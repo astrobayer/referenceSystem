@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>referenceSystem - Migration from v1</title>
+<link rel="stylesheet" href="referenceSystem.css">
+</head><body>
+
+<h1>Migration from v1</h1>
+
+<p>Ordered by what actually bites, most frequent first.</p>
+
+<h2>1. Every call site fails immediately &mdash; and that is deliberate</h2>
+
+<div class="key">
+<p>Every function is now inside the <code>referenceSystem</code> namespace and
+every name is camelCase, so <b>every v1 call fails at once as an undefined
+function</b>. Nothing silently returns a different answer. This is the loudest
+possible migration and it was chosen over compatibility shims for exactly that
+reason: a shim would let a v1 script run to completion against v2 semantics.</p>
+</div>
+
+<p>Find your call sites first:</p>
+<pre>
+% every unqualified call to a v1 name
+grep -rnE '\b(dcm_?ecef2eci|dcm_?eci2rsw|polarMotionMatrix|ecef2geod|geod2ecef|geod2utm|utm2geod|helmert7|molodensky|itrf_convert|eop_prepare|convertTimeSystem|epochCreate|epochToNumeric|heightConvert)\b' .
+
+% the v1 two-output rotation call, which no longer exists in that form
+grep -rnE '\[\s*R\s*,\s*status\s*\]' .
+</pre>
+
+<h2>2. <code>R</code> is 3x3xN pages, not Nx9</h2>
+
+<p>v1 returned rotation matrices flattened to <code>N</code>-by-9 and every
+example carried a <code>reshape</code>. v2 returns
+<code>3</code>-by-<code>3</code>-by-<code>N</code> pages, which is what
+<code>pagemtimes</code> and <code>pagetranspose</code> consume directly.</p>
+
+<pre>
+% v1
+Rk = reshape(R(k, :), 3, 3)';     % and the transpose was easy to forget
+
+% v2
+Rk = R(:, :, k);
+rGcrs = pagemtimes(R, rItrs);     % or referenceSystem.applyRotation(R, rItrs)
+</pre>
+
+<h2>3. Tidal corrections now default to ON &mdash; results differ at ~15&nbsp;mm</h2>
+
+<p>v1 had <code>ApplyTidalCorrections</code> default <code>false</code>. v2
+defaults it <code>true</code>, because sub-daily ocean tide and libration reach
+about 0.5&nbsp;mas in polar motion and 50&nbsp;&micro;s in UT1, which is roughly
+<b>15&nbsp;mm at the surface</b> &mdash; not optional for GRACE-class work.</p>
+
+<pre>
+% to reproduce a v1 number exactly
+R = referenceSystem.rotationItrsToGcrs(epoch, 'Eop', eop, ...
+        'ApplyTidalCorrections', false);
+</pre>
+
+<p><b>Do this only to reproduce an old result, never for new work.</b></p>
+
+<h2>4. The <code>status</code> output is gone entirely</h2>
+
+<p>The signature is now <code>[R, Rdot, Rddot, info]</code>. The second output
+is <code>Rdot</code>, not <code>status</code>. No function anywhere in the
+toolbox returns a numeric status: SOFA warning conditions surface as MATLAB
+warnings and SOFA error conditions as MATLAB errors.</p>
+
+<pre>
+% v1
+[R, status] = dcm_ecef2eci(...);
+if status ~= 0, warning('...'); end
+
+% v2 - delete the status logic entirely
+R = referenceSystem.rotationItrsToGcrs(epoch, 'Eop', eop);
+</pre>
+
+<p><code>info</code> is a <b>diagnostics</b> struct reporting the execution path
+and the derivative method. It is not a status code: the function still errors
+rather than signalling.</p>
+
+<div class="warn">
+<p><b>Every epoch from 2029 onward raises a dubious-year warning</b> on the
+bundled SOFA leap-second table, which ends at 2017-01-01. Exactly one warning is
+raised per call regardless of how many epochs you pass, and it names the function
+you called rather than an internal one.</p>
+</div>
+
+<h2>5. Name mapping</h2>
+
+<p>Three naming decisions drive the whole table.</p>
+<ul>
+<li><b>Frames use the rigorous IERS names</b>: ITRS and GCRS, not ECEF and ECI.
+The engineering shorthand survives in <code>rotationEcefToEnu</code> and
+<code>rotationEcefToNed</code>, where the local-level context makes it
+unambiguous, and those two functions state the rigorous frame in their
+<code>METHOD</code> block. <code>lookfor ecef</code> finds them.</li>
+<li><b>L4 is named by representation, not by frame</b>: the function converts a
+Cartesian triple to a geodetic one, and which frame that triple lives in is the
+caller's business.</li>
+<li><b>The epoch constructors are split by source format</b>, and the outbound
+direction is the single <code>epochTo(epoch, format)</code>. This deletes the
+<code>'Format'</code> string argument that made the v1 mistake possible.</li>
+</ul>
+
+<table>
+<tr><th>v1 (any of the three sources)</th><th>v2</th><th>Note</th></tr>
+<tr><td><code>dcm_ecef2eci</code>, <code>dcmEcef2Eci</code></td>
+    <td><code>rotationItrsToGcrs</code></td>
+    <td>Signature and output shape both changed; see 2 and 4 above.</td></tr>
+<tr><td><code>dcm_eci2rsw</code>, <code>dcmEci2Rsw</code></td>
+    <td><code>rotationGcrsToRsw</code></td><td></td></tr>
+<tr><td><code>polarMotionMatrix</code></td><td><code>rotationTirsToItrs</code></td>
+    <td>Takes <b>radians</b>. Returns the TIRS&rarr;ITRS rotation, which is the
+        transpose of the matrix IERS TN36 eq.&nbsp;5.3 calls <i>W</i>.</td></tr>
+<tr><td>&mdash;</td><td><code>rotationGcrsToCirs</code></td><td>New; the CIO stage on its own.</td></tr>
+<tr><td>&mdash;</td><td><code>greenwichSiderealTime</code>, <code>equinoxNutationMatrix</code></td>
+    <td>New; GMST/GAST are needed in their own right and the equinox route is the
+        continuous cross-check of the CIO route.</td></tr>
+<tr><td><code>eop_prepare</code></td>
+    <td><code>readEop</code> + <code>interpolateEop</code></td>
+    <td>Split: reading a file and interpolating a table are different jobs with
+        different failure modes.</td></tr>
+<tr><td>&mdash;</td><td><code>subdailyEopCorrection</code>, <code>zonalTideEopCorrection</code></td>
+    <td>New, and each returns a <code>sense</code>-tagged struct so it cannot be
+        applied twice.</td></tr>
+<tr><td><code>convertTimeSystem</code></td><td><code>convertTimeScale</code></td>
+    <td>&ldquo;Scale&rdquo; is the metrological term.</td></tr>
+<tr><td><code>epochCreate(x, 'Format', f)</code></td>
+    <td><code>mjdToEpoch</code>, <code>daySecondToEpoch</code>,
+        <code>datetimeToEpoch</code>, <code>gpsWeekToEpoch</code>,
+        <code>j2000SecondsToEpoch</code></td>
+    <td>Five constructors, no format string.</td></tr>
+<tr><td><code>epochToNumeric(e, 'Format', f)</code></td>
+    <td><code>epochTo(e, format)</code></td>
+    <td>One outbound function. The asymmetry is deliberate and documented.</td></tr>
+<tr><td><code>leapSeconds</code></td><td><code>leapSecondTable</code></td>
+    <td>Renamed: base MATLAB ships <code>leapseconds</code>, which differs only
+        in case and is therefore the same name to a Windows filesystem.</td></tr>
+<tr><td><code>refEllipsoid</code>, <code>referenceEllipsoid</code></td>
+    <td><code>ellipsoidParameters</code></td>
+    <td>Renamed: collides with the Mapping Toolbox class. Also more honest &mdash;
+        it returns parameters, not an object.</td></tr>
+<tr><td><code>ecef2geod</code></td><td><code>cartesianToGeodetic</code></td><td></td></tr>
+<tr><td><code>geod2ecef</code></td><td><code>geodeticToCartesian</code></td><td></td></tr>
+<tr><td><code>geod2utm</code></td><td><code>geodeticToUtm</code></td><td></td></tr>
+<tr><td><code>utm2geod</code></td><td><code>utmToGeodetic</code></td><td></td></tr>
+<tr><td><code>heightConvert</code></td>
+    <td><code>ellipsoidalToOrthometric</code>, <code>orthometricToEllipsoidal</code></td>
+    <td>Split; no direction flag.</td></tr>
+<tr><td><code>helmert7</code></td><td><code>applyHelmert7</code></td>
+    <td><code>'Convention'</code> and <code>'Units'</code> are now
+        <b>required</b>: the two conventions are 3.6&nbsp;m apart at the test
+        point and every wrong choice yields a plausible coordinate.</td></tr>
+<tr><td><code>molodensky</code></td><td><code>applyMolodensky</code></td>
+    <td>Its help said &ldquo;abridged&rdquo;; the code was the standard form.
+        v2 says standard, because that is what it is.</td></tr>
+<tr><td><code>itrf_convert</code></td><td><code>convertItrf</code></td>
+    <td>Vectorised; the inverse is solved, never obtained by negating the
+        parameters.</td></tr>
+<tr><td><code>quaternionToRotation</code></td><td><code>rotationFromQuaternion</code></td>
+    <td>Re-expressing one object uses the <code>targetFromSource</code> grammar;
+        travelling between frames uses <code>sourceToTarget</code>.</td></tr>
+<tr><td>per-frame <code>rotate*</code> family</td><td><code>applyRotation</code></td>
+    <td>One frame-agnostic function. A rotation is applied the same way whatever
+        the frames are called.</td></tr>
+<tr><td>direction flags and inverse partners</td>
+    <td><code>invertRotation</code>, or <code>'Inverse', true</code></td>
+    <td><b>There is no direction option anywhere.</b> An orthogonal rotation's
+        inverse is its transpose.</td></tr>
+<tr><td><code>runTests</code></td><td><code>runTestSuite</code></td>
+    <td>Renamed away from base MATLAB's <code>runtests</code>.</td></tr>
+</table>
+
+<p><b>Any v1 name not in this table simply has no v2 equivalent under the old
+spelling and will fail as undefined.</b> Search the
+<a href="referenceSystem_functionReference.html">function reference</a> by what
+the function does; the <code>KEYWORDS</code> block of every help text is there
+so that <code>lookfor</code> finds it.</p>
+
+<h2>6. Things that are now stricter, and why</h2>
+<table>
+<tr><th>Change</th><th>Reason</th></tr>
+<tr><td>The default ellipsoid is <b>GRS80</b>, not WGS84.</td>
+    <td>GRS80 is the ITRS ellipsoid of IERS Conventions Table 1.2. The polar
+        radii differ by 1.05e-4&nbsp;m, which is above this toolbox's own
+        target, so it is asserted in a test rather than mentioned.</td></tr>
+<tr><td>Polar motion and CIP offsets are in <b>radians</b>.</td>
+    <td>Units are converted once, at read time. Nothing downstream sees
+        arcseconds.</td></tr>
+<tr><td><code>geoidUndulation</code> <b>errors</b> outside its grid instead of
+        returning NaN.</td>
+    <td>A query outside a regional grid is a mistake in the data, not undefined
+        geometry.</td></tr>
+<tr><td><code>interpolateEop</code> refuses a regularization-tagged correction
+        without <code>'Regularize', true</code>.</td>
+    <td>Double-correcting the zonal tides is invisible and costs millimetres.</td></tr>
+<tr><td><code>addSeconds</code> and <code>secondsBetween</code> refuse a UTC or
+        GLONASS interval that <i>crosses</i> a leap second.</td>
+    <td>The wrong answer is made unreachable rather than documented.</td></tr>
+<tr><td><code>convertCoordinates</code> refuses <code>"GCRS"</code>.</td>
+    <td>That leg needs EOP; nothing else in the graph does. The error names the
+        function to call instead.</td></tr>
+</table>
+
+<p class="foot">referenceSystem v2.1.</p>
+</body></html>

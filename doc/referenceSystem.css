@@ -1,0 +1,22 @@
+/* referenceSystem v2.0 documentation - shared style for the four help pages. */
+body { font-family: Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.5;
+       color: #1a1a1a; max-width: 60em; margin: 1.5em auto; padding: 0 1.5em; }
+h1 { font-size: 1.8em; border-bottom: 2px solid #4a6a8a; padding-bottom: 0.2em; }
+h2 { font-size: 1.35em; margin-top: 2em; color: #24405c; border-bottom: 1px solid #ccd6e0; }
+h3 { font-size: 1.1em; margin-top: 1.6em; color: #24405c; font-family: Consolas, monospace; }
+h4 { font-size: 0.9em; margin: 1em 0 0.3em 0; color: #5a6a7a; letter-spacing: 0.05em; }
+pre, code { font-family: Consolas, "Courier New", monospace; font-size: 12.5px; }
+pre { background: #f6f8fa; border: 1px solid #e0e6ec; border-left: 3px solid #4a6a8a;
+      padding: 0.6em 0.9em; overflow-x: auto; white-space: pre; }
+table { border-collapse: collapse; margin: 1em 0; font-size: 13px; }
+th, td { border: 1px solid #ccd6e0; padding: 0.35em 0.7em; text-align: left; vertical-align: top; }
+th { background: #eef2f6; }
+.fcn { border-top: 1px solid #eee; padding-top: 0.5em; margin-top: 2em; }
+.h1 { font-style: italic; color: #445; margin: 0.2em 0 0.6em 0; }
+.index { columns: 3; list-style: none; padding-left: 0; margin-top: 0.2em; }
+.index li { font-family: Consolas, monospace; font-size: 12.5px; }
+.layer { margin-bottom: 0.1em; }
+.top { font-size: 11px; margin-top: 0.8em; }
+.generated, .foot { color: #667; font-size: 12.5px; }
+.warn { background: #fff6e0; border-left: 3px solid #d08000; padding: 0.6em 0.9em; }
+.key { background: #eef6ee; border-left: 3px solid #3a7a3a; padding: 0.6em 0.9em; }

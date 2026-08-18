@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- referenceSystem v2.1 - registers the toolbox documentation with the MATLAB
+     Help browser. This file must sit in a folder that is ON THE MATLAB PATH,
+     which for this toolbox is the distribution folder - never +referenceSystem,
+     which is a namespace folder and is never on the path (handover C.5 rule 1).
+     help_location is relative to this file. Displaying custom documentation is
+     not supported in MATLAB Online. -->
+<productinfo
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="optional">
+  <?xml-stylesheet type="text/xsl" href="optional"?>
+  <matlabrelease>R2026a</matlabrelease>
+  <name>referenceSystem</name>
+  <type>toolbox</type>
+  <icon></icon>
+  <help_location>doc</help_location>
+</productinfo>

@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>referenceSystem - Getting Started</title>
+<link rel="stylesheet" href="referenceSystem.css">
+</head><body>
+
+<h1>referenceSystem &mdash; Getting Started</h1>
+
+<p>Time systems, Earth orientation and coordinate transformations for satellite
+geodesy, built on the <b>IERS Conventions (2010)</b> and the unmodified
+<b>IAU SOFA</b> library. It consolidates three earlier toolboxes
+(<code>ecef2eci</code>, <code>geodesyToolbox</code>, <code>convertTimeSystem</code>)
+into one package with a single set of conventions.</p>
+
+<h2 id="install">Installation</h2>
+
+<pre>
+&gt;&gt; cd &lt;wherever you unpacked or cloned it&gt;/referenceSystem
+&gt;&gt; setupReferenceSystem
+</pre>
+
+<p>That is all of it. <code>setupReferenceSystem</code> is the installer as well
+as the path setter: it compiles the MEX gateway, builds the documentation,
+saves the path and downloads the external data &mdash; each step only when it is
+missing or out of date, and nothing at all when everything is current. A few
+minutes and about 700 MB on a fresh copy, milliseconds afterwards, so it is safe
+in <code>startup.m</code>. Pass <code>Fetch="none"</code> for an offline
+install, or <code>KernelSet="minimal"</code> to leave out the 650 MB small-body
+kernel.</p>
+
+<p>It is also the only unqualified name the toolbox installs, and the one place
+permitted to print. It prints by default, and this is what it says:</p>
+
+<pre>
+&gt;&gt; setupReferenceSystem
+referenceSystem 2.1.204 is ready.
+  root    : /home/you/referenceSystem
+  path    : added for this session, saved permanently
+  build   : mex built (the gateway is not compiled on this machine),
+            reference written, search built
+  doc     : registered, /home/you/referenceSystem/doc
+  leapsec : last leap second 2017-01-01 (TAI-UTC = 37 s), valid through 2028-12-31
+  fetched : 2 EOP file(s), 7 kernel(s), 0 failure(s)
+</pre>
+
+<p>Then, once:</p>
+
+<pre>
+&gt;&gt; referenceSystem.runTestSuite    % writes referenceSystem_testReport.txt
+</pre>
+
+<p>Zip and git installation, what is and is not a build artefact, and what to do
+when the Help browser cannot find the pages are all covered in
+<a href="referenceSystem_installation.html">Installation and Distribution</a>.</p>
+
+<h2 id="namespace">The namespace &mdash; read this once</h2>
+
+<div class="warn">
+<p><b>Add the parent folder to the path. Never add <code>+referenceSystem</code>
+itself.</b> A folder whose name begins with <code>+</code> is a namespace
+folder, and it is never on the MATLAB path &mdash; that is what makes it a
+namespace. Adding it makes every function visible both qualified and
+unqualified, which is precisely the collision hazard the namespace exists to
+prevent. <code>setupReferenceSystem</code> removes it if it finds it there.</p>
+</div>
+
+<p>Every function is called qualified:</p>
+
+<pre>
+epoch = referenceSystem.mjdToEpoch(60000.5, "UTC");
+R     = referenceSystem.rotationItrsToGcrs(epoch, 'Eop', eop);
+</pre>
+
+<p>If unqualified names are preferred, import the namespace <b>in the function
+that needs them</b>, never at the top of a script that also calls other
+toolboxes:</p>
+
+<pre>
+import referenceSystem.*
+epoch = mjdToEpoch(60000.5, "UTC");
+</pre>
+
+<p>An imported name takes precedence over the path, so
+<code>import referenceSystem.*</code> shadows any same-named function you have.
+Two names in this toolbox were <i>renamed</i> for exactly that reason:
+<code>leapSecondTable</code> (base MATLAB ships <code>leapseconds</code>) and
+<code>ellipsoidParameters</code> (Mapping Toolbox ships
+<code>referenceEllipsoid</code>).</p>
+
+<h2 id="types">The two data types you need</h2>
+
+<p><b>The epoch.</b> A plain struct with a <b>two-part</b> time tag, because a
+decimal MJD holds only about 5&nbsp;&micro;s at MJD&nbsp;60000 &mdash; not enough
+for GRACE ranging.</p>
+
+<pre>
+epoch.day    Nx1 double   integer day number at 0h in the given scale
+epoch.sec    Nx1 double   seconds since 0h, [0, 86400) or [0, 86401) across a leap second
+epoch.scale  1x1 string   TAI TT TDB TCG TCB UTC UT1 GPS GST BDT GLONASS
+epoch.source 1x1 string   provenance, free text
+</pre>
+
+<p>Build one with the constructor that matches your source
+(<code>mjdToEpoch</code>, <code>daySecondToEpoch</code>,
+<code>datetimeToEpoch</code>, <code>gpsWeekToEpoch</code>,
+<code>j2000SecondsToEpoch</code>) and leave with the single
+<code>epochTo(epoch, format)</code>.</p>
+
+<p><b>The attitude convention.</b> A struct carried <i>with</i> a rotation
+object rather than ten separate flags, because every wrong combination of
+sequence, sense, quaternion order and product still yields an orthogonal,
+unit-determinant matrix that round-trips through its own inverse. There is no
+runtime symptom; the only defence is that the convention travels with the
+data and functions consuming two objects compare them.</p>
+
+<pre>
+c = referenceSystem.attitudeConvention();             % geodetic default
+c = referenceSystem.attitudeConvention("aerospace");  % NED, scalar-last, Shuster
+</pre>
+
+<h2 id="workflow">Workflows</h2>
+
+<h3>ITRS to GCRS for an arc &mdash; the hot path</h3>
+
+<pre>
+eop   = referenceSystem.readEop("eopc04_20.1962-now.txt");
+utc   = referenceSystem.daySecondToEpoch([day, secondOfDay], "UTC");
+[R, Rdot] = referenceSystem.rotationItrsToGcrs(utc, 'Eop', eop);
+[rGcrs, vGcrs] = referenceSystem.applyRotation(R, Rdot, rItrs, vItrs);
+</pre>
+
+<div class="key">
+<p><b>R is 3x3xN pages, not Nx9.</b> The inverse is the transpose: use
+<code>invertRotation</code>, or <code>applyRotation(..., 'Inverse', true)</code>,
+which passes the transpose straight to <code>pagemtimes</code> at no cost.
+There is no direction option anywhere in the toolbox.</p>
+<p><b>Sub-daily tidal corrections default to ON</b> (about 15&nbsp;mm at the
+surface). This differs from v1.</p>
+</div>
+
+<h3>Changing terrestrial realization</h3>
+
+<pre>
+xItrf2020 = referenceSystem.convertItrf(xItrf2008, "ITRF2008", "ITRF2020", 2015.5);
+</pre>
+
+<h3>Ground station visibility</h3>
+
+<pre>
+enu = referenceSystem.cartesianToEnu(satelliteItrs, stationGeodetic, 'AngleUnit', "deg");
+ael = referenceSystem.enuToAzimuthElevation(enu);     % azimuth CLOCKWISE FROM NORTH
+visible = ael(:, 2) &gt; deg2rad(10);
+</pre>
+
+<h3>One call across the geometry graph</h3>
+
+<pre>
+geodetic = referenceSystem.convertCoordinates(xItrs, "ITRS", "GEODETIC");
+</pre>
+
+<p><code>convertCoordinates</code> routes across the L3 and L4 transformations.
+It deliberately does <b>not</b> include ITRS&nbsp;&harr;&nbsp;GCRS: that leg
+needs Earth orientation data, everything else needs none, and mixing them would
+hide the requirement. Asking for <code>"GCRS"</code> raises
+<code>referenceSystem:convertCoordinates:useRotationFunction</code> and names
+the function to call.</p>
+
+<h2 id="conventions">Conventions that will bite you if you skip them</h2>
+
+<table>
+<tr><th>Rule</th><th>Why</th></tr>
+<tr><td><b>SI units everywhere inside.</b> Polar motion and CIP offsets are in
+<b>radians</b>, never arcseconds.</td>
+<td>IERS files publish arcseconds; <code>readEop</code> converts once, at read
+time. Passing arcseconds to <code>rotationTirsToItrs</code> gives a matrix that
+is still orthogonal and wrong by five orders.</td></tr>
+<tr><td><b>L2 takes 3xN</b> (one column per epoch); <b>L3 and L4 take Nx3</b>
+(one point per row).</td>
+<td>A 3x3 array is therefore three points in L4 and never one transposed
+triple. Resolved by the documented rule, never by inspection.</td></tr>
+<tr><td><b>No status codes.</b> Nothing returns a numeric status.</td>
+<td>SOFA warnings become MATLAB warnings and SOFA errors become MATLAB errors.
+<code>info</code> structs are diagnostics, not signals.</td></tr>
+<tr><td><b>The default ellipsoid is GRS80, not WGS84.</b></td>
+<td>GRS80 is the ITRS ellipsoid of IERS Conventions Table&nbsp;1.2. The polar
+radii differ by 1.05e-4&nbsp;m.</td></tr>
+<tr><td><b>Epochs from 2029 onward warn.</b></td>
+<td>The bundled SOFA leap-second table ends at 2017-01-01 and SOFA reports a
+dubious year beyond its horizon. Supply a current table through
+<code>leapSecondTable</code> before operational use.</td></tr>
+</table>
+
+<h2>Where to go next</h2>
+<ul>
+<li><a href="referenceSystem_functionReference.html">Function Reference</a>
+&mdash; generated from the help text of every function.</li>
+<li><a href="referenceSystem_accuracy.html">Accuracy and Error Budget</a>
+&mdash; every approximation, its measured magnitude, and when it matters.</li>
+<li><a href="referenceSystem_migration.html">Migration from v1</a>
+&mdash; old to new names, and the four behaviour changes.</li>
+<li><a href="referenceSystem_installation.html">Installation and Distribution</a>
+&mdash; zip, git, build artefacts, and the Help browser.</li>
+<li><code>doc/examples/</code> &mdash; three runnable scripts.</li>
+</ul>
+
+<p class="foot">referenceSystem v2.1. The handover document is the single point
+of truth for the design, the workflow and the rules.</p>
+</body></html>

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Table of contents for the Contents pane of the Supplemental Software
+     browser. This file must live in the SAME FOLDER as the HTML help files,
+     which is the folder info.xml names in help_location. -->
+<toc version="2.0">
+  <tocitem target="referenceSystem_gettingStarted.html">referenceSystem
+    <tocitem target="referenceSystem_installation.html">Installation and Distribution
+      <tocitem target="referenceSystem_installation.html#install">Install</tocitem>
+      <tocitem target="referenceSystem_installation.html#git">Distributing by git</tocitem>
+      <tocitem target="referenceSystem_installation.html#zip">Distributing by zip</tocitem>
+    </tocitem>
+    <tocitem target="referenceSystem_gettingStarted.html">Getting Started
+      <tocitem target="referenceSystem_gettingStarted.html#install">Installation</tocitem>
+      <tocitem target="referenceSystem_gettingStarted.html#namespace">The namespace</tocitem>
+      <tocitem target="referenceSystem_gettingStarted.html#workflow">Workflows</tocitem>
+    </tocitem>
+    <tocitem target="referenceSystem_cApi.html">The public C API
+      <tocitem target="referenceSystem_cApi.html#workflow">Workflow</tocitem>
+      <tocitem target="referenceSystem_cApi.html#entry-points">Entry points</tocitem>
+      <tocitem target="referenceSystem_cApi.html#format">The interpolant file format</tocitem>
+      <tocitem target="referenceSystem_cApi.html#ownership">Ownership</tocitem>
+      <tocitem target="referenceSystem_cApi.html#threads">Thread safety</tocitem>
+      <tocitem target="referenceSystem_cApi.html#example">Worked example</tocitem>
+    </tocitem>
+    <tocitem target="referenceSystem_functionReference.html">Function Reference
+      <tocitem target="referenceSystem_functionReference.html#l0-time-and-constants">L0 Time and constants</tocitem>
+      <tocitem target="referenceSystem_functionReference.html#l1-earth-orientation-parameters">L1 Earth orientation parameters</tocitem>
+      <tocitem target="referenceSystem_functionReference.html#contents">All layers</tocitem>
+    </tocitem>
+    <tocitem target="referenceSystem_ephemerides.html">Ephemerides, Body Frames and EOP Partials
+      <tocitem target="referenceSystem_ephemerides.html#providers">Ephemeris providers</tocitem>
+      <tocitem target="referenceSystem_ephemerides.html#bcrs">The BCRS transformation</tocitem>
+      <tocitem target="referenceSystem_ephemerides.html#bodyframes">Body-fixed frames</tocitem>
+      <tocitem target="referenceSystem_ephemerides.html#partials">EOP partial derivatives</tocitem>
+    </tocitem>
+    <tocitem target="referenceSystem_accuracy.html">Accuracy and Error Budget</tocitem>
+    <tocitem target="referenceSystem_migration.html">Migration from v1</tocitem>
+  </tocitem>
+</toc>

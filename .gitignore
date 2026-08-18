@@ -1,0 +1,57 @@
+# referenceSystem v2.0 - build artefacts and local state.
+#
+# EVERYTHING LISTED HERE IS PRODUCED BY setupReferenceSystem AND MUST NOT BE
+# COMMITTED. The MEX gateway is platform-specific, so a committed binary is
+# wrong for most of the people who clone the repository and, worse, is wrong
+# SILENTLY on the platform it was built for once the C sources move on. Setup
+# compares the sources against the binary and rebuilds when they are newer,
+# which only works if the binary is local.
+
+# Compiled MEX gateway, one extension per platform
++referenceSystem/private/mexGateway.mex*
++referenceSystem/private/*.o
++referenceSystem/private/*.obj
+
+# Standalone C test binaries, built by test/c/runStandaloneTests.sh. The same
+# rule as the gateway for the same reason: they are platform-specific ELF or
+# PE executables, wrong for most machines and SILENTLY stale on the one that
+# built them once the C sources move on. Rev. 1.183's archive shipped five of
+# them - 2.2 MB of Linux binaries in a two-megabyte toolbox - against this
+# file's own opening paragraph (finding C-4 of the rev. 1.184 review). The
+# runner rebuilds them from source in seconds; nothing reads them from disk.
+test/c/build/
+
+# Help browser search database, rebuilt by referenceSystem.buildDocumentation
+doc/helpsearch*/
+
+# Test output. The report is a deliverable of a RUN, not of the repository:
+# committing one invites reading a stale result as a current one.
+referenceSystem_testReport.txt
+test/*_testReport.txt
+
+# Earth orientation and leap-second files a session may download. These are
+# measured data that the IERS reissues; pin a copy deliberately if a result
+# has to be reproducible, and say so in the handover when you do.
+data/*.txt
+data/*.dat
+
+# SPICE kernels for P21-P23. THESE ARE HUNDREDS OF MEGABYTES: sb441-n16.bsp
+# alone is about 650 MB and de441.bsp about 2.6 GB. They are third-party data
+# with a canonical download location (handover section H.7.1), they are not
+# ours to redistribute, and one of them committed here would make the hand-over
+# archive unusable - the whole toolbox is about two megabytes. Download them
+# into data/ and let git ignore them; record the filename and a digest in the
+# result, not the file itself.
+data/*.bsp
+data/*.bpc
+data/*.tpc
+data/*.tf
+data/*.tls
+data/*.tm
+!data/README.md
+
+# MATLAB and editor leavings
+*.asv
+*.m~
+slprj/
+.DS_Store

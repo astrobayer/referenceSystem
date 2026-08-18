@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>referenceSystem - Ephemerides, Body Frames and EOP Partials</title>
+<link rel="stylesheet" href="referenceSystem.css">
+</head><body>
+
+<h1>Ephemerides, Body Frames and EOP Partials</h1>
+
+<p>These three layers arrived after the v2.0 pages were written, and until now
+<code>Contents.m</code> listed functions the browsable help did not describe.
+This page covers them: <b>L5e</b> the solar-system ephemeris and the
+BCRS&nbsp;&harr;&nbsp;GCRS transformation, <b>L5f</b> the planetary body-fixed
+frames, and the <b>partial derivatives of the Earth rotation with respect to the
+EOP</b>.</p>
+
+<div class="key">
+<p><b>Read this first if you are here for an absolute position.</b> The bundled
+ephemeris provider is analytic and is good to <b>kilometres</b>, not
+millimetres. Everything on this page that quotes a millimetre &mdash; the
+BCRS&nbsp;transformation in particular &mdash; is millimetre-accurate <i>as a
+correction</i>, applied to a position whose own error is four orders larger. The
+two must not be combined and then quoted at the smaller number.</p>
+</div>
+
+<h2 id="providers">L5e &mdash; two ephemeris tiers, and which one you have</h2>
+
+<p><code>barycentricBodyState</code> and <code>geocentricBodyState</code> take a
+<code>Source</code> option with two values. They are not two speeds of the same
+thing; they are different theories with different error budgets, and
+<code>info.positionError</code> carries the figure for the body actually asked
+for on every call, so it never has to be looked up.</p>
+
+<table>
+<tr><th>Source</th><th>What it is</th><th>Needs</th><th>Position error</th></tr>
+<tr><td><code>"sofa"</code> <i>(default)</i></td>
+    <td>IAU SOFA <code>iauEpv00</code> (Earth), <code>iauMoon98</code> (Moon)
+        and <code>iauPlan94</code> (planets). Analytic series, bundled with the
+        toolbox.</td>
+    <td>nothing</td>
+    <td>Earth ~4.6&nbsp;km; Moon ~10.7&nbsp;km; Mercury ~339&nbsp;km; Neptune
+        ~158&nbsp;000&nbsp;km</td></tr>
+<tr><td><code>"mice"</code></td>
+    <td>JPL DE440 through NAIF SPICE, read by <code>readEphemeris</code>.</td>
+    <td>MICE on the path and a kernel in <code>data/</code>; see
+        <code>downloadKernels</code></td>
+    <td>metres &mdash; the kernel's own, not this toolbox's</td></tr>
+</table>
+
+<p><b>No heuristic warns you when <code>"sofa"</code> is used for precise
+work</b> (decision D95). The toolbox cannot know what a caller intends, and a
+warning that fires on the wrong criterion is worse than the table above.</p>
+
+<h3>What the <code>"mice"</code> tier has actually been checked against</h3>
+<p>Four bodies &mdash; Sun, Moon, Mars barycentre, Jupiter barycentre &mdash; at
+three epochs, against a committed JPL&nbsp;HORIZONS fixture retrieved
+2026-07-29. HORIZONS serves DE441 while the bundled kernel is DE440, so the test
+<i>measures</i> that difference rather than assuming it away.</p>
+<div class="warn">
+<p><b>The small-body path has never been executed against an external
+authority</b>, and separately, on the shipped <code>de440s.bsp</code> the
+generation-pairing check of decision&nbsp;D15 was found at run&nbsp;68 to parse
+no generation at all. Read <code>ephemeris.meta.generationVerified</code>: when
+it is false, <code>meta.ephemeris</code> is your own declaration and not
+something the files confirmed.</p>
+<p> Ceres is in the HORIZONS fixture and is skipped, because it needs
+<code>sb441-n16.bsp</code>, which is not in the <code>"orientation"</code> kernel
+set. The skip is now reported in the test log rather than passed over in
+silence. Fetch the <code>"smallBodies"</code> set if you intend to rely on it,
+and treat the first result as a measurement rather than a confirmation.</p>
+</div>
+
+<h3 id="generations">Mixing kernel generations is warned about, never refused</h3>
+<p><code>readEphemeris</code> reads each SPK's own comment area and reports every
+planetary ephemeris the furnished set names. <b>Holding several generations for
+testing and comparison is ordinary work</b>, so the toolbox's duty is to make
+sure you cannot mix them <i>unknowingly</i>, not to decide for you
+(decision&nbsp;D110).</p>
+<ul>
+<li><code>meta.generations</code> lists every generation found.</li>
+<li><code>meta.ephemeris</code> names the set &mdash; <code>DE440+DE441</code>
+&mdash; rather than picking one of it.</li>
+<li>A warning fires on every mixed call until you declare the set.</li>
+<li><code>'AllowGenerations', ["DE440" "DE441"]</code> silences it for
+<b>exactly</b> that set. It takes a list and not a flag, because a flag says
+only &ldquo;be quiet&rdquo; and leaves no record of what was asserted.</li>
+</ul>
+<p><b>When is a mixture right?</b> DE440 and DE441 were fit to the same data set
+and differ in one modelling choice; the planets differ by under 1&nbsp;m over
+DE440's span and the Moon by under 2&nbsp;m across 1970&ndash;2020 (Park
+et&nbsp;al. 2021). Different <i>fits</i> are another matter: the barycentre moved
+about 100&nbsp;km between DE430 and DE440, mainly from the added Kuiper-belt
+masses. <b>SPICE resolves an overlapping body from whichever kernel was
+furnished last</b>, so an unintended mixture is silent in the result.</p>
+<p>One thing is still an error: an <code>ExpectedEphemeris</code> that none of
+the furnished files supports. That is not the toolbox overruling you &mdash; it
+is answering the question you asked it to ask.</p>
+
+<h2 id="bcrs">L5e &mdash; the BCRS transformation</h2>
+
+<p><code>gcrsToBcrs</code> and <code>bcrsToGcrs</code> implement IERS
+Conventions&nbsp;(2010) Eqs.&nbsp;(11.18) and (11.19) &mdash; <i>not</i>
+Chapter&nbsp;10, which is time coordinates and contains no spatial
+transformation. The Conventions state their own uncertainty for the formula as
+<b>below 1&nbsp;mm</b>, and that is the accuracy of these functions.</p>
+
+<table>
+<tr><th>Term, at a mid-latitude station (|r| = 6391 km)</th><th>Size</th></tr>
+<tr><td>L<sub>C</sub> scale term (only for <code>Scale = "tdbCompatible"</code>)</td>
+    <td>&minus;0.0947&nbsp;m</td></tr>
+<tr><td>U/c&sup2; potential term</td><td>&minus;0.0631&nbsp;m</td></tr>
+<tr><td>Lorentz term (maximum, r along V)</td><td>+0.0322&nbsp;m</td></tr>
+<tr><td><b>total, <code>"tdbCompatible"</code></b></td><td><b>&minus;0.1715&nbsp;m</b></td></tr>
+<tr><td><b>total, <code>"none"</code></b></td><td><b>&minus;0.0769&nbsp;m</b></td></tr>
+</table>
+
+<p><code>Scale</code> has <b>no default</b>. The two choices differ by 9.5&nbsp;cm
+against a formula uncertainty of 1&nbsp;mm &mdash; ninety-five times &mdash; and
+neither is visible in the result, so the caller states which one they mean.</p>
+
+<p><b>The ephemeris barely matters here, which is counter-intuitive.</b> U and V
+reach the answer only through 1/c&sup2; terms, so their errors are suppressed by
+1e-8: the bundled provider's 2.8&nbsp;mm/s on the Earth's velocity moves the
+result by 4.8e-9&nbsp;m. <i>Do not reach for MICE on account of this
+function.</i></p>
+
+<p>Velocity <b>is</b> transformed, from IAU 2000 Resolution&nbsp;B1.3, and its
+dT/dt factor is 1.5e-8 &mdash; 4.7e-4&nbsp;m/s on 31&nbsp;km/s. Validated by
+central difference at six step sizes at order 2.00 throughout, so the residual
+is the difference's own truncation and not a formula error.</p>
+
+<p><code>geocentricBodyState</code> returns a <b>coordinate difference in the
+BCRS</b>, not a GCRS state, and the two differ by about 6&nbsp;m at the Moon.
+There is no <code>'Frame'</code> option by decision (D94/D96): the BCRS-to-GCRS
+expansion is valid only near the Earth, and applying it to Jupiter's geocentric
+vector would give a smooth, plausible, wrong answer.</p>
+
+<h2 id="bodyframes">L5f &mdash; planetary body-fixed frames</h2>
+
+<p><code>bodyRotationElements</code> returns &alpha;<sub>0</sub>,
+&delta;<sub>0</sub> and W from the IAU WGCCRE 2015 report;
+<code>rotationIcrfToBodyFixed</code> assembles them into a rotation.</p>
+
+<div class="warn">
+<p><b>The two sources have different domains, not merely different
+accuracies.</b> <code>Source = "iau"</code> covers <b>Table&nbsp;1 only</b>
+&mdash; the Sun and the eight planets. Satellites, dwarf planets and minor
+planets (Phobos, Io, Titan, Ceres, Vesta &hellip;) resolve only through
+<code>Source = "pck"</code>. Tables&nbsp;2 and 3 are deliberately not
+transcribed, because section&nbsp;6 of the report uses the <i>opposite</i> pole
+convention for dwarf planets, minor planets and comets, and folding them in
+would put two conventions behind one argument value (decision D100).</p>
+</div>
+
+<p>The report's own accuracy statement is <b>one tenth of a degree</b>, with
+Mercury, Mars, Saturn and Uranus carrying more digits. At Uranus the report
+notes that the present uncertainty of the prime meridian <i>exceeds a complete
+rotation</i>.</p>
+
+<p><b>The pole is the one north of the invariable plane</b>, which is not the
+right-hand-rule spin pole for a retrograde rotator: for Venus and Uranus the two
+differ by 180&deg;. <code>info.poleDefinition</code> says so on every call and
+<code>info.sense</code> gives the sense of rotation from the sign of
+W&#775;.</p>
+
+<p><b>The Earth and the Moon are absent on purpose.</b> The 2015 report removed
+them; for the Earth use the rigorous chain (<code>rotationItrsToGcrs</code>) and
+for the Moon use a frame from the ephemeris, at any precision.</p>
+
+<h2 id="partials">Partial derivatives with respect to the EOP</h2>
+
+<p><code>rotationItrsToGcrsPartials</code> returns
+&part;R/&part;x<sub>p</sub>, &part;R/&part;y<sub>p</sub> and
+&part;R/&part;&Delta;UT1, and &mdash; when five or more outputs are requested
+&mdash; the same three for R&#775;.
+<code>earthOrientationPartials</code> is the generator layer underneath and takes
+a rotation you already hold.</p>
+
+<div class="key">
+<p><b>The partials are per radian, not per arcsecond.</b> Polar motion is
+published in arcseconds and &Delta;UT1 in seconds; x<sub>p</sub> and
+y<sub>p</sub> reach these functions in <b>radians</b>, as everywhere else in the
+toolbox. A caller building a normal matrix from an arcsecond-parameterised
+estimate must scale by <code>iersConstants().arcsecondsToRadians</code>.
+<code>info.polarMotionUnits</code> states this on every call, because <i>a factor
+of 206265 in a Jacobian is not visible in the answer</i> &mdash; it just makes
+the estimate converge to the wrong place.</p>
+</div>
+
+<table>
+<tr><th>Property</th><th>Value</th></tr>
+<tr><td>Rotation partials</td>
+    <td>Closed form: the same product chain with one elementary rotation
+        replaced by its derivative. Exact to roundoff.</td></tr>
+<tr><td>Constant-axis approximation</td>
+    <td>Neglects terms of order x<sub>p</sub>, y<sub>p</sub>, s&prime;
+        (&lt;&nbsp;1e-6&nbsp;rad), so the partials are exact to about one part
+        in 1e6 of themselves &mdash; six orders better than any use.</td></tr>
+<tr><td>Rate partials</td>
+    <td>D102 ordering: differentiate in the parameter first, difference in time
+        second, with the same step <code>rotationItrsToGcrs</code> uses for
+        R&#775;. <code>info.rateConstruction</code> records which order was
+        taken, because the two are not interchangeable and a reader cannot tell
+        from the numbers.</td></tr>
+<tr><td>Agreement with a differenced rotation</td>
+    <td>4.8e-9 (x<sub>p</sub>), 1.9e-9 (y<sub>p</sub>), 1.7e-7 (&Delta;UT1) at
+        the perturbations used. <b>All three are the difference's own roundoff
+        floor, not the accuracy of the partials</b>; the &Delta;UT1 figure was
+        swept over four decades of perturbation to establish that, and falls to
+        5.4e-10 at a 0.1&nbsp;s step.</td></tr>
+<tr><td><b>Partials of R&#775;&#775;</b></td>
+    <td><b>Not provided, by decision D105.</b> R&#775;&#775; exists for a force
+        model, not for an estimator, and no observation in scope is a function
+        of it.</td></tr>
+</table>
+
+<p class="foot">See <a href="referenceSystem_accuracy.html">Accuracy and Error
+Budget</a> for how these figures sit beside the rest of the toolbox, and the
+<a href="referenceSystem_functionReference.html">Function Reference</a> for the
+full signatures.</p>
+</body></html>

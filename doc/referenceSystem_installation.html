@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>referenceSystem - Installation and Distribution</title>
+<link rel="stylesheet" href="referenceSystem.css">
+</head><body>
+
+<h1>Installation and Distribution</h1>
+
+<p>The toolbox ships as a <b>zip archive</b> or a <b>git repository</b>. There
+is no packaged installer and no <code>.mltbx</code>: nothing stands between the
+repository and the user, so everything that has to happen before the toolbox
+works happens in one command.</p>
+
+<h2 id="install">Install</h2>
+
+<pre>
+&gt;&gt; cd &lt;wherever you unpacked or cloned it&gt;/referenceSystem
+&gt;&gt; setupReferenceSystem
+</pre>
+
+<p>That is the whole procedure. On a fresh copy it takes about a minute,
+because it compiles the gateway; afterwards it takes milliseconds.</p>
+
+<div class="key">
+<p><b><code>setupReferenceSystem</code> is the installer, and it is
+idempotent.</b> Every step compares its inputs against its output and does
+nothing when the output is already newer, so it is safe to call from
+<code>startup.m</code>. It does five things:</p>
+<ol>
+<li>puts the <b>distribution folder</b> on the path — never
+<code>+referenceSystem</code>, which is a namespace folder and must not be on
+the path;</li>
+<li>removes any stale or misconfigured entry belonging to this toolbox,
+including another installation of it;</li>
+<li>compiles the <b>MEX gateway</b> if it is missing or if any C source is newer
+than the binary;</li>
+<li>regenerates the <b>function reference</b> if any help block is newer than
+the page, and rebuilds the <b>Help browser search database</b> if any page is
+newer than the database;</li>
+<li><b>saves</b> the path, so the toolbox is still there after a restart;</li>
+<li><b>downloads</b> both Earth orientation series and the full SPICE kernel set
+into <code>data/</code>, skipping anything already present;</li>
+<li>prints what it found and what it did.</li>
+</ol>
+</div>
+
+<p><b>The defaults install rather than inspect.</b> A first run costs a few
+minutes and about 700 MB, of which 650 MB is the small-body kernel
+<code>sb441-n16.bsp</code>; later runs cost milliseconds and no network at all,
+because every file already on disk is skipped. A failed download never stops
+setup — the reasons come back in <code>status.fetch.failures</code> and in the
+summary. Every one of these behaviours is one named argument away from off.</p>
+
+<table>
+<tr><th>Call</th><th>Use it when</th></tr>
+<tr><td><code>setupReferenceSystem</code></td>
+    <td>Normal use. Installs, fetches and saves; builds and downloads only what
+        is out of date or absent.</td></tr>
+<tr><td><code>setupReferenceSystem(Fetch="none")</code></td>
+    <td>No network, or you do not want the data. Nothing is downloaded.</td></tr>
+<tr><td><code>setupReferenceSystem(KernelSet="minimal")</code></td>
+    <td>You want the planetary ephemeris <code>de440s.bsp</code> (~31 MB) and
+        not the orientation or small-body kernels.</td></tr>
+<tr><td><code>setupReferenceSystem(Save=false)</code></td>
+    <td>You want the path for this session only, leaving
+        <code>pathdef.m</code> untouched.</td></tr>
+<tr><td><code>setupReferenceSystem(Verbose=false)</code></td>
+    <td>A scripted call that should print nothing.</td></tr>
+<tr><td><code>setupReferenceSystem(Build="always")</code></td>
+    <td>After changing a compiler, a MATLAB release, or anything under
+        <code>mex/</code> that the timestamp check might not catch.</td></tr>
+<tr><td><code>setupReferenceSystem(Build="never")</code></td>
+    <td>A read-only installation, a diagnostic run, or a CI job that builds
+        separately. Setup then only reports.</td></tr>
+</table>
+
+<p>A build failure never stops setup. The path is the one thing setup
+absolutely has to get right, and a toolbox on the path with no gateway still
+gives you a working namespace, readable help, and an error that names the
+missing piece. You get a warning saying what failed and how to see the
+compiler output in full:</p>
+
+<pre>
+&gt;&gt; referenceSystem.buildMex           % the gateway, with the compiler output
+&gt;&gt; referenceSystem.buildDocumentation % the reference page and search database
+&gt;&gt; referenceSystem.runTestSuite       % writes referenceSystem_testReport.txt
+</pre>
+
+<p>Those three are every build step the toolbox has.</p>
+
+<h2 id="requirements">Requirements</h2>
+
+<table>
+<tr><th>Needed</th><th>For</th><th>If absent</th></tr>
+<tr><td>MATLAB R2020b or newer</td><td>The <code>arguments</code> block and
+    <code>pagemtimes</code></td><td>Setup refuses and says so.</td></tr>
+<tr><td>A C compiler (<code>mex -setup C</code>)</td>
+    <td>The gateway: leap seconds, time scales, the CIP series, the tidal models</td>
+    <td>Those functions raise <code>gatewayMissing</code> and name the fix.
+        Everything that is pure MATLAB still works.</td></tr>
+<tr><td>Nothing else</td><td></td>
+    <td>No toolboxes are required. SPICE (MICE) is used only by one vendor
+        comparison in the test suite, which is skipped when it is absent.</td></tr>
+</table>
+
+<h2 id="git">Distributing by git</h2>
+
+<p>Clone, then run setup. The repository holds <b>sources only</b>; every
+artefact is built locally and is listed in <code>.gitignore</code>:</p>
+
+<table>
+<tr><th>Not tracked</th><th>Why</th></tr>
+<tr><td><code>+referenceSystem/private/mexGateway.mex*</code></td>
+    <td><b>The MEX binary is platform-specific</b>, so a committed one is wrong
+        for most people who clone. Worse, it is wrong <i>silently</i> on the
+        platform it was built for once the C sources move on.</td></tr>
+<tr><td><code>doc/helpsearch*/</code></td>
+    <td>A database whose format changes between MATLAB releases.</td></tr>
+<tr><td><code>referenceSystem_testReport.txt</code></td>
+    <td>The report is a deliverable of a <i>run</i>, not of the repository.
+        Committing one invites reading a stale result as a current one.</td></tr>
+<tr><td><code>data/*.txt</code>, <code>data/*.dat</code></td>
+    <td>Earth orientation and leap-second files are measured data the IERS
+        reissues. Pin a copy deliberately when a result has to be reproducible,
+        and say so.</td></tr>
+</table>
+
+<div class="warn">
+<p><b>The stale-binary case is the one that bites, and setup checks for it.</b>
+Pulling a branch that touched <code>mex/</code> leaves a compiled gateway older
+than its own sources. A <i>missing</i> binary announces itself — every call
+fails. A <i>stale</i> one does not: it runs, it returns numbers, and you are
+executing one version of the algorithm from MATLAB and another from C. Setup
+compares the newest C source against the binary and rebuilds when the sources
+are newer, which only works because the binary is untracked and local.</p>
+</div>
+
+<p>The generated function reference <b>is</b> committed, deliberately: it is
+the one artefact a reader may want to open straight from a web view of the
+repository without a MATLAB session. Setup regenerates it when a help block is
+newer, so it cannot drift, and a test asserts that it has a section for every
+function in the package.</p>
+
+<h2 id="zip">Distributing by zip</h2>
+
+<p>Unpack anywhere and run setup. Two points are worth knowing.</p>
+
+<ul>
+<li><b>A zip made from a working tree carries one platform's binary.</b> That is
+harmless: the extension differs per platform, so a Linux MATLAB simply does not
+see a <code>.mexw64</code> and setup compiles a fresh one. On the <i>same</i>
+platform the timestamp check applies as usual.</li>
+<li><b>Prefer a zip made from a clean tree.</b> Everything in
+<code>.gitignore</code> is exactly what a release archive should not contain,
+which is convenient: if you build the archive from
+<code>git archive</code> you get the right contents for free.</li>
+</ul>
+
+<pre>
+$ git archive --format=zip --prefix=referenceSystem/ -o referenceSystem_v2.1.zip HEAD
+</pre>
+
+<h2 id="doc">Making the documentation reachable</h2>
+
+<p>Setup does this for you; this section is here for when it reports that it
+could not. Three files must line up, and any one of them missing is
+otherwise silent:</p>
+
+<table>
+<tr><th>File</th><th>Where</th><th>Job</th></tr>
+<tr><td><code>info.xml</code></td><td>the distribution folder, on the path</td>
+    <td>Tells MATLAB this folder documents a toolbox, and names the help folder
+        in <code>&lt;help_location&gt;</code>.</td></tr>
+<tr><td><code>helptoc.xml</code></td><td>inside that help folder</td>
+    <td>The Contents tree shown in the Supplemental Software browser.</td></tr>
+<tr><td><code>helpsearch-vN/</code></td><td>likewise</td>
+    <td>The search index. Built by
+        <code>referenceSystem.buildDocumentation</code>; without it the pages
+        still open, they just are not found by the search box.</td></tr>
+</table>
+
+<p><code>setupReferenceSystem(Verbose=true)</code> reports which of the three is
+absent, because the three have three different repairs. After a manual change,
+<code>rehash toolboxcache</code> makes MATLAB notice.</p>
+
+<div class="warn">
+<p><b>Custom documentation does not display in MATLAB Online.</b> The pages are
+plain HTML and open in any browser directly from the <code>doc</code>
+folder.</p>
+</div>
+
+<h2 id="uninstall">Removing it</h2>
+
+<pre>
+&gt;&gt; referenceSystem.teardownReferenceSystem
+</pre>
+
+<p>This releases the MEX gateway and reports anything else still holding the
+folder, so that it can be deleted on Windows too. Then remove the folder and,
+if you saved the path, remove the entry.</p>
+
+<p class="foot">referenceSystem v2.1. See
+<a href="referenceSystem_gettingStarted.html">Getting Started</a> for what to do
+once it is installed.</p>
+</body></html>

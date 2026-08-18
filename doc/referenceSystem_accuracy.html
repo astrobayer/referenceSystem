@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>referenceSystem - Accuracy and Error Budget</title>
+<link rel="stylesheet" href="referenceSystem.css">
+</head><body>
+
+<h1>Accuracy and Error Budget</h1>
+
+<p>This page is the scientific credential of the toolbox. It lists every
+approximation the code makes, its <b>measured</b> magnitude, and the conditions
+under which it matters. It consolidates section A.3 of the handover document in
+full.</p>
+
+<div class="key">
+<p><b>Read the first row before any other.</b> For an absolute
+Earth-fixed&nbsp;&harr;&nbsp;inertial rotation, the error is set by the Earth
+orientation parameters and not by this toolbox: about <b>1.5&ndash;2&nbsp;mm</b>
+at the surface for an IERS&nbsp;C04 series. Every algorithmic term below is at
+least an order smaller. The toolbox is built so that it will not become the
+limiting factor when the EOP improve, which is why tolerances in its test suite
+assert <i>algorithmic</i> agreement and never EOP-level agreement.</p>
+</div>
+
+<h2>Dominant term</h2>
+<table>
+<tr><th>Source</th><th>Magnitude</th><th>Notes</th></tr>
+<tr><td>EOP formal error, IERS&nbsp;C04</td>
+    <td>~30&nbsp;&micro;as in the pole &rarr; <b>0.9&nbsp;mm</b> at the equator;
+        ~1.5&ndash;2&nbsp;mm total at the surface</td>
+    <td>Measured, not modelled. Improves with each series release.</td></tr>
+</table>
+
+<h2>Earth rotation chain (L2)</h2>
+<table>
+<tr><th>#</th><th>Approximation</th><th>Measured magnitude</th><th>Verdict</th></tr>
+<tr><td>1</td><td>CIP offsets referred to the wrong precession-nutation model</td>
+    <td>0 at J2000.0; 2/39&nbsp;&micro;as at 2007; <b>121/135&nbsp;&micro;as at 2025 = 4.2&nbsp;mm</b></td>
+    <td><b>Fixed.</b> The model reference travels with the data in
+        <code>eop.meta.cipModel</code> instead of being assumed. This was the
+        most serious defect inherited from v1.</td></tr>
+<tr><td>3</td><td>Linear interpolation of daily EOP</td>
+    <td>~0.1&nbsp;mas peak in xp/yp</td>
+    <td>Justified; the IERS <code>interp.f</code> does the same.</td></tr>
+<tr><td>5</td><td>Sub-daily ocean tide and libration in the EOP</td>
+    <td>up to ~0.5&nbsp;mas polar motion, ~50&nbsp;&micro;s UT1 &rarr; <b>~15&nbsp;mm</b></td>
+    <td><b>Now default ON.</b> Not optional for GRACE-class work. This is the
+        behaviour change most likely to move your v1 results.</td></tr>
+<tr><td>6</td><td>Zonal tides in UT1/LOD (RG_ZONT2)</td>
+    <td>full model <b>167.7&nbsp;ms peak (&asymp;78&nbsp;m at the equator)</b>;
+        short-period part alone 2.07&nbsp;ms (&asymp;0.96&nbsp;m); dLOD 0.93&nbsp;ms/day</td>
+    <td>Already present in a C04 series as observed values. The correction
+        carries a <code>sense</code> tag and <code>interpolateEop</code>
+        <b>refuses</b> it without an explicit opt-in, because double-correcting
+        is invisible and costs millimetres.</td></tr>
+<tr><td>12</td><td>UTC fed to the tidal routines</td><td>&lt; 0.1&nbsp;&micro;as</td>
+    <td>Justified. Each routine's own header specifies its scale and the toolbox
+        refuses the other one.</td></tr>
+<tr><td>16</td><td>Central differences for <code>Rdot</code>/<code>Rddot</code></td>
+    <td><b>Measured optimum h = 200&nbsp;s.</b> Order 2.14 confirmed
+        600&rarr;300&nbsp;s; roundoff plateau below ~150&nbsp;s.
+        <b>Every step from 1&nbsp;s to 1800&nbsp;s meets a 1&nbsp;nm/s velocity and
+        1e-10&nbsp;m/s&sup2; acceleration budget</b>; only 3000&nbsp;s fails, by 1.3x.</td>
+    <td>Justified, and the choice is <i>not</i> critical &mdash; the opposite of
+        what the earlier unmeasured figure implied. Analytic differentiation
+        would mean duplicating SOFA's tables.</td></tr>
+<tr><td>17</td><td>ERA rate from &omega;<sub>E</sub> plus interpolated LOD</td>
+    <td>LOD term <b>2.5e-8 of &omega;<sub>E</sub> = 12.5&nbsp;&micro;m/s</b> at a
+        2.18&nbsp;ms LOD</td>
+    <td>Correction is default on. The residual is the interpolation of a daily
+        LOD series plus its own sub-daily signal.</td></tr>
+<tr><td>18</td><td>TIO locator s&prime; from <code>iauSp00</code></td>
+    <td>&minus;47&nbsp;&micro;as/century, &asymp; &minus;12&nbsp;&micro;as at 2025
+        = 0.37&nbsp;mm</td>
+    <td>Justified. Listed so nobody has to wonder whether it was forgotten.</td></tr>
+</table>
+
+<h3>Terms in <code>Rdot</code>, and what dropping one costs</h3>
+<p>Measured, as a ratio to the Earth rotation rate and as the velocity error at
+a 7000&nbsp;km orbit radius. <b>All three are included.</b></p>
+<table>
+<tr><th>Term</th><th>Ratio</th><th>Velocity error if dropped</th></tr>
+<tr><td>precession-nutation <code>Qdot</code></td><td>9.3e-8</td><td>47&nbsp;&micro;m/s</td></tr>
+<tr><td>length-of-day correction to &omega;</td><td>2.5e-8</td><td>12.5&nbsp;&micro;m/s</td></tr>
+<tr><td>polar motion <code>Wdot</code></td><td>2.6e-9</td><td>1.3&nbsp;&micro;m/s</td></tr>
+</table>
+<p><code>Qddot</code> measures 2.0e-17&nbsp;s<sup>-2</sup> =
+<b>1.4e-10&nbsp;m/s&sup2;</b>, which is at the GRACE accelerometer noise floor.
+That is why <code>Rddot</code> exists.</p>
+
+<h3>Validation of the chain</h3>
+<table>
+<tr><th>Check</th><th>Result</th></tr>
+<tr><td>CIP X, Y against the SOFA cookbook</td><td>9.0e-17, 2.9e-16</td></tr>
+<tr><td>Full ITRS&rarr;GCRS matrix against the cookbook</td>
+    <td>2.6e-15 (5e-4&nbsp;&micro;as)</td></tr>
+<tr><td>ERA against the cookbook</td><td>5.9e-13 deg</td></tr>
+<tr><td><b>Equinox route versus CIO route</b> (risk R13b)</td>
+    <td><b>4.4e-16 rad = 9.1e-5&nbsp;&micro;as</b>, run continuously over an
+        epoch sweep, not at a handful of literals</td></tr>
+<tr><td>Orthogonality &#8214;R&prime;R &minus; I&#8214;</td><td>1.1e-16</td></tr>
+<tr><td>Skew invariant &#8214;Rdot&prime;R + R&prime;Rdot&#8214;</td><td>4.2e-19 rad/s</td></tr>
+</table>
+
+<h2>Time scales (L0)</h2>
+<table>
+<tr><th>#</th><th>Approximation</th><th>Measured magnitude</th><th>Verdict</th></tr>
+<tr><td>2</td><td>TDB&minus;TT series</td>
+    <td>SOFA <code>iauDtdb</code> agrees with the published three-term Almanac
+        formula to better than <b>1e-5&nbsp;s</b>. The corrupted v1 series was
+        wrong by up to <b>1.7e-4&nbsp;s</b> against a claimed 2&nbsp;ns.</td>
+    <td><b>Fixed.</b></td></tr>
+<tr><td>15</td><td>GST&nbsp;&equiv;&nbsp;GPS, BDT = TAI&minus;33&nbsp;s</td>
+    <td>ns-level steering offsets</td>
+    <td>Justified, and documented as <b>nominal, not realised</b>. A real GNSS
+        time-transfer application must not rely on it.</td></tr>
+<tr><td>&mdash;</td><td>Fundamental arguments: SOFA <code>iauFa*03</code>
+        versus the ported IERS <code>FUNDARG.F</code></td>
+    <td><b>9.8e-12 rad = 2.0&nbsp;&micro;as</b>, confined to l&prime; and D and
+        bit-exact for l, F and &Omega;</td>
+    <td>The supplied <code>FUNDARG.F</code> truncates two constants by two
+        digits and does not reproduce the test case in its own header. Pinned
+        and measured rather than repaired, because repairing it would break the
+        byte-intactness under which the other five routines are validated.
+        2&nbsp;&micro;as of lunisolar argument reaches polar motion as under
+        1e-9&nbsp;&micro;as.</td></tr>
+<tr><td>&mdash;</td><td>Leap-second table horizon</td>
+    <td>frozen at 2017-01-01</td>
+    <td>Every epoch from 2029 onward raises a dubious-year warning. Check IERS
+        Bulletin C and supply an override before operational use.</td></tr>
+</table>
+
+<h2>Terrestrial frames and datums (L3)</h2>
+<table>
+<tr><th>#</th><th>Approximation</th><th>Measured magnitude</th><th>Verdict</th></tr>
+<tr><td>7</td><td>IGS frames treated as the underlying ITRF</td><td>few mm</td>
+    <td>Justified and documented.</td></tr>
+<tr><td>8, 9</td><td>Inverse Helmert by negating the parameters</td>
+    <td>1.2e-10&nbsp;m at ITRF scale; 5.0e-6&nbsp;m for a modern datum;
+        <b>9.9e-4&nbsp;m for a legacy datum</b>; 1.4&nbsp;m at 100&Prime;/20&nbsp;ppm
+        &mdash; against <b>1e-10&nbsp;m for the exact solve</b></td>
+    <td><b>Removed.</b> Every inverse is solved. Negation is sub-millimetre for
+        modern parameters and wrong at the millimetre level for exactly the
+        legacy datums it was traditionally used for.</td></tr>
+<tr><td>10</td><td>Molodensky, <b>standard form</b> (v1's help said
+        &ldquo;abridged&rdquo;; the code was standard)</td>
+    <td>standard 16/15/8&nbsp;mm north/east/up; abridged 165/16/84&nbsp;mm
+        (ED50&rarr;WGS84, global 5&deg; grid, against the exact Cartesian route)</td>
+    <td>Legacy compatibility only. It exists because national parameter sets are
+        <i>defined</i> by Molodensky, so reproducing an official coordinate
+        needs the same approximation the publication used. Use the Cartesian
+        route for anything below a centimetre.</td></tr>
+<tr><td>11</td><td>Small-angle Helmert rotation matrix</td>
+    <td>fine to about an arcsecond</td>
+    <td>Justified, with a guard above ~100&nbsp;arcsec.</td></tr>
+</table>
+<p>Agreement with PROJ&nbsp;9.5.1: <code>geodeticToCartesian</code> bit for bit,
+Helmert in both conventions 0.0&nbsp;m, the full ITRF2020 chain including
+ITRF93's rotations 1e-9&nbsp;m.</p>
+
+<h2>Coordinate representations (L4)</h2>
+<table>
+<tr><th>#</th><th>Approximation</th><th>Measured magnitude</th><th>Verdict</th></tr>
+<tr><td>13</td><td>Vermeille (2002) closed form for Cartesian&rarr;geodetic</td>
+    <td>~1e-9&nbsp;m</td><td>Best in class. No iteration limit to tune.</td></tr>
+<tr><td>14</td><td>Kr&uuml;ger n-series to n&sup3; for UTM</td>
+    <td>forward easting 0.0&nbsp;m on the central meridian, 1.1e-5&nbsp;m at 3&deg;,
+        8.8e-5&nbsp;m at 20&deg;; forward <b>northing 1.71e-4&nbsp;m and
+        essentially independent of the offset</b>, because it is the meridian arc
+        series; <b>inverse 5.9e-4&nbsp;m</b>; <b>round trip 7.4e-4&nbsp;m</b>,
+        worst near &plusmn;55&deg;</td>
+    <td>Justified; n&#8310; withdrawn as buying nothing a UTM coordinate can use.
+        <b>The useful fact is which series dominates: the inverse &delta;
+        series</b>, so a future order increase should go there and nowhere
+        else.</td></tr>
+</table>
+
+<div class="warn">
+<p><b>A measurement lesson worth carrying.</b> An earlier revision recorded the
+UTM truncation as 0.06&nbsp;mm. That was the easting alone, swept at a fixed
+offset from the central meridian, and it could not see the meridian arc term
+<i>because that term does not vary with the quantity being swept</i>. A one-way
+comparison at one offset is not a measurement of a truncation.</p>
+</div>
+
+<h2>Attitude and navigation (L4b, L5)</h2>
+<table>
+<tr><th>Quantity</th><th>Measured</th><th>Notes</th></tr>
+<tr><td>SLERP against held-out real GRACE-FO attitude</td>
+    <td><b>4.4e-6 rad median at 2&nbsp;s gaps, 7.7e-6 at 30&nbsp;s</b>, against
+        JPL's 8.8e-7 rad formal error</td>
+    <td>Interpolation, not the algebra, is the limit at 30&nbsp;s.</td></tr>
+<tr><td>Frame sense against real flight data</td>
+    <td>SRF axes at <b>1.20, 1.61, 0.99 deg</b> from along-track, cross-track and
+        radial over one orbit</td>
+    <td>The residual is a real spacecraft's attitude control deadband, not
+        numerical error. Recovered inclination 88.87 deg against a published
+        89.0.</td></tr>
+<tr><td>Euler sequences and quaternion products against NAIF SPICE</td>
+    <td><b>1e-14</b> over 9600 comparisons</td>
+    <td>Twelve sequences x two rotation types x two senses. The first check in
+        the project that does not run against the toolbox's own transcription.</td></tr>
+<tr><td>Attitude integration, coning case</td>
+    <td>With exact rate quadrature the coning correction drives the residual to
+        machine precision. <b>In practice the limit is the trapezoidal
+        reconstruction of &omega; between samples</b>, so the measured benefit of
+        the coning term is a factor of <b>2, not hundreds</b>.</td>
+    <td>A rate interface cannot do better; an integrated-increment
+        (delta-theta) input would remove the dominant term. Deferred as P27.</td></tr>
+</table>
+
+<div class="warn">
+<p><b>The limit of every self-test in the rotation algebra.</b> A wrong Euler
+sense, quaternion order or product still yields an orthogonal, unit-determinant
+matrix that round-trips through its own inverse. No self-test can catch a
+<i>consistently</i> wrong toolbox. The conventions here are therefore checked
+against independent authorities &mdash; NAIF SPICE, scipy, hand-computed
+literals and real GRACE-FO flight data &mdash; and the convention struct travels
+with the data so that a mismatch between two objects is detectable. That is a
+statement about what has been checked, not a proof of correctness.</p>
+</div>
+
+<h2>Ephemerides and the BCRS (L5e)</h2>
+<p>Added in v2.1. Full narrative in
+<a href="referenceSystem_ephemerides.html">Ephemerides, Body Frames and EOP
+Partials</a>; the figures are here because this page is where they are looked
+for.</p>
+<table>
+<tr><th>Quantity</th><th>Measured / stated</th><th>Verdict</th></tr>
+<tr><td><b>Ephemeris tier <code>"sofa"</code></b> (bundled, default)</td>
+    <td>Earth ~4.6&nbsp;km, Moon ~10.7&nbsp;km, Mercury ~339&nbsp;km, Neptune
+        ~158&nbsp;000&nbsp;km</td>
+    <td>Analytic series (<code>iauEpv00</code>, <code>iauMoon98</code>,
+        <code>iauPlan94</code>). <b>Kilometres, not millimetres</b>, and
+        <code>info.positionError</code> carries the figure on every call so it
+        is never inferred.</td></tr>
+<tr><td><b>Ephemeris tier <code>"mice"</code></b> (DE440 through SPICE)</td>
+    <td>metres; checked against a HORIZONS fixture at four bodies and three
+        epochs</td>
+    <td>The residual measured there is the <b>DE440-minus-DE441</b> difference,
+        because HORIZONS serves DE441 &mdash; measured, not assumed away.
+        <b>The small-body path has never been run against an external
+        authority</b>; Ceres needs <code>sb441-n16.bsp</code> and the skip is
+        reported in the test log.</td></tr>
+<tr><td><b>DE440 against DE441</b></td>
+    <td><b>planets below 1&nbsp;m</b> over DE440's 1100-year span;
+        <b>Moon below 2&nbsp;m</b> across 1970&ndash;2020, growing outside it
+        and mostly along-track</td>
+    <td>Read from Park et&nbsp;al. (2021), AJ&nbsp;161:105, not assumed. The two
+        were fit to the <b>same data set</b> and differ in one modelling choice
+        &mdash; DE441 assumes no damping between the lunar liquid core and
+        mantle, which is what lets it integrate backwards for millennia. At or
+        below the metre-level floor the MICE tier claims for itself, so for
+        GRACE-era work they are interchangeable; JPL's own guidance is DE440 for
+        modern data and DE441 for epochs before DE440's span. <b>The pairing of
+        the <code>sb441</code> asteroid files with a DE440 planetary kernel is
+        NOT established by that paper</b> and remains inferred from JPL's
+        naming.</td></tr>
+<tr><td>DE430 against DE440</td>
+    <td>solar-system barycentre moved by <b>about 100&nbsp;km</b></td>
+    <td>Mainly the added Kuiper-belt masses (30 KBOs plus a ring at 44&nbsp;au).
+        This is the figure decision D15 rests on, now verified rather than
+        recalled. <b>Different fits are not interchangeable</b>; the toolbox
+        warns when they are furnished together and never refuses (D110).</td></tr>
+<tr><td>Small-body path, <code>sb441-n16</code> against HORIZONS</td>
+    <td><b>8021.9&nbsp;m</b> for Ceres, three epochs 2000&ndash;2025</td>
+    <td>2e-8 of Ceres's 2.77&nbsp;au. A frozen 2020-era small-body integration
+        against HORIZONS' current solution &mdash; <b>the two ephemerides
+        disagreeing, not this toolbox</b>. First measurement of this path
+        against an outside authority; bounded at 50&nbsp;km, which a unit or
+        frame error could not hide under.</td></tr>
+<tr><td>Frame bias, <code>"sofa"</code> provider</td>
+    <td>23&nbsp;mas &rarr; 6.7&nbsp;km at Mercury, 500&nbsp;km at Neptune</td>
+    <td><b>Reported, not applied</b> (D93). <code>iauPlan94</code> is referred to
+        the mean equator and equinox of J2000.0; the bias is one to three orders
+        <i>inside</i> the model error for every planet, so applying it would
+        imply a precision the theory does not have.</td></tr>
+<tr><td><b>BCRS &harr; GCRS transformation</b></td>
+    <td><b>below 1&nbsp;mm</b> &mdash; the Conventions' own stated uncertainty
+        for Eqs.&nbsp;(11.18)/(11.19); round trip closes to 9.3e-10&nbsp;m</td>
+    <td>Everything neglected inside it is smaller: planets 12&nbsp;&micro;m
+        through U, Moon 0.9&nbsp;&micro;m. <b>The ephemeris barely matters</b> —
+        U and V enter only through 1/c&sup2;, so the bundled provider's
+        2.8&nbsp;mm/s on the Earth's velocity moves the result by
+        4.8e-9&nbsp;m.</td></tr>
+<tr><td><code>Scale</code> choice, <code>"none"</code> vs
+        <code>"tdbCompatible"</code></td>
+    <td>differ by <b>9.5&nbsp;cm</b> at a mid-latitude station</td>
+    <td>Ninety-five times the formula's own 1&nbsp;mm and invisible in the
+        result, so the option has <b>no default</b>.</td></tr>
+<tr><td>BCRS velocity, IAU 2000 Resolution B1.3</td>
+    <td>dT/dt factor 1.5e-8 = 4.7e-4&nbsp;m/s on 31&nbsp;km/s; order 2.00 at six
+        step sizes</td>
+    <td>Validated by central difference; the residual is the difference's own
+        truncation, not a formula error.</td></tr>
+<tr><td><code>geocentricBodyState</code> is a coordinate difference</td>
+    <td>omitted GCRS term ~6&nbsp;m at the Moon, ~2.2&nbsp;km at the Sun</td>
+    <td>Invisible under <code>"sofa"</code> (6&nbsp;m against 10&nbsp;700&nbsp;m);
+        <b>dominant under <code>"mice"</code></b>. Stated on the function rather
+        than hidden behind a <code>'Frame'</code> option that would be applied
+        outside its domain.</td></tr>
+</table>
+
+<h2>Planetary body-fixed frames (L5f)</h2>
+<table>
+<tr><th>Quantity</th><th>Measured / stated</th><th>Verdict</th></tr>
+<tr><td>WGCCRE 2015 rotational elements</td>
+    <td><b>one tenth of a degree</b>, the report's own statement; at Uranus the
+        prime-meridian uncertainty <i>exceeds a complete rotation</i></td>
+    <td>The accuracy is entirely the elements'; the frame assembly adds only
+        orthonormal arithmetic, measured below 1e-15.</td></tr>
+<tr><td>Transcription of Table 1, against quantities the table does not
+        contain</td>
+    <td>pole vs orbital pole agrees to <b>0.011&ndash;0.034&nbsp;deg</b>;
+        360/W&#775; vs published sidereal period to <b>2.5e-6 &hellip;
+        8.8e-11</b></td>
+    <td>Checking a transcription against a second copy of itself proves nothing.
+        The Neptune check first failed by 0.9&nbsp;% against the System&nbsp;III
+        period &mdash; <b>the comparator was wrong, not the table</b>.</td></tr>
+<tr><td>Table 1 against NAIF's independent PCK encoding</td>
+    <td><b>2e-6 in matrix elements &asymp; 0.4&nbsp;arcsec</b>, all nine
+        bodies</td>
+    <td>Table 1 is now bounded twice, by two unrelated authorities.</td></tr>
+<tr><td><b>Domain of <code>Source = "iau"</code></b></td>
+    <td><b>Table 1 only</b>: the Sun and eight planets</td>
+    <td>Satellites, dwarf and minor planets route through
+        <code>Source = "pck"</code>. Tables&nbsp;2&ndash;3 are deliberately not
+        transcribed &mdash; section&nbsp;6 of the report uses the
+        <i>opposite</i> pole convention for them (D100). <b>The two sources
+        differ in domain, not only in accuracy.</b></td></tr>
+</table>
+
+<h2>Partial derivatives with respect to the EOP</h2>
+<p>Measured cost, N&nbsp;=&nbsp;500 on one host: the three rotation partials are
+<b>1.15&times;</b> the rotation itself and <b>4.00&times;</b> with the rate
+partials, so they reuse the rotation's factors rather than re-deriving the
+chain. <code>earthOrientationPartials</code>, given a rotation you already hold,
+is eleven times cheaper than that rotation.</p>
+<table>
+<tr><th>Quantity</th><th>Measured</th><th>Verdict</th></tr>
+<tr><td>Constant-axis approximation in the generators</td>
+    <td>neglects terms of order x<sub>p</sub>, y<sub>p</sub>, s&prime;
+        (&lt;&nbsp;1e-6&nbsp;rad)</td>
+    <td>Exact to one part in 1e6 of themselves &mdash; six orders better than
+        any use a partial is put to.</td></tr>
+<tr><td>&part;R/&part;x<sub>p</sub>, &part;R/&part;y<sub>p</sub> against a
+        differenced rotation</td>
+    <td><b>4.8e-9 and 1.9e-9</b></td>
+    <td>At the central difference's own roundoff floor.</td></tr>
+<tr><td>&part;R/&part;&Delta;UT1 against a differenced rotation</td>
+    <td><b>5.4e-10</b> at a 0.1&nbsp;s perturbation, rising as 1/&delta; to
+        1.7e-7 at 1&nbsp;ms</td>
+    <td><b>Resolved: this is the oracle's roundoff floor, not the accuracy of
+        the partial.</b> Swept over &delta;&nbsp;=&nbsp;1e-1&hellip;1e-5&nbsp;s;
+        the product (error &times; &delta;) has no trend, scattering about
+        <b>4.3e-11</b>, which corresponds to about 28&nbsp;ulp of roundoff in
+        the differenced rotation. A &delta;-independent error would not have
+        fallen by 306&times; between 1&nbsp;ms and 0.1&nbsp;s. The sweep is
+        <b>bit-reproducible across runs</b>, so its scatter is the exact
+        rounding this chain produces at each perturbation and not the noise of
+        the instrument. The analytic
+        partials are closed-form products of the same factors the rotation is
+        built from and are exact to roundoff; <b>1.7e-7 measures how well a
+        finite difference can see them</b>, which is a statement about the
+        instrument.</td></tr>
+<tr><td>Units</td>
+    <td>per <b>radian</b>, not per arcsecond</td>
+    <td><code>info.polarMotionUnits</code> states it on every call. A factor of
+        206265 in a Jacobian is not visible in the answer.</td></tr>
+<tr><td>Partials of R&#775;&#775;</td><td>&mdash;</td>
+    <td><b>Not provided, by decision D105.</b> R&#775;&#775; is a force-model
+        quantity; no observation in scope is a function of it. Recorded so it is
+        clear the question was answered rather than overlooked.</td></tr>
+</table>
+
+<h2>What is deliberately not in the toolbox</h2>
+<ul>
+<li><b>IAU 2000B</b> as a fast nutation alternative: 1&nbsp;mas &asymp; 3&nbsp;cm
+is an order worse than the EOP error floor, so it is unusable here (D16).</li>
+<li><b>A bundled geoid grid</b>, for licensing and size reasons (risk R8).</li>
+<li><b>WGCCRE Tables 2 and 3</b> under <code>Source = "iau"</code>; they carry a
+different pole convention and route through the PCK instead (D100).</li>
+<li><b>Partials of R&#775;&#775;</b> with respect to the EOP (D105).</li>
+<li><b>A GCRS frame option on <code>geocentricBodyState</code></b>; the
+expansion is valid only near the Earth (D96).</li>
+</ul>
+<p><i>The three items listed here in v2.0 &mdash; interpolated CIP mode, EOP
+partials, and barycentric frames and ephemerides &mdash; have all since been
+delivered, and are documented above and on the ephemerides page.</i></p>
+
+<p class="foot">Every figure on this page is measured unless it says otherwise.
+Where a figure was asserted and later measured, the measurement replaced it and
+the correction is recorded in the handover revision log.</p>
+</body></html>

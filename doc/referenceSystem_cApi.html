@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>referenceSystem - The public C API</title>
+<link rel="stylesheet" href="referenceSystem.css">
+</head><body>
+
+<h1>The public C API</h1>
+
+<p>This page documents <code>mex/rsApi.h</code>, a small stable header that a
+user's own MEX file or standalone C program can link against to evaluate the
+ITRS&nbsp;&harr;&nbsp;GCRS rotation with no MATLAB in the loop.</p>
+
+<div class="key">
+<p><b>Why it exists, in one measurement.</b> MATLAB's own call overhead is
+about <b>5&ndash;15&nbsp;&micro;s</b> and cannot be optimised away &mdash; it is
+the MEX round trip, the <code>arguments</code> block and the struct assembly,
+not the arithmetic. An orbit integrator evaluating its right-hand side a
+hundred thousand times per arc pays that overhead a hundred thousand times.
+<code>rsApiRotation</code> is measured at <b>0.564&nbsp;&micro;s per call</b> by
+<code>test/c/testApi.c</code> on the reference host. <b>The accuracy is
+identical</b>; only the overhead differs. If your integrator needs better than
+about 15&nbsp;&micro;s per evaluation, it has to live in C.</p>
+</div>
+
+<div class="key">
+<p><b>Measured, 2026-08-04, and it changes the advice.</b> On the reference host
+a single-epoch <code>rotationItrsToGcrs</code> call costs <b>491&nbsp;&micro;s</b>
+on the exact path and <b>469&nbsp;&micro;s</b> with an interpolant &mdash; a
+speedup of <b>0.99</b>. At N&nbsp;=&nbsp;1 the cost is MATLAB-side overhead,
+which the interpolant cannot touch, so <b>the interpolated mode buys nothing for
+single calls</b> and P19's "&lt;&nbsp;15&nbsp;&micro;s per single-epoch call"
+target was inconsistent with the same prompt's statement that 5&ndash;15&nbsp;&micro;s
+of overhead cannot be optimised away. The interpolant is for <b>arcs</b>, where
+per-epoch series evaluation dominates. <b>For a hot loop, use this C API</b>
+&mdash; 0.564&nbsp;&micro;s per call, measured &mdash; and not the MATLAB
+interpolated path.</p>
+</div>
+
+<h2 id="workflow">The workflow</h2>
+
+<p>MATLAB builds the interpolant and writes it; C reads it and evaluates it.
+The two halves never run at the same time.</p>
+
+<pre>
+% MATLAB, once per arc
+eop  = referenceSystem.readEop("data/eopc04_20.1962-now");
+span = referenceSystem.daySecondToEpoch([57754 0; 57755 0], "UTC");
+eoi  = referenceSystem.earthOrientationInterpolant(span, 'Eop', eop);
+referenceSystem.writeInterpolant(eoi, "arc.eopi");
+</pre>
+
+<p>The struct <code>eoi</code> carries its validity interval, node spacing, fit
+degree and the <b>measured</b> maximum residual against the exact model, so the
+accuracy of the fast path is reported at run time rather than assumed.</p>
+
+<h2 id="entry-points">Entry points</h2>
+
+<table>
+<tr><th>Function</th><th>Purpose</th></tr>
+<tr><td><code>rsApiReadInterpolant</code></td><td>Read a file written by
+<code>writeInterpolant</code>. Two-call protocol; see below.</td></tr>
+<tr><td><code>rsApiInterpolantSize</code></td><td>Doubles the coefficient array
+needs: <code>(degree+1) * 6 * panelCount</code>.</td></tr>
+<tr><td><code>rsApiRotation</code></td><td>The 3&times;3 rotation at one UTC MJD,
+column-major, ITRS to GCRS.</td></tr>
+<tr><td><code>rsApiRotationRate</code></td><td>The rotation and its time
+derivative, per second, by central difference.</td></tr>
+<tr><td><code>rsApiPanelIndex</code></td><td>Which panel holds an epoch, or
+&minus;1. An optimisation, never a requirement.</td></tr>
+</table>
+
+<h2 id="format">The interpolant file, and the seventh channel</h2>
+
+<p><code>writeInterpolant</code> emits a plain-text file that
+<code>rsApiReadInterpolant</code> reads. It exists in two formats and
+<b>both are read</b>:</p>
+
+<table>
+<tr><th>Format</th><th>Channels per panel</th><th>Written by</th></tr>
+<tr><td>1</td><td>6 &mdash; X, Y, s, x<sub>p</sub>, y<sub>p</sub>, &Delta;UT1</td>
+    <td>up to v2.1.178</td></tr>
+<tr><td>2</td><td>7 &mdash; the same, plus the excess length of day</td>
+    <td>v2.1.179 onward (prompt P19c)</td></tr>
+</table>
+
+<p><b>The channel count is read from the file's own <code>quantity</code> line,
+never inferred from the version number.</b> A reader that trusted the version
+would stride correctly only for as long as the two never disagreed, and would
+then be wrong in a way that produces smooth, plausible coefficients. The version
+guards one thing: an <i>unknown</i> format is refused rather than read
+hopefully.</p>
+
+<p>The C side needs only the first six channels &mdash; the seventh feeds the
+ERA rate in MATLAB, and <code>rsApiRotationRate</code> differences rather than
+differentiates. What the count buys here is correct <b>striding</b>.</p>
+
+<div class="warn">
+<p><b>If you fill in an <code>rsApiInterpolant</code> yourself</b> &mdash; as the
+worked propagator below does &mdash; set the new
+<code>quantityCount</code> field. <b>Zero means six</b>, so code written before
+v2.1.179 keeps its meaning and needs no edit; new code should say what it
+means. This default is not a courtesy: adding the field without it silently
+changed the meaning of every hand-built interpolant, made the panel term in the
+coefficient offset vanish so that every panel read panel&nbsp;0, and moved the
+residual against the direct chain from <b>1.16e-16 to 6.53e-07</b> &mdash; small
+enough to read as a tolerance and entirely wrong. The standalone C suite caught
+it; nothing else would have.</p>
+</div>
+
+<h2 id="ownership">Ownership</h2>
+
+<div class="key">
+<p><b>This library never allocates.</b> The caller owns every buffer, which is
+why <code>rsApiReadInterpolant</code> uses a two-call protocol: call it once
+with both buffers <code>NULL</code> to have the header parsed and the sizes
+filled in, size your arrays with <code>rsApiInterpolantSize</code>, then call it
+again to fill them. The alternative &mdash; the library mallocs and the caller
+remembers to free &mdash; is the arrangement that leaks in an integrator
+reloading panels once a day for a month.</p>
+</div>
+
+<p>On any status other than <code>RS_API_OK</code> the output is
+<b>untouched</b>, and a failed read leaves the interpolant <b>unusable</b>
+rather than half filled: its coefficient pointer is set to <code>NULL</code>, so
+a caller that ignores the return value gets
+<code>RS_API_NULL_ARGUMENT</code> from the next call instead of a rotation built
+out of whatever happened to be in the buffer.</p>
+
+<h2 id="threads">Thread safety (risk R11)</h2>
+
+<p><code>rsApiRotation</code> and <code>rsApiRotationRate</code> take the
+interpolant as <code>const</code> and hold no state between calls, so <b>any
+number of threads may share one interpolant concurrently</b>.
+<code>rsApiReadInterpolant</code> writes into it and is <b>not</b> thread safe;
+it must complete before the threads start.</p>
+
+<h2 id="derivative">The rate is differenced, not differentiated</h2>
+
+<p><code>rsApiRotationRate</code> takes a central-difference step in seconds.
+That is the same construction the direct MATLAB path uses under decision D28,
+so the two agree. Differentiating the Chebyshev panels analytically would be
+faster and is a reasonable thing to want &mdash; it is a separate prompt, not a
+variation to be slipped in here, because the two would then disagree at a level
+nobody had measured.</p>
+
+<h2 id="example">Worked example</h2>
+
+<p><code>doc/examples/exampleRk4Propagator.c</code> is a complete fourth-order
+Runge&ndash;Kutta propagator that links this API. Its force model is a point
+mass plus J2 &mdash; the smallest model that makes the rotation matter, since J2
+is expressed in the Earth-fixed frame while the state is integrated in the
+inertial one, so <b>every right-hand-side evaluation needs one rotation</b>.</p>
+
+<pre>
+cc -O2 -std=c99 -Imex -Imex/sofa -Imex/iers \
+   doc/examples/exampleRk4Propagator.c mex/rsApi.c mex/rsCore.c \
+   mex/rsCheb.c mex/sofa/*.c mex/iers/*.c -lm -o rk4
+./rk4 arc.eopi
+</pre>
+
+<p>It is <b>not</b> a precise orbit determination force model: no third bodies,
+no tides, no drag, no radiation pressure, no relativistic correction. It exists
+to show the calling sequence, the ownership rules and the cost, and it should
+not be mistaken for anything more.</p>
+
+</body></html>
