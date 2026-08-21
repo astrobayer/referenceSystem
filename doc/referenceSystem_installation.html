@@ -44,20 +44,27 @@ into <code>data/</code>, skipping anything already present;</li>
 </ol>
 </div>
 
-<p><b>The defaults install rather than inspect.</b> A first run costs a few
-minutes and about 700 MB, of which 650 MB is the small-body kernel
-<code>sb441-n16.bsp</code>; later runs cost milliseconds and no network at all,
-because every file already on disk is skipped. A failed download never stops
-setup — the reasons come back in <code>status.fetch.failures</code> and in the
-summary. Every one of these behaviours is one named argument away from off.</p>
+<p><b>Setup installs the toolbox; a second call installs the data.</b> The
+default run is offline and takes seconds. <code>Fetch="all"</code> then costs a
+few minutes and about 700 MB, of which 650 MB is the small-body kernel
+<code>sb441-n16.bsp</code>; later runs cost nothing, because every file already
+on disk is skipped. A failed download never stops setup — the reasons come
+back in <code>status.fetch.failures</code> and in the summary. When nothing is
+installed yet, setup prints the call that installs it, so the empty folder is
+reported rather than merely left.</p>
+
+<p>Where the data goes is <code>referenceSystem.dataFolder</code>, the one
+authority for the location: call it with a path to move installed data off the
+system disk, and the choice persists across sessions.</p>
 
 <table>
 <tr><th>Call</th><th>Use it when</th></tr>
 <tr><td><code>setupReferenceSystem</code></td>
-    <td>Normal use. Installs, fetches and saves; builds and downloads only what
-        is out of date or absent.</td></tr>
-<tr><td><code>setupReferenceSystem(Fetch="none")</code></td>
-    <td>No network, or you do not want the data. Nothing is downloaded.</td></tr>
+    <td>Normal use. Sets and saves the path, builds what is out of date, and
+        downloads nothing.</td></tr>
+<tr><td><code>setupReferenceSystem(Fetch="all")</code></td>
+    <td>Install the external data: both EOP series and the full kernel set,
+        about 700 MB once.</td></tr>
 <tr><td><code>setupReferenceSystem(KernelSet="minimal")</code></td>
     <td>You want the planetary ephemeris <code>de440s.bsp</code> (~31 MB) and
         not the orientation or small-body kernels.</td></tr>

@@ -165,9 +165,14 @@ function source = localSourceRegistry()
 end
 
 function folder = localDefaultCache()
-%LOCALDEFAULTCACHE The data/ folder of the installation.
+%LOCALDEFAULTCACHE The toolbox data folder, from its one authority.
+%
+%   D119: this function used to compose data/ from its own mfilename, and so
+%   did its twin in the sibling downloader. Two definitions of one location
+%   cannot be moved together, and a caller who set one was surprised by the
+%   other. Both now ask referenceSystem.dataFolder.
 
-    folder = string(fullfile(fileparts(fileparts(mfilename('fullpath'))), 'data'));
+    folder = referenceSystem.dataFolder();
 end
 
 function [isFresh, age] = localCacheIsFresh(file, maxAge)

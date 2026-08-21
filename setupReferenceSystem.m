@@ -235,8 +235,10 @@ function status = setupReferenceSystem(options)
 
     arguments
         options.Save (1,1) logical = true
+        % D119: "none", NOT "all". Setup installs the toolbox; it does not
+        % install the data. See the METHOD note on why D115's default moved.
         options.Fetch (1,1) string {mustBeMember(options.Fetch, ...
-            ["none", "eop", "kernels", "all"])} = "all"
+            ["none", "eop", "kernels", "all"])} = "none"
         options.KernelSet (1,1) string = "all"
         options.KernelSpan (1,1) string = "short"
         options.Verbose (1,1) logical = true
@@ -937,6 +939,15 @@ function printSummary(status)
         for k = 1:numel(status.fetch.failures)
             fprintf('  FAILED  : %s\n', status.fetch.failures(k));
         end
+    elseif isempty(status.kernels) || isempty(status.eopSources)
+        % D119 OWES D115 THIS LINE. Decoupling setup from the fetch brings back
+        % the state rev. 1.204 was written against - an installed toolbox with
+        % an empty data folder - and the fix for that was never the download
+        % itself, it was ending the SILENCE about it. The next command is
+        % printed rather than left in the documentation.
+        fprintf(['  data    : nothing installed yet. To fetch it:\n', ...
+            '            setupReferenceSystem(Fetch = "all")   %% ~700 MB\n', ...
+            '            referenceSystem.dataFolder(path)      %% to put it elsewhere first\n']);
     end
     if isempty(status.eopSources)
         fprintf('  EOP     : none cached in data/; supply a series to readEop\n');

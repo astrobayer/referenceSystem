@@ -107,10 +107,23 @@ SECTIONS = ['INPUT ARGUMENTS', 'OUTPUT ARGUMENTS', 'METHOD', 'ACCURACY',
             'ERRORS', 'REFERENCES', 'EXAMPLE', 'KEYWORDS']
 
 failures = []
+warnings = []
 
 
 def fail(what, detail):
     failures.append('%-28s %s' % (what, detail))
+
+
+def warn(what, detail):
+    """Report without failing. O37's ceiling is a WARNING and not a gate.
+
+    Development runs from a phone against CI for days at a time, when the
+    MATLAB MCP is by definition unavailable; a check that blocked on that
+    would block the normal way of working to police the exceptional one. The
+    channel is kept separate from failures so the exit code still means
+    exactly one thing: something is WRONG, not something is OWED.
+    """
+    warnings.append('%-28s %s' % (what, detail))
 
 
 def code_only(text):
@@ -620,8 +633,42 @@ def check_build_date_agrees_with_contents():
                  builtIso, listedIso))
 
 
+def check_unrun_revisions_against_the_o37_ceiling():
+    """Count consecutive NOT RUN revision rows and warn past the ceiling.
+
+    O37 lets a CI-green change merge while the MATLAB MCP is unavailable and
+    turns the unrun MATLAB tier into a recorded debt rather than a blocker. A
+    debt nobody rereads is the failure mode that exception creates, so the
+    document counts its own.
+
+    THE CEILING IS 15 AND IT WARNS RATHER THAN FAILS. Fifteen is not a
+    tolerance for sloppiness; it is the length of an ordinary phone-and-CI
+    stretch, stated by the person who works that way rather than guessed at
+    here. The count runs from the top of the log and stops at the first
+    revision that recorded a run, so discharging clears it in one edit.
+    """
+    ceiling = 15
+    handover = os.path.join(ROOT, 'HANDOVER_referenceSystem.md')
+    if not os.path.isfile(handover):
+        return
+    text = open(handover, encoding='utf-8').read()
+    rows = re.findall(r'^\| (1\.\d+) \| [^|]*\| (.*)$', text, re.M)
+    unrun = 0
+    for _revision, body in rows:
+        if re.search(r'NOT RUN|O2 is open', body, re.I):
+            unrun += 1
+        else:
+            break
+    if unrun > ceiling:
+        warn('o37/unrunCeiling',
+             '%d consecutive revisions carry an unrun MATLAB tier (ceiling '
+             '%d). Run the suite and discharge O2 by naming the revisions it '
+             'clears.' % (unrun, ceiling))
+
+
 def main():
     check_patch_is_handover_revision()
+    check_unrun_revisions_against_the_o37_ceiling()
     check_build_date_agrees_with_contents()
     check_handover_header_is_current()
     check_reference_page_indexes_contents()
@@ -804,6 +851,11 @@ def main():
 
     print('audited %d package files, %d listed in Contents.m, %d test classes'
           % (len(files), len(layer_of), len(classFile) if os.path.isdir(testFolder) else 0))
+    if warnings:
+        print()
+        print('%d WARNING(S) - recorded, not blocking' % len(warnings))
+        for line in warnings:
+            print('  ' + line)
     if failures:
         print('\n%d FINDINGS' % len(failures))
         for line in failures:
