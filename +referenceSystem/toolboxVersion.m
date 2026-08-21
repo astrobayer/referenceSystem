@@ -13,11 +13,12 @@ function versionInfo = toolboxVersion()
 %   Name                     Size   Type     Units  Description
 %   ----                     ----   ----     -----  -----------
 %   versionInfo              1x1    struct   -      Fields listed below.
-%   .version                 1x1    string   -      Semantic version, '2.1.183'.
+%   .version                 1x1    string   -      Semantic version, release plus
+%                                                  patch, e.g. '2.1.204'.
 %   .release                 1x1    string   -      Major and minor only, '2.1'.
-%   .patch                   1x1    string   -      Patch component, '166'. This
-%                                                  IS the handover revision
-%                                                  number (decision D107).
+%   .patch                   1x1    string   -      Patch component, e.g. '204'.
+%                                                  This IS the handover
+%                                                  revision number (D107).
 %   .buildDate               1x1    string   -      Source revision date, ISO 8601.
 %   .sofaRelease             1x1    string   -      Bundled IAU SOFA release, '20231011'.
 %   .iersConventions         1x1    string   -      IERS Conventions edition, '2010'.
@@ -36,8 +37,8 @@ function versionInfo = toolboxVersion()
 %   provenance test can verify the agreement.
 %
 %   THE PATCH COMPONENT IS THE HANDOVER REVISION NUMBER (decision D107).
-%   Version 2.1.183 is the state of the sources at handover revision 1.183, and
-%   the two are edited together or not at all. Major and minor identify the
+%   Version 2.1.N is the state of the sources at handover revision 1.N, and the
+%   two are edited together or not at all. Major and minor identify the
 %   RELEASE; the patch identifies the DOCUMENT REVISION that produced these
 %   sources, so an archived copy can be tied to the revision log entry that
 %   explains it without guessing from dates. A test and auditPackage.py both
@@ -93,8 +94,8 @@ function versionInfo = toolboxVersion()
     majorMinorVersion = "2.1";
     % D107: THE PATCH IS THE HANDOVER REVISION. Bump this in the same edit that
     % writes the revision log entry; the two are checked against each other.
-    patchVersion = "204";
-    buildDate = "2026-08-05";
+    patchVersion = "205";
+    buildDate = "2026-08-21";
     toolboxAuthor = "Matthias Weigelt";
     generatorModel = "Claude Opus 5 (Anthropic)";
     toolboxName = "referenceSystem";

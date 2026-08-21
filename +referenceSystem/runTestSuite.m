@@ -1,4 +1,4 @@
-function [results, reportFile] = runTestSuite(options)
+function [results, reportFile, summary] = runTestSuite(options)
 %RUNTESTSUITE Run the referenceSystem test suite and write one plain-text report.
 %
 %   results = runTestSuite() runs every test in the test folder of this toolbox and
@@ -279,6 +279,14 @@ function [results, reportFile] = runTestSuite(options)
     reportFile = absoluteReportPath(options.Output);
     writeReport(reportFile, results, suite, environment, ...
         warningPlugin.WarningRecord, runFailure, instrument);
+
+    % THE CLASSIFICATION THE REPORT PRINTS, RETURNED RATHER THAN REPRINTED.
+    % ciGate has to distinguish a skip that D116 foresaw from one that nobody
+    % did, and the allow-list that makes the distinction lives in this file.
+    % A copy in the caller is the defect auditPackage.py's own header names -
+    % two instruments disagreeing after one of them is edited - so the counts
+    % are computed HERE, from intendedFilterMask, and handed out.
+    summary = localRunSummary(results);
 
     % THE ARTEFACT FIRST, THE EXCEPTION SECOND - the same order as the
     % excluded-class error below, and for the same reason.
@@ -857,6 +865,29 @@ function heading = unexpectedFilterHeading()
         "(NOT A FAILURE)";
 end
 
+function summary = localRunSummary(results)
+%LOCALRUNSUMMARY Counts of the run, with skips split by whether they were foreseen.
+%
+%   The fields exist so a gate does not have to re-derive them, and so that a
+%   NEW permanently filtered test cannot enter the tree behind a word that
+%   says it was foreseen: anything filtered and not on the allow-list is
+%   counted as unexpected and named.
+
+    failed = [results.Failed];
+    filtered = [results.Incomplete] & ~failed;
+    intended = intendedFilterMask(results) & filtered;
+    unexpected = filtered & ~intended;
+
+    summary = struct( ...
+        'total', numel(results), ...
+        'passed', sum([results.Passed]), ...
+        'failed', sum(failed), ...
+        'intendedSkip', sum(intended), ...
+        'unexpectedFilter', sum(unexpected), ...
+        'unexpectedFilterName', string({results(unexpected).Name}), ...
+        'duration', sum([results.Duration]));
+end
+
 function catalogue = intendedFilterCatalogue()
 %INTENDEDFILTERCATALOGUE Tests whose assumption is EXPECTED not to hold.
 %
@@ -870,10 +901,62 @@ function catalogue = intendedFilterCatalogue()
 %   Name is the full matlab.unittest test name, Class/method. Parameterisation
 %   brackets are stripped before the comparison, so a parameterised test is
 %   named once and not once per parameter.
+%
+%   REQUIRES NAMES A CAPABILITY, AND AN EMPTY REQUIRES MEANS UNCONDITIONAL.
+%   A row with Requires "" is intended wherever it filters, which is the only
+%   shape this list had before D117: the premise cannot be built on ANY
+%   machine. A row that names a symbol is intended ONLY WHILE THAT SYMBOL IS
+%   ABSENT, and is reported as an unexpected filter the moment it is present -
+%   so a test that skips on Matthias's machine, where MICE is installed, is
+%   still a finding there while the same skip on a hosted CI runner is not.
+%
+%   THE SYMBOL IS THE ONE THE TEST'S OWN assumeTrue NAMES, deliberately, so
+%   the two can be compared by eye and by grep. It is a second statement of
+%   the same fact and therefore a drift risk: if a test changes the entry
+%   point it probes, this column has to move with it. The alternative -
+%   asking the framework why an assumption failed - is not available, because
+%   a filtered result carries the diagnostic text and not the predicate.
+
+    % THE MICE ROWS ARE D117 AND ALL EIGHT CARRY THE SAME REASON, because they
+    % skip for the same cause: MICE is JPL's MATLAB interface to SPICE, it is
+    % a separate download that no MathWorks product list can install, and a
+    % hosted CI runner therefore cannot have it. The kernels are NOT the
+    % missing piece - a CI run fetches all six - so the symbol, not the data,
+    % is what the row names.
+    miceName = [ ...
+        "TestBodyFrames/bodyRotationElements_reference_pckAgreesWithTheBundledTable"; ...
+        "TestBodyFrames/rotationIcrfToBodyFixed_reference_pckReachesTablesTwoAndThree"; ...
+        "TestEphemeris/readEphemeris_contract_warnsOnTwoGenerationsFurnishedTogether"; ...
+        "TestEphemeris/readEphemeris_contract_allowGenerationsSilencesTheWarning"; ...
+        "TestEphemeris/readEphemeris_contract_neverAcceptsAnUnverifiedGeneration"; ...
+        "TestEphemeris/readEphemeris_diagnostics_reportsWhatTheCommentAreaNamed"; ...
+        "TestEphemeris/barycentricBodyState_reference_miceMatchesTheHorizonsFixture"; ...
+        "TestRotationAlgebra/rotationAlgebra_reference_matchesSpice"];
+
+    % One symbol per row, copied from the assumeTrue each test reaches:
+    % TestBodyFrames.requireOrientationKernels probes cspice_pxform,
+    % TestEphemeris.requirePlanetaryKernel and its four siblings probe
+    % cspice_spkezr, TestRotationAlgebra probes cspice_q2m.
+    miceSymbol = [ ...
+        "cspice_pxform"; "cspice_pxform"; ...
+        "cspice_spkezr"; "cspice_spkezr"; "cspice_spkezr"; "cspice_spkezr"; ...
+        "cspice_spkezr"; "cspice_q2m"];
+
+    miceReason = "Toolkit-dependent, and expected to filter wherever MICE " + ...
+        "is not installed. The kernel-backed tier compares this toolbox " + ...
+        "against JPL's own SPICE implementation, which is the whole point " + ...
+        "of the comparison and also why it cannot be vendored: MICE is a " + ...
+        "separate JPL download and is not a MathWorks product, so no " + ...
+        "products list installs it on a hosted runner. The kernels " + ...
+        "themselves are present - a CI run fetches all six - so nothing " + ...
+        "here is a data gap. THIS ROW IS CONDITIONAL: on a machine that " + ...
+        "HAS MICE the same skip is reported as unexpected, because there " + ...
+        "the premise could have been built and was not.";
 
     name = [ ...
         "TestDispatch/setupReferenceSystem_contract_removesThePackageFolderFromPath"; ...
-        "TestEphemeris/downloadKernels_contract_partialFetchWarnsAndReturnsTheManifest"];
+        "TestEphemeris/downloadKernels_contract_partialFetchWarnsAndReturnsTheManifest"; ...
+        miceName];
 
     reason = [ ...
         "Release-dependent, and expected to filter on every current MATLAB. " + ...
@@ -890,9 +973,43 @@ function catalogue = intendedFilterCatalogue()
             "observe, and the remaining assertions would then hold without " + ...
             "testing anything - a vacuous pass, which is worse than a skip. " + ...
             "See handover section H.11 for the catalogue seam that would " + ...
-            "make it deterministic."];
+            "make it deterministic."; ...
+        repmat(miceReason, numel(miceName), 1)];
 
-    catalogue = table(name, reason, 'VariableNames', ["Name", "Reason"]);
+    requires = [""; ""; miceSymbol];
+
+    catalogue = table(name, reason, requires, ...
+        'VariableNames', ["Name", "Reason", "Requires"]);
+end
+
+function present = capabilityIsPresent(symbol)
+%CAPABILITYISPRESENT Whether a named MATLAB symbol resolves on this machine.
+%
+%   The predicate is the one the tests themselves use - exist(...) returning
+%   2 for an .m file or 3 for a MEX file - so the catalogue and the assumeTrue
+%   it stands for cannot answer differently for the same installation.
+%
+%   THE ANSWER IS CACHED because it cannot change during a run: nothing in
+%   the suite installs a toolkit, and intendedFilter is asked once per result,
+%   which at 590 results would otherwise be 590 path searches for one fact.
+
+    persistent cachedSymbol cachedAnswer
+    if isempty(cachedSymbol)
+        cachedSymbol = strings(0, 1);
+        cachedAnswer = false(0, 1);
+    end
+
+    % Two parallel arrays and not a containers.Map: the catalogue names three
+    % distinct symbols in total, and a linear scan of three strings is cheaper
+    % than the container the codebase does not otherwise use.
+    row = find(cachedSymbol == symbol, 1);
+    if isempty(row)
+        found = exist(char(symbol), 'file');
+        cachedSymbol(end + 1, 1) = symbol;
+        cachedAnswer(end + 1, 1) = found == 2 || found == 3;
+        row = numel(cachedAnswer);
+    end
+    present = cachedAnswer(row);
 end
 
 function [isIntended, reason] = intendedFilter(testName)
@@ -904,7 +1021,17 @@ function [isIntended, reason] = intendedFilter(testName)
     % never the parameter, so both bracket forms are removed before matching.
     bareName = regexprep(string(testName), '[\[\(][^\]\)]*[\]\)]', '');
     row = find(catalogue.Name == bareName, 1);
-    isIntended = ~isempty(row);
+    if isempty(row)
+        isIntended = false;
+        reason = "";
+        return
+    end
+
+    % D117: A ROW THAT NAMES A CAPABILITY ONLY EXCUSES THE SKIP WHILE THAT
+    % CAPABILITY IS ABSENT. Listing a test here must not become a permanent
+    % licence to skip it on the one machine where it could actually run.
+    requires = catalogue.Requires(row);
+    isIntended = requires == "" || ~capabilityIsPresent(requires);
     if isIntended
         reason = catalogue.Reason(row);
     else

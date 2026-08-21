@@ -1,0 +1,124 @@
+# referenceSystem CI - modelled on lsqvce's ci.yml, with one job lsqvce has
+# no use for. The repository is PUBLIC, so matlab-actions licenses MATLAB for
+# free and no MLM_LICENSE_TOKEN is needed; making it private would break the
+# `matlab` job and nothing else.
+#
+# THREE GATES, CHEAPEST FIRST, and the first two need no MATLAB at all:
+#   audit    auditPackage.py, stdlib only, seconds. Exits 1 on findings.
+#   csuites  the five standalone C suites built with plain gcc. Handover
+#            section C.4 requires rsCore.c to stay buildable without MATLAB;
+#            this is where that requirement stops being a promise. It covers
+#            rsCore, the ported IERS routines, the public C API, the
+#            Chebyshev panels and the gateway logic - 237 assertions that
+#            cost no licence and no minutes worth caring about.
+#   matlab   the 590-test suite. Only reached when the cheap gates are green.
+name: referenceSystem CI
+
+on:
+  push:
+    branches: [main]   # the post-merge run on main (the DONE evidence)
+  pull_request:        # ONE run per dev push, on the merge-preview commit.
+                       # push-on-all-branches PLUS pull_request runs
+                       # everything twice once a PR exists; lsqvce paid for
+                       # that lesson on 2026-08-19 and this file inherits it.
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      # No pip install: auditPackage.py imports os, re, sys and collections
+      # and nothing else. Verified against the source, not assumed.
+      - run: python3 auditPackage.py
+
+  csuites:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: sh test/c/runStandaloneTests.sh
+      # fundargIers.csv is a BUILD PRODUCT of testIersModels and TestTime
+      # reads it (obligation O3). Keeping the CI copy makes it possible to
+      # compare the runner's D27 sweep against the one under revision
+      # control when the two ever disagree.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fundargIersSweep
+          path: test/fixtures/fundargIers.csv
+
+  matlab:
+    needs: [audit, csuites]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60        # backstop: no wedge sits for hours
+    env:
+      REFERENCESYSTEM_CI: 1    # read by ciGate; the ONE CI policy switch
+    steps:
+      - uses: actions/checkout@v6
+
+      # data/ IS the toolbox's own kernel cache (downloadKernels'
+      # localDefaultCache resolves there), so caching the folder caches
+      # exactly what a fetch would write. Keyed on downloadKernels.m because
+      # the catalogue lives inside it: change the catalogue, lose the cache.
+      #
+      # MEASURED AT RUN 1, NOT ESTIMATED: the six kernels come to about
+      # 660 MB, of which sb441-n16.bsp alone is 615.8 MB. The catalogue's own
+      # approximateBytes row said 650e6 for it and was right; the "about
+      # 50 MB" this comment carried until now was a bad reading of that
+      # table, not a bad table. The committed EOP files ride along.
+      #
+      # RESTORE AND SAVE ARE SPLIT, AND THE SAVE RUNS ON A RED JOB. Runs 1
+      # and 2 both fetched all six kernels from NAIF and JPL because the
+      # combined action's post step was skipped when the job failed, so a
+      # red run paid 660 MB of somebody else's bandwidth and left nothing
+      # behind for the next one. `if: always()` is what stops that.
+      - uses: actions/cache/restore@v4
+        id: kernelCache
+        with:
+          path: data
+          key: rsKernels-${{ hashFiles('+referenceSystem/downloadKernels.m') }}
+
+      # setup-matlab can wedge on a cache restore or a stalled download.
+      # Each attempt dies at 12 minutes instead of hanging, and a wedged
+      # first attempt gets ONE automatic retry - only two wedges in a row
+      # turn the job red. The check name stays `matlab` so branch protection
+      # is unaffected.
+      - uses: matlab-actions/setup-matlab@v3
+        id: matlabSetupFirst
+        continue-on-error: true
+        timeout-minutes: 12
+        with:
+          release: R2026a      # == the local release; the local run has been
+                               # ground truth throughout, so CI matches it
+                               # rather than tracking "latest"
+          cache: true
+      - uses: matlab-actions/setup-matlab@v3
+        if: steps.matlabSetupFirst.outcome != 'success'
+        timeout-minutes: 12
+        with:
+          release: R2026a
+          cache: true
+
+      # The repository root is the MATLAB startup folder, so ciGate.m is
+      # callable before any path is set. ciGate calls setupReferenceSystem
+      # itself: install policy belongs with judgement policy, in one file.
+      - uses: matlab-actions/run-command@v3
+        with:
+          command: ciGate
+
+      - uses: actions/upload-artifact@v4
+        if: always()           # the report is wanted MOST when the run is red
+        with:
+          name: referenceSystemTestReport
+          path: referenceSystem_testReport.txt
+
+      - uses: actions/cache/save@v4
+        if: always() && steps.kernelCache.outputs.cache-hit != 'true'
+        with:
+          path: data
+          key: rsKernels-${{ hashFiles('+referenceSystem/downloadKernels.m') }}
