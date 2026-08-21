@@ -11,6 +11,7 @@ each function by <code>referenceSystem.buildDocumentation</code>
 <p class="layer"><b>L0 - Time and constants</b></p>
 <ul class="index">
 <li><a href="#toolboxversion">toolboxVersion</a></li>
+<li><a href="#datafolder">dataFolder</a></li>
 <li><a href="#iersconstants">iersConstants</a></li>
 <li><a href="#ellipsoidparameters">ellipsoidParameters</a></li>
 <li><a href="#timescale">timeScale</a></li>
@@ -155,11 +156,12 @@ each function by <code>referenceSystem.buildDocumentation</code>
 <pre>Name                     Size   Type     Units  Description
   ----                     ----   ----     -----  -----------
   versionInfo              1x1    struct   -      Fields listed below.
-  .version                 1x1    string   -      Semantic version, '2.1.183'.
+  .version                 1x1    string   -      Semantic version, release plus
+                                                 patch, e.g. '2.1.204'.
   .release                 1x1    string   -      Major and minor only, '2.1'.
-  .patch                   1x1    string   -      Patch component, '166'. This
-                                                 IS the handover revision
-                                                 number (decision D107).
+  .patch                   1x1    string   -      Patch component, e.g. '204'.
+                                                 This IS the handover
+                                                 revision number (D107).
   .buildDate               1x1    string   -      Source revision date, ISO 8601.
   .sofaRelease             1x1    string   -      Bundled IAU SOFA release, '20231011'.
   .iersConventions         1x1    string   -      IERS Conventions edition, '2010'.
@@ -177,8 +179,8 @@ each function by <code>referenceSystem.buildDocumentation</code>
   provenance test can verify the agreement.
 
   THE PATCH COMPONENT IS THE HANDOVER REVISION NUMBER (decision D107).
-  Version 2.1.183 is the state of the sources at handover revision 1.183, and
-  the two are edited together or not at all. Major and minor identify the
+  Version 2.1.N is the state of the sources at handover revision 1.N, and the
+  two are edited together or not at all. Major and minor identify the
   RELEASE; the patch identifies the DOCUMENT REVISION that produced these
   sources, so an archived copy can be tied to the revision log entry that
   explains it without guessing from dates. A test and auditPackage.py both
@@ -222,6 +224,97 @@ referenceSystem v2.1
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 11:05 (CEST, UTC+02:00)
 Revised: 2026-08-09 10:15 (CEST, UTC+02:00)
+-------------------------------------------------------------------------</pre>
+<p class="top"><a href="#contents">back to contents</a></p>
+</div>
+<div class="fcn" id="datafolder">
+<h3>referenceSystem.dataFolder</h3>
+<p class="h1">Get or set the persistent data folder of the toolbox.</p>
+<h4>SYNTAX</h4>
+<pre>folder = dataFolder() returns the folder the toolbox reads and writes
+  installed data in, creating it if it does not exist. Without a stored
+  preference this is data/ beside the package, which is what ships.
+
+  folder = dataFolder(path) stores path as the data folder and returns it.
+  The choice PERSISTS ACROSS SESSIONS as a MATLAB preference, so it is made
+  once and not on every call, and no startup.m is needed.
+
+  folder = dataFolder("reset") discards the stored choice and returns the
+  default. Without it a preference would be one-way and the shipped
+  behaviour unreachable, which is a trap rather than a setting.</pre>
+<h4>INPUT ARGUMENTS</h4>
+<pre>Name                     Size   Type     Units  Description
+  ----                     ----   ----     -----  -----------
+  newFolder                1x1    string   -      Folder to store, the
+                                                  literal "reset" to discard
+                                                  a stored choice, or omitted
+                                                  to query. Default "".</pre>
+<h4>OUTPUT ARGUMENTS</h4>
+<pre>Name                     Size   Type     Units  Description
+  ----                     ----   ----     -----  -----------
+  folder                   1x1    string   -      ABSOLUTE path of the data
+                                                  folder, which exists on
+                                                  return.</pre>
+<h4>METHOD</h4>
+<pre>ONE AUTHORITY FOR THE LOCATION, AND THIS IS IT. downloadEop and
+  downloadKernels each carried a private localDefaultCache that composed
+  data/ from their own mfilename, so the toolbox held two answers to one
+  question and neither could be moved. Both now resolve through this
+  function, which is rev. 1.53's rule applied to a path: where a value has
+  more than one definition, delete the copies rather than keep them equal.
+
+  THE MECHANISM IS setpref AND IT MATCHES shAnalysis DELIBERATELY. The same
+  author maintains both toolboxes and calls shLowLevel.dataFolder with the
+  same three shapes - query, set, "reset" - so the habit transfers and the
+  two do not disagree about where a session's data lives. The preference
+  group is the toolbox name, so nothing here can collide with another
+  toolbox's settings.
+
+  THE FOLDER IS CREATED ON QUERY, WHICH IS A SIDE EFFECT AND IS INTENDED.
+  Every caller of this function is about to read or write in the folder, and
+  returning a path that does not exist moves the mkdir into each of them,
+  where it would be written more than once and eventually forgotten in one
+  place. The alternative - a query that only reports - was considered and
+  rejected because it makes the common path longer to serve a case the
+  toolbox does not have.
+
+  A STORED PREFERENCE IS INVISIBLE IN A SCRIPT, which is the cost of
+  persistence and is stated here rather than discovered. Two identical
+  scripts on two machines can read different files with nothing in the call
+  to say so. Where that matters - a test, a published result, a CI run -
+  pass the folder explicitly through the CacheDir option of downloadEop or
+  downloadKernels, which is unaffected by any preference.</pre>
+<h4>ACCURACY</h4>
+<pre>Not applicable; the function resolves a path and computes no numerical
+  quantity.</pre>
+<h4>ERRORS</h4>
+<pre>referenceSystem:dataFolder:pathIsAFile
+      The requested folder is an existing FILE, so no folder can be made
+      there. Raised before anything is written, because mkdir would
+      otherwise fail later inside a transfer and report a kernel when the
+      defect is in the argument.
+  referenceSystem:dataFolder:notCreated
+      The folder does not exist and could not be created; the message
+      carries the reason the file system gave.</pre>
+<h4>REFERENCES</h4>
+<pre>Handover decision D119 (rev. 1.207) and section C.10. The sibling
+  implementation is shLowLevel.dataFolder in the shAnalysis toolbox.</pre>
+<h4>EXAMPLE</h4>
+<pre>% Where does installed data go, and how do I move it off the system disk?
+  folder = referenceSystem.dataFolder()
+  referenceSystem.dataFolder("E:\DATAPOOL\referenceSystem");
+  referenceSystem.downloadKernels(Mode = "download");   % goes there now
+  referenceSystem.dataFolder("reset");                  % back to the default</pre>
+<h4>KEYWORDS</h4>
+<pre>data folder, preference, cache, installation, kernels, EOP
+
+See also DOWNLOADKERNELS, DOWNLOADEOP, SETUPREFERENCESYSTEM
+
+-------------------------------------------------------------------------
+referenceSystem v2.1
+Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
+Created: 2026-08-21 18:05 (CEST, UTC+02:00)
+Revised: 2026-08-21 18:05 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
 <p class="top"><a href="#contents">back to contents</a></p>
 </div>
@@ -10630,6 +10723,6 @@ Created: 2026-07-26 12:30 (CEST, UTC+02:00) - session S4, folder-lock report
 -------------------------------------------------------------------------</pre>
 <p class="top"><a href="#contents">back to contents</a></p>
 </div>
-<p class="foot">referenceSystem v2.1.206 &mdash; generated from the
+<p class="foot">referenceSystem v2.1.207 &mdash; generated from the
 package help blocks. See the handover document for the design.</p>
 </body></html>
