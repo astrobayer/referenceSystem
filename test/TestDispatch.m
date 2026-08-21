@@ -618,6 +618,8 @@ classdef TestDispatch < matlab.unittest.TestCase
             addpath(packageFolder);
 
             % Releases from R2024b on refuse a namespace folder on the path and
+            % D120 put the supported floor at R2026a, so this can no longer run
+            % on any supported release. Kept: see intendedFilterCatalogue.
             % only warn, so the misconfiguration cannot be created and the repair
             % cannot be exercised. That is a filtered test, not a passing one.
             isOnPath = any(TestDispatch.normalizePath(split(string(path()), pathsep)) == ...
