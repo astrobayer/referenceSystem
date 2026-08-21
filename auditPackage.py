@@ -633,6 +633,86 @@ def check_build_date_agrees_with_contents():
                  builtIso, listedIso))
 
 
+def check_reference_page_bodies_match_the_help(files):
+    """The RENDERED help must equal the help it was rendered from.
+
+    Rev. 1.207 found the shipped function reference carrying `toolboxVersion`
+    help text from twenty-one revisions earlier, behind a footer stamp that was
+    correct.  Every existing doc gate passed it: `doc/pageStampIsStale` compares
+    the STAMP, and the rev. 1.184 checks compare the INDEX - which function
+    names appear, and whether any is a ghost.  Nothing compared the BODIES, so a
+    help block could change and the page keep the old text indefinitely.
+
+    THIS DOES NOT RE-IMPLEMENT THE GENERATOR, WHICH WOULD BE A SECOND
+    AUTHORITY.  It reads what the page actually rendered - each `<h4>SECTION`
+    followed by its `<pre>` - and asks whether that text is still what the
+    source says.  A section the generator deliberately does not render is
+    therefore out of scope here and stays the business of the index checks;
+    what is asserted is that nothing RENDERED has gone stale.
+
+    Whitespace is collapsed on both sides before comparing, because the two
+    differ in indentation by construction and the claim is about words, not
+    columns.
+
+    THE HEADING PATTERN ADMITS A HYPHEN, AND THAT WAS NOT THE FIRST GUESS.
+    Written as [A-Z ]+ it silently failed to recognise OPTIONAL NAME-VALUE
+    ARGUMENTS as a heading, so its body was appended to INPUT ARGUMENTS and 68
+    functions were reported stale when nothing was.  An instrument firing on
+    most of the tree is more likely broken than the tree is; the vocabulary was
+    then read off BOTH sides - nine mandatory sections, plus OPTIONAL
+    NAME-VALUE ARGUMENTS and WARNINGS - instead of being guessed a second time.
+    """
+    page = os.path.join(ROOT, 'doc', 'referenceSystem_functionReference.html')
+    if not os.path.isfile(page):
+        return
+    html = open(page, encoding='utf-8').read()
+
+    def plain(text):
+        for entity, literal in (('&quot;', '"'), ('&#39;', "'"), ('&lt;', '<'),
+                                ('&gt;', '>'), ('&amp;', '&')):
+            text = text.replace(entity, literal)
+        return ' '.join(text.split())
+
+    rendered = {}
+    for block in re.finditer(r'<div class="fcn" id="([^"]+)">(.*?)(?=<div class="fcn"|\Z)',
+                             html, re.S):
+        sections = {}
+        for section in re.finditer(r'<h4>([A-Z][A-Z ]*)</h4>\s*<pre>(.*?)</pre>',
+                                   block.group(2), re.S):
+            sections[section.group(1).strip()] = plain(section.group(2))
+        rendered[block.group(1)] = sections
+
+    for filename in files:
+        if filename == 'Contents.m':
+            continue
+        name = filename[:-2]
+        sections = rendered.get(name.lower())
+        if not sections:
+            continue
+        text = open(os.path.join(PACKAGE, filename), encoding='utf-8').read()
+        source = {}
+        current = None
+        for line in text.split('\n')[1:]:
+            if not line.startswith('%'):
+                break
+            body = line[1:]
+            heading = re.match(r' ([A-Z][A-Z -]*[A-Z])\s*$', body)
+            if heading:
+                current = heading.group(1).strip()
+                source[current] = []
+            elif current is not None:
+                source[current].append(body)
+        for section, shown in sections.items():
+            if section not in source:
+                continue
+            expected = plain('\n'.join(source[section]))
+            if expected != shown:
+                fail('doc/referencePageBodyIsStale',
+                     '%s section %s in the function reference no longer matches '
+                     'the help block; rebuild with buildDocumentation' % (
+                         name, section))
+
+
 def check_no_unexpected_file_at_the_root():
     """The distribution root holds a known set of files and nothing else.
 
@@ -768,6 +848,8 @@ def main():
                 fail(what, detail)
             for what, detail in check_test_tags(full, body):
                 fail(what, detail)
+
+    check_reference_page_bodies_match_the_help(files)
 
     for filename in files:
         path = os.path.join(PACKAGE, filename)
