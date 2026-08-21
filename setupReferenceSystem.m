@@ -56,23 +56,44 @@ function status = setupReferenceSystem(options)
 %   options.KernelSet 1x1    string    -      How much kernel content, when
 %                                            Fetch asks for them: "minimal"
 %                                            (~31 MB), "orientation" or "all"
-%                                            (default, ~695 MB, of which the
-%                                            small-body kernel is 650 MB).
-%                                            These accumulate.
+%                                            (default, ~660 MB MEASURED, of
+%                                            which the small-body kernel is
+%                                            615.8 MB). These accumulate.
+%                                            downloadKernels holds the
+%                                            catalogue and is the authority
+%                                            for every size here.
 %   options.KernelSpan 1x1   string    -      Which issue of the planetary
 %                                            ephemeris: "short" (default,
 %                                            de440s.bsp) or "full"
-%                                            (de440.bsp, 2.6 GB). These are
-%                                            alternatives. See downloadKernels.
+%                                            (de440.bsp, ~120 MB planning
+%                                            figure, still an estimate). These
+%                                            are alternatives. The 2.6 GB this
+%                                            row carried until now was DE441's
+%                                            scale and the catalogue retracted
+%                                            it at rev. 1.191; the repair
+%                                            stopped one file short of here.
+%                                            See downloadKernels.
 %                                            NOTE: setup DETECTS the NAIF MICE
 %                                            toolkit and reports it, but never
 %                                            installs it. See toolkitState.
 %   options.Verbose   1x1    logical   -      Print a summary to the command
 %                                             window. Default true. It also
 %                                             announces each transfer, which a
-%                                             650 MB download needs: websave
+%                                             615 MB download needs: websave
 %                                             shows nothing, and silence is
 %                                             indistinguishable from a hang.
+%   options.Build     1x1    string    -      Whether to build the MEX gateway
+%                                             and the documentation: "auto"
+%                                             (default, build when the sources
+%                                             are newer than the product),
+%                                             "always" or "never".
+%   options.DataFolder 1x1   string    -      Where installed EOP files and
+%                                             kernels are put, RESOLVED BEFORE
+%                                             ANYTHING IS FETCHED. Default ""
+%                                             means <toolboxRoot>/data. A
+%                                             named folder is created when it
+%                                             does not exist and reported
+%                                             absolute in status.dataFolder.
 %
 % OUTPUT ARGUMENTS
 %   Name                  Size   Type      Units  Description
@@ -99,14 +120,27 @@ function status = setupReferenceSystem(options)
 %   .unlistedFiles        Nx1    string    -      Package files absent from
 %                                                 Contents.m, possibly empty.
 %   .mex                  1x1    struct    -      The mexInfo report, see there.
-%   .dataFolder           1x1    string    -      Path of the data folder that
-%                                                 holds installed leap-second
-%                                                 and EOP files.
+%   .dataFolder           1x1    string    -      ABSOLUTE path of the folder
+%                                                 that holds installed EOP
+%                                                 files and kernels: the
+%                                                 DataFolder option resolved,
+%                                                 or <toolboxRoot>/data.
 %   .leapSecondTable      1x1    string    -      The leap-second source and
 %                                                 coverage actually in use.
 %   .ready                1x1    logical   -      True when the package resolves.
 %
 % METHOD
+%   DataFolder GOVERNS THIS CALL AND NOT THE TOOLBOX. downloadEop and
+%   downloadKernels each resolve their own CacheDir default to
+%   <toolboxRoot>/data, so a later bare downloadKernels(Mode="download")
+%   writes THERE, not to the folder named here. Nothing reads the wrong data
+%   as a result - readEop and readEphemeris take explicit paths and discover
+%   nothing - but a caller who installs elsewhere has to carry the path
+%   onward, which is what status.dataFolder is for. The toolbox has no
+%   persisted setting and this option does not invent one: a preference that
+%   survives the call would have to be written somewhere, and where is a
+%   decision, not an implementation detail.
+%
 %   Three things are checked, in the order in which they break a session.
 %
 %   The MATLAB release comes first: the toolbox uses string scalars in
@@ -208,6 +242,7 @@ function status = setupReferenceSystem(options)
         options.Verbose (1,1) logical = true
         options.Build (1,1) string {mustBeMember(options.Build, ...
             ["auto", "always", "never"])} = "auto"
+        options.DataFolder (1,1) string = ""
     end
 
     toolboxRoot = string(fileparts(mfilename('fullpath')));
@@ -272,13 +307,11 @@ function status = setupReferenceSystem(options)
             unlistedFile(1));
     end
 
-    dataFolder = fullfile(toolboxRoot, 'data');
-    if ~isfolder(dataFolder)
-        warning('referenceSystem:setupReferenceSystem:missingDataFolder', ...
-            ['The data folder "%s" is missing. It holds the leap-second and ', ...
-            'Earth orientation files a session may install; the toolbox runs ', ...
-            'without it on the bundled SOFA table alone.'], dataFolder);
-    end
+    % RESOLVED HERE, WHICH IS BEFORE performFetch AND BEFORE ANY REPORT READS
+    % IT. Both downloads and both of the state readers below take the folder as
+    % an argument, so this line is the single place the location is decided and
+    % nothing downstream can pick a different one.
+    dataFolder = resolveDataFolder(toolboxRoot, options.DataFolder);
 
     % SETUP IS THE INSTALLER. The toolbox ships as a zip or a git clone, so
     % nothing stands between the repository and the user: whatever has to
@@ -595,6 +628,61 @@ function state = documentationState(toolboxRoot)
     % for the third.
     found = dir(fullfile(helpFolder, 'helpsearch*'));
     state.searchable = ~isempty(found) && any([found.isdir]);
+end
+
+function dataFolder = resolveDataFolder(toolboxRoot, requested)
+%RESOLVEDATAFOLDER Decide where installed data goes, and say so when it is new.
+%
+%   AN OMISSION AND A CHOICE ARE DISTINGUISHABLE, WHICH IS THE D113 IDIOM.
+%   The default is the empty string rather than the path, so this function can
+%   tell "the caller said nothing" from "the caller named the default", and the
+%   two get different treatment: an absent DEFAULT folder is a warning, because
+%   the toolbox shipped with one and its absence means an incomplete unpack; an
+%   absent NAMED folder is created, because naming it is a deliberate act and
+%   an installer that refuses to make the directory it was pointed at is
+%   answering a question nobody asked.
+%
+%   A PATH THAT IS ALREADY A FILE IS REFUSED RATHER THAN WORKED AROUND. mkdir
+%   would fail later, inside a download, with the message of whichever transfer
+%   happened to go first; the caller would then be reading about a kernel when
+%   the defect is in their argument.
+
+    if strlength(strtrim(requested)) == 0
+        dataFolder = string(fullfile(toolboxRoot, 'data'));
+        if ~isfolder(dataFolder)
+            warning('referenceSystem:setupReferenceSystem:missingDataFolder', ...
+                ['The data folder "%s" is missing. It holds the leap-second ', ...
+                'and Earth orientation files a session may install; the ', ...
+                'toolbox runs without it on the bundled SOFA table alone.'], ...
+                dataFolder);
+        end
+        return
+    end
+
+    dataFolder = string(strtrim(requested));
+    if isfile(dataFolder)
+        error('referenceSystem:setupReferenceSystem:dataFolderIsAFile', ...
+            ['DataFolder "%s" is an existing FILE, so no data folder can be ', ...
+            'made there. Name a directory, or a path that does not exist ', ...
+            'yet.'], dataFolder);
+    end
+
+    if ~isfolder(dataFolder)
+        [made, message] = mkdir(char(dataFolder));
+        if ~made
+            error('referenceSystem:setupReferenceSystem:dataFolderNotCreated', ...
+                'DataFolder "%s" could not be created: %s', dataFolder, message);
+        end
+    end
+
+    % ABSOLUTE FROM HERE ON. A relative DataFolder would be resolved against
+    % whatever the working directory happened to be when each downstream call
+    % ran, and the status struct would report a path that means something
+    % different after a cd. what() answers for a folder that now exists.
+    resolved = what(char(dataFolder));
+    if ~isempty(resolved)
+        dataFolder = string(resolved(1).path);
+    end
 end
 
 function fetch = performFetch(dataFolder, options)
