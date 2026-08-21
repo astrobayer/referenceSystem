@@ -1,4 +1,4 @@
-function [results, reportFile] = runTestSuite(options)
+function [results, reportFile, summary] = runTestSuite(options)
 %RUNTESTSUITE Run the referenceSystem test suite and write one plain-text report.
 %
 %   results = runTestSuite() runs every test in the test folder of this toolbox and
@@ -279,6 +279,14 @@ function [results, reportFile] = runTestSuite(options)
     reportFile = absoluteReportPath(options.Output);
     writeReport(reportFile, results, suite, environment, ...
         warningPlugin.WarningRecord, runFailure, instrument);
+
+    % THE CLASSIFICATION THE REPORT PRINTS, RETURNED RATHER THAN REPRINTED.
+    % ciGate has to distinguish a skip that D116 foresaw from one that nobody
+    % did, and the allow-list that makes the distinction lives in this file.
+    % A copy in the caller is the defect auditPackage.py's own header names -
+    % two instruments disagreeing after one of them is edited - so the counts
+    % are computed HERE, from intendedFilterMask, and handed out.
+    summary = localRunSummary(results);
 
     % THE ARTEFACT FIRST, THE EXCEPTION SECOND - the same order as the
     % excluded-class error below, and for the same reason.
@@ -855,6 +863,29 @@ function heading = unexpectedFilterHeading()
 
     heading = "FILTERED - AN ASSUMPTION DID NOT HOLD ON THIS MACHINE " + ...
         "(NOT A FAILURE)";
+end
+
+function summary = localRunSummary(results)
+%LOCALRUNSUMMARY Counts of the run, with skips split by whether they were foreseen.
+%
+%   The fields exist so a gate does not have to re-derive them, and so that a
+%   NEW permanently filtered test cannot enter the tree behind a word that
+%   says it was foreseen: anything filtered and not on the allow-list is
+%   counted as unexpected and named.
+
+    failed = [results.Failed];
+    filtered = [results.Incomplete] & ~failed;
+    intended = intendedFilterMask(results) & filtered;
+    unexpected = filtered & ~intended;
+
+    summary = struct( ...
+        'total', numel(results), ...
+        'passed', sum([results.Passed]), ...
+        'failed', sum(failed), ...
+        'intendedSkip', sum(intended), ...
+        'unexpectedFilter', sum(unexpected), ...
+        'unexpectedFilterName', string({results(unexpected).Name}), ...
+        'duration', sum([results.Duration]));
 end
 
 function catalogue = intendedFilterCatalogue()
