@@ -396,8 +396,8 @@ function [variant, rejected] = localDetectOpenMpFlags()
     candidate = localOpenMpFlagVariants();
     for k = 1:numel(candidate)
         % Called through evalc below, which the analyser cannot read.
-        compileProbe = @() mex('-c', candidate(k).flag{:}, ... %#ok<NASGU>
-            '-outdir', probeFolder, probeFile);
+        compileProbe = @() mex('-c', candidate(k).flag{:}, ...
+            '-outdir', probeFolder, probeFile); %#ok<NASGU>
         try
             evalc('compileProbe()');
             variant = candidate(k);

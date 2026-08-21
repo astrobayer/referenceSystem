@@ -2286,13 +2286,13 @@ classdef TestDispatch < matlab.unittest.TestCase
                     code = char(TestDispatch.codeOnlyLine(string(oneLine)));
                     index = numel(methodKey);
                     % Indexed assignment at a computed index, not an append; nothing to preallocate.
-                    methodPackageCall{index} = union( ... %#ok<AGROW>
+                    methodPackageCall{index} = union( ...
                         methodPackageCall{index}(:), ...
-                        TestDispatch.capturedNames(code, 'referenceSystem\.(\w+)'));
+                        TestDispatch.capturedNames(code, 'referenceSystem\.(\w+)')); %#ok<AGROW>
                     % Indexed assignment at a computed index, not an append; nothing to preallocate.
-                    methodHelperCall{index} = union( ... %#ok<AGROW>
+                    methodHelperCall{index} = union( ...
                         methodHelperCall{index}(:), ...
-                        TestDispatch.capturedNames(code, '(\w+)\s*\('));
+                        TestDispatch.capturedNames(code, '(\w+)\s*\(')); %#ok<AGROW>
                 end
             end
 
