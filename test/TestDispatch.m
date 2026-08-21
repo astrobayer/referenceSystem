@@ -417,6 +417,81 @@ classdef TestDispatch < matlab.unittest.TestCase
                 referenceSystem.toolboxVersion().version);
         end
 
+        function setupReferenceSystem_contract_dataFolderIsResolvedBeforeTheFetch(testCase)
+            % D118: THE OPTION IS ONLY WORTH ANYTHING IF IT IS RESOLVED BEFORE
+            % ANYTHING IS DOWNLOADED. Resolving it afterwards, or reporting it
+            % without using it, would look identical in the status struct and
+            % would put 660 MB in the wrong place. Fetch is "none" here, so
+            % what is asserted is the RESOLUTION and the folder creation; the
+            % ordering is guarded structurally by the fact that both downloads
+            % receive the folder as an argument and cannot pick another.
+            originalPath = path();
+            restorePath = onCleanup(@() path(originalPath));
+
+            wanted = fullfile(tempname(), "rsData");
+            cleanupFolder = onCleanup(@() TestDispatch.removeIfPresent(wanted));
+
+            status = setupReferenceSystem(TestDispatch.setupOptionsForTesting{:}, ...
+                'DataFolder', wanted);
+
+            testCase.verifyTrue(isfolder(wanted), ...
+                "Setup did not create the DataFolder it was given: " + wanted);
+
+            % ABSOLUTE, AND COMPARED AFTER what() HAS SEEN BOTH SIDES. A
+            % verbatim string comparison would fail on macOS, where tempname
+            % returns /var/... and the resolved path is /private/var/...; the
+            % assertion is about the folder, not about its spelling.
+            resolved = what(char(wanted));
+            testCase.assertNotEmpty(resolved, ...
+                "The created folder did not resolve: " + wanted);
+            testCase.verifyEqual(status.dataFolder, string(resolved(1).path), ...
+                ['status.dataFolder must be the resolved DataFolder, not the ', ...
+                'default and not the string as it was passed in.']);
+
+            testCase.verifyNotEqual(status.dataFolder, ...
+                string(fullfile(testCase.toolboxRoot(), 'data')), ...
+                'DataFolder was accepted and then ignored in favour of data/.');
+        end
+
+        function setupReferenceSystem_contract_dataFolderDefaultsToTheToolboxData(testCase)
+            % D113's idiom, asserted on the branch that keeps the old
+            % behaviour: an OMITTED DataFolder is not the same argument as one
+            % naming the default, and the omission must still land on
+            % <toolboxRoot>/data. Without this the previous test would pass
+            % against an implementation that had quietly moved the default.
+            originalPath = path();
+            restorePath = onCleanup(@() path(originalPath));
+
+            status = setupReferenceSystem(TestDispatch.setupOptionsForTesting{:});
+
+            expected = what(char(fullfile(testCase.toolboxRoot(), 'data')));
+            if isempty(expected)
+                testCase.verifyEqual(status.dataFolder, ...
+                    string(fullfile(testCase.toolboxRoot(), 'data')));
+            else
+                testCase.verifyEqual(status.dataFolder, string(expected(1).path));
+            end
+        end
+
+        function setupReferenceSystem_contract_dataFolderRefusesAnExistingFile(testCase)
+            % A PATH THAT IS ALREADY A FILE FAILS EARLY OR IT FAILS LATE. Late
+            % means inside a transfer, reported as whichever download happened
+            % to go first, and the caller reads about a kernel when the defect
+            % is in their argument. Asserted on the identifier, not the text.
+            originalPath = path();
+            restorePath = onCleanup(@() path(originalPath));
+
+            wanted = string(tempname()) + ".txt";
+            fileId = fopen(wanted, 'w');
+            testCase.assertNotEqual(fileId, -1, "Could not create " + wanted);
+            fclose(fileId);
+            cleanupFile = onCleanup(@() delete(wanted));
+
+            testCase.verifyError(@() setupReferenceSystem( ...
+                TestDispatch.setupOptionsForTesting{:}, 'DataFolder', wanted), ...
+                'referenceSystem:setupReferenceSystem:dataFolderIsAFile');
+        end
+
         function setupReferenceSystem_contract_removesThePackageFolderFromPath(testCase)
             % THIS TEST ASSERTS A WARNING, SO IT CONSUMES IT. The report lists
             % warnings nobody claimed, and an asserted warning is claimed.
@@ -1384,6 +1459,15 @@ classdef TestDispatch < matlab.unittest.TestCase
             %   defaults cannot leave one call site behind - which is exactly
             %   how this trap would be sprung a second time.
             option = {'Save', false, 'Fetch', "none", 'Verbose', false};
+        end
+
+        function removeIfPresent(folder)
+            %REMOVEIFPRESENT Delete a scratch folder without failing the test.
+            %   A teardown that throws turns a passing test red for a reason
+            %   that has nothing to do with what it asserted.
+            if isfolder(folder)
+                [~, ~] = rmdir(folder, 's');
+            end
         end
 
         function openId = openFileIds()
