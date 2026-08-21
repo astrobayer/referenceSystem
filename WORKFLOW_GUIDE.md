@@ -5,7 +5,12 @@
 file may POINT at the handover and must never RESTATE it: where the two
 disagree, the handover is right and this file is stale.*
 
-*Part 7 transfers the pattern to any other project. The shape is not specific
+**This file OWNS: the loop, CI mechanics, the token, and the debt rule for an
+unavailable tier.** `VALIDATION_GUIDE.md` owns categories, prediction, fault
+injection and the verification tiers; `CODING_GUIDE.md` owns the code rules;
+`DOCUMENTATION_GUIDE.md` owns templates and artefacts. This file points at them.
+
+*Part 8 transfers the pattern to any other project. The shape is not specific
 to MATLAB, to this toolbox, or to geodesy.*
 
 ---
@@ -20,7 +25,8 @@ to MATLAB, to this toolbox, or to geodesy.*
                 container that resets.
     PRE-CHECK   Audit and any licence-free suites run in the container. Free,
                 no push, catches most of what CI would.
-    PREDICT     State the expected test count BEFORE running anything.
+    PREDICT     State the expected count BEFORE running anything.
+                (Rules and reconciliation: VALIDATION_GUIDE Part 7.)
     OPEN        Push the branch and open a DRAFT pull request at once. The
                 draft is not the submission - it is what BUYS THE CI VERDICT.
                 With `on: pull_request`, a branch without a PR gets no runs
@@ -164,8 +170,9 @@ when the run is red.
 2. **Develop.** Container clones, branches, implements. Python mirrors for
    numbers, committed under `validation/`.
 3. **Pre-check.** Audit and C suites in the container. Free.
-4. **Predict.** State the expected count. A missed prediction is a finding even
-   when the suite is green — this is what catches version/revision drift.
+4. **Predict.** State the expected count, reconciled three ways. The rules and
+   the reasoning are in `VALIDATION_GUIDE.md` Part 7; what matters here is
+   *when* — before the run, in writing, where it cannot be quietly revised.
 5. **Push, then open a draft PR immediately.** Two separate facts make this
    one step. Actions needs a ref, so CI cannot run before a push at all. And
    with `on: pull_request` and `push` restricted to `main`, a branch **without
@@ -219,6 +226,53 @@ exactly one thing: something is **wrong**, not something is **owed**.
 
 ---
 
+## Part 6b — Scope, and what belongs in one round
+
+**Freeze the scope before implementing.** A work package whose boundary moves
+while it is being built cannot be reviewed, because the reviewer has no statement
+of what was meant to happen. Write the boundary down; a change to it is a
+decision, recorded.
+
+**Do not mix a substantial change with unrelated repairs.** The reason is not
+tidiness — it is that a red run in a mixed round tells you nothing about which
+half caused it, and a bisect over a mixed commit lands on a diff you cannot
+reason about.
+
+**The exception, and its cost.** One round here carried a design decision, an
+obligation amendment, four documentation surfaces and three new guides. It
+worked, and it cost four red runs whose causes had to be untangled one at a
+time. Mixing is affordable exactly when the parts are independent enough that a
+failure names its own half — and that is a judgement, made in advance and
+written down, not a discovery afterwards.
+
+**A change that touches the workflow itself is never mixed with anything.** The
+loop is what judges every other change; a round that alters it and something else
+has no unmoved reference.
+
+## Part 6c — Ending and resuming a session
+
+Development runs in sessions that end abruptly, and the next one starts with no
+memory of this one. What survives is what was written down.
+
+**Every round closes with four things**, or it did not close:
+
+1. **The record entry** — what changed and why, in the single point of truth.
+2. **The verdict, per tier**, with the debt named if one is open.
+3. **What the next session could be wrong for not reading.** Deliberately short.
+   This is the only section anybody reads under time pressure, and it is worth
+   more than the other three combined.
+4. **The next action, as a command**, not as a label. "Run 93" means nothing to
+   a session that has not read the log; `referenceSystem.runTestSuite()` means
+   something to anyone.
+
+**A standing preamble is worth writing once.** The rules that apply to every
+session — the single point of truth, the tier declaration, the prediction
+discipline, what may and may not be pushed — belong in one block that is pasted
+at the start rather than re-derived. When it changes, it changes in one place.
+
+**State the execution tier in the first line.** See `VALIDATION_GUIDE.md`
+Part 8: what the session can reach determines what it may claim.
+
 ## Part 7 — Transferring the pattern
 
 Four files and two settings, independent of MATLAB:
@@ -268,8 +322,8 @@ answer: CI is the verdict and the debt is recorded.
    message, a code comment or this file may point at it; none may restate it.
 3. **Any change under `.github/workflows/` is read before it is merged.**
 4. **Merging is Matthias's alone.**
-5. **A new check is fault-injected before it is trusted** (O29). A check that
-   has only ever passed is not known to work.
+5. **A new check is fault-injected before it is trusted** — see
+   `VALIDATION_GUIDE.md` Part 3.
 
 ---
 
