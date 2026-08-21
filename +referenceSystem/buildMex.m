@@ -183,7 +183,8 @@ function buildReport = buildMex(options)
 
     % The previously loaded binary must be released before the new one can be
     % queried; a private MEX function cannot be cleared by name from here.
-    clear mex
+    % clear mex UNLOADS the gateway so the next build can overwrite it.
+    clear mex %#ok<CLMEX>
     mexState = referenceSystem.mexInfo();
     if ~mexState.built || mexState.sofaRelease == ""
         error('referenceSystem:buildMex:gatewayNotLoadable', ...
@@ -317,7 +318,8 @@ function localReleaseAndCheckOutput(outputFile)
 %   names a path and a permission and not a cause, and because the OpenMP
 %   search would otherwise run first and attribute the failure to a flag.
 
-    clear mex
+    % clear mex UNLOADS the gateway so the next build can overwrite it.
+    clear mex %#ok<CLMEX>
 
     if ~isfile(outputFile)
         return
@@ -393,8 +395,9 @@ function [variant, rejected] = localDetectOpenMpFlags()
 
     candidate = localOpenMpFlagVariants();
     for k = 1:numel(candidate)
+        % Called through evalc below, which the analyser cannot read.
         compileProbe = @() mex('-c', candidate(k).flag{:}, ...
-            '-outdir', probeFolder, probeFile);
+            '-outdir', probeFolder, probeFile); %#ok<NASGU>
         try
             evalc('compileProbe()');
             variant = candidate(k);

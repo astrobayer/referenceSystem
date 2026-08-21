@@ -98,7 +98,7 @@ classdef TestEop < matlab.unittest.TestCase
             % Handover P5: if the format cannot be identified, error. Never
             % default, because a wrong column map produces a plausible series.
             scratch = fullfile(tempdir, "referenceSystem_notAnEopFile.txt");
-            cleanup = onCleanup(@() TestEop.deleteIfPresent(scratch)); %#ok<NASGU>
+            cleanup = onCleanup(@() TestEop.deleteIfPresent(scratch));
             writelines(["this is not an EOP series"; "1 2 3"], scratch);
 
             testCase.verifyError(@() referenceSystem.readEop(scratch), ...
@@ -173,7 +173,7 @@ classdef TestEop < matlab.unittest.TestCase
             % warnings nobody claimed, and an asserted warning is claimed.
             % Registered as a cleanup so it fires on pass, on failure and on a
             % filtered assumption alike. See WarningRecordingPlugin.
-            consumeWarning = onCleanup(@() lastwarn('', '')); %#ok<NASGU>
+            consumeWarning = onCleanup(@() lastwarn('', ''));
             eop = referenceSystem.readEop(testCase.fixture('eop20c04.txt'));
             outside = referenceSystem.daySecondToEpoch( ...
                 [eop.mjd(end) + 5, 0], "UTC");
@@ -658,7 +658,7 @@ classdef TestEop < matlab.unittest.TestCase
             % content, because relying on a real mis-read to reach it only
             % tests whichever check fires first.
             scratch = fullfile(tempdir, "referenceSystem_absurdEop.txt");
-            cleanup = onCleanup(@() TestEop.deleteIfPresent(scratch)); %#ok<NASGU>
+            cleanup = onCleanup(@() TestEop.deleteIfPresent(scratch));
 
             % A well-formed EOP 20 C04 row whose polar motion is 5 arcseconds:
             % correct layout, correct field count, physically impossible value.

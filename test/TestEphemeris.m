@@ -209,8 +209,8 @@ classdef TestEphemeris < matlab.unittest.TestCase
 
             warningState = warning('off', ...
                 'referenceSystem:readEphemeris:mixedGenerations');
-            restoreWarning = onCleanup(@() warning(warningState)); %#ok<NASGU>
-            consumeWarning = onCleanup(@() lastwarn('', '')); %#ok<NASGU>
+            restoreWarning = onCleanup(@() warning(warningState));
+            consumeWarning = onCleanup(@() lastwarn('', ''));
 
             ephemeris = referenceSystem.readEphemeris(kernel(keep), ...
                 'Digest', false, 'AllowGenerations', family);
@@ -274,7 +274,7 @@ classdef TestEphemeris < matlab.unittest.TestCase
                 "Fewer than two SPKs are in data/, so no mixed set exists.");
             kernel = string(fullfile({found.folder}, {found.name}));
 
-            consumeWarning = onCleanup(@() lastwarn('', '')); %#ok<NASGU>
+            consumeWarning = onCleanup(@() lastwarn('', ''));
             mixed = testCase.verifyWarning(@() referenceSystem.readEphemeris( ...
                 kernel, 'Digest', false), ...
                 'referenceSystem:readEphemeris:mixedGenerations');
@@ -335,7 +335,7 @@ classdef TestEphemeris < matlab.unittest.TestCase
             testCase.assumeGreaterThanOrEqual(numel(distinct), 2, ...
                 "The SPKs in data/ name one generation, so nothing is mixed.");
 
-            consumeWarning = onCleanup(@() lastwarn('', '')); %#ok<NASGU>
+            consumeWarning = onCleanup(@() lastwarn('', ''));
 
             % DECLARING EVERY GENERATION PRESENT MUST SILENCE IT.
             lastwarn('', '');
@@ -390,7 +390,7 @@ classdef TestEphemeris < matlab.unittest.TestCase
             warned = false;
             previous = warning('off', ...
                 'referenceSystem:readEphemeris:generationNotVerified');
-            restoreWarning = onCleanup(@() warning(previous)); %#ok<NASGU>
+            restoreWarning = onCleanup(@() warning(previous));
             % A TEST THAT RAISES A WARNING DELIBERATELY CONSUMES IT, which is
             % WarningRecordingPlugin's documented rule and not a workaround:
             % suppression does not hide a warning from lastwarn, so without
@@ -398,7 +398,7 @@ classdef TestEphemeris < matlab.unittest.TestCase
             % and stops being worth reading. A cleanup rather than a trailing
             % statement, so it fires on failure and on a filtered assumption
             % too - which rev. 1.167's trailing lastwarn('') did not.
-            consumeWarning = onCleanup(@() lastwarn('', '')); %#ok<NASGU>
+            consumeWarning = onCleanup(@() lastwarn('', ''));
             lastwarn('');
             try
                 ephemeris = referenceSystem.readEphemeris(string(kernel), ...
@@ -809,8 +809,8 @@ classdef TestEphemeris < matlab.unittest.TestCase
                 % job should say so in the report.
                 warningId = 'referenceSystem:downloadKernels:incompleteFetch';
                 previousState = warning('off', warningId);
-                restoreWarning = onCleanup(@() warning(previousState)); %#ok<NASGU>
-                cleanup = onCleanup(@() lastwarn('', ''));              %#ok<NASGU>
+                restoreWarning = onCleanup(@() warning(previousState));
+                cleanup = onCleanup(@() lastwarn('', ''));
                 lastwarn('', '');
                 scratch = string(tempname);
 
@@ -1812,7 +1812,7 @@ classdef TestEphemeris < matlab.unittest.TestCase
                 % loop, which has no access to the total. The aggregation is
                 % therefore checked through the only evidence that distinguishes it.
                 testCase.requireGateway();
-                cleanup = onCleanup(@() lastwarn('', ''));           %#ok<NASGU>
+                cleanup = onCleanup(@() lastwarn('', ''));
                 day = (-58000:-57901).';            % about the year 1700
                 epoch = referenceSystem.daySecondToEpoch( ...
                     [day repmat(43200, numel(day), 1)], "TT");

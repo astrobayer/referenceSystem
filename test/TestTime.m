@@ -620,7 +620,7 @@ classdef TestTime < matlab.unittest.TestCase
             % This test raises the warning deliberately, so it consumes it -
             % WarningRecordingPlugin's rule, because suppression does not hide
             % a warning from lastwarn.
-            cleanup = onCleanup(@() lastwarn('', '')); %#ok<NASGU>
+            cleanup = onCleanup(@() lastwarn('', ''));
             epoch = referenceSystem.daySecondToEpoch([60310 43200], "UTC");
 
             % verifyWarning FORWARDS the function's outputs - unlike
@@ -1101,7 +1101,7 @@ classdef TestTime < matlab.unittest.TestCase
             % warnings nobody claimed, and an asserted warning is claimed.
             % Registered as a cleanup so it fires on pass, on failure and on a
             % filtered assumption alike. See WarningRecordingPlugin.
-            consumeWarning = onCleanup(@() lastwarn('', '')); %#ok<NASGU>
+            consumeWarning = onCleanup(@() lastwarn('', ''));
             testCase.assumeTrue(referenceSystem.mexInfo().built, ...
                 'The MEX gateway is not built.');
             % Section C.6 rule 2. The bundled SOFA release flags every year more
@@ -1195,7 +1195,7 @@ classdef TestTime < matlab.unittest.TestCase
             % stale cache, and that is deliberate redundancy: this test names
             % the mechanism, that one names the consequence, and a reader who
             % sees only one of them still learns something true.
-            restore = onCleanup(@() referenceSystem.leapSecondTable("reset")); %#ok<NASGU>
+            restore = onCleanup(@() referenceSystem.leapSecondTable("reset"));
 
             utc = referenceSystem.daySecondToEpoch([58849 0], "UTC");
             sofaValue = referenceSystem.leapSecondTable("deltaAT", utc);
@@ -1204,7 +1204,7 @@ classdef TestTime < matlab.unittest.TestCase
 
             overrideFile = fullfile(tempdir, ...
                 "referenceSystem_p28bColumnCache.txt");
-            removeFile = onCleanup(@() delete(overrideFile)); %#ok<NASGU>
+            removeFile = onCleanup(@() delete(overrideFile));
             writematrix([41317 10; 58000 99], overrideFile, ...
                 'FileType', 'text', 'Delimiter', ' ');
 

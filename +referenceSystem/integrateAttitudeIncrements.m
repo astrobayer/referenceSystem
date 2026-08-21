@@ -202,7 +202,7 @@ function [q, info, convention] = integrateAttitudeIncrements(initialQuaternion, 
     stepCount = size(deltaTheta, 2);
     if stepCount < 1
         error('referenceSystem:integrateAttitudeIncrements:tooFewEpochs', ...
-            ['Propagation needs at least one increment; none were supplied.']);
+            'Propagation needs at least one increment; none were supplied.');
     end
 
     firstEpoch = referenceSystem.normalizeEpoch(epoch);
