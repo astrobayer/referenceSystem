@@ -634,18 +634,36 @@ def check_build_date_agrees_with_contents():
 
 
 def check_unrun_revisions_against_the_o37_ceiling():
-    """Count consecutive NOT RUN revision rows and warn past the ceiling.
+    """Count OPEN O2 debt against the ceiling and warn past it.
 
     O37 lets a CI-green change merge while the MATLAB MCP is unavailable and
-    turns the unrun MATLAB tier into a recorded debt rather than a blocker. A
-    debt nobody rereads is the failure mode that exception creates, so the
-    document counts its own.
+    turns the unrun MATLAB tier into a recorded debt.  A debt nobody rereads is
+    the failure mode that exception creates, so the document counts its own.
 
-    THE CEILING IS 15 AND IT WARNS RATHER THAN FAILS. Fifteen is not a
-    tolerance for sloppiness; it is the length of an ordinary phone-and-CI
-    stretch, stated by the person who works that way rather than guessed at
-    here. The count runs from the top of the log and stops at the first
-    revision that recorded a run, so discharging clears it in one edit.
+    REV. 1.209: THIS CHECK USED TO PATTERN-MATCH ENGLISH AND WAS SILENTLY
+    WRONG.  It scanned revision rows for the phrases "NOT RUN" or "O2 is open"
+    and counted them as debt.  Three ways that failed at once, all live in the
+    tree when the defect was found:
+
+      * rev. 1.208 matched on "NOT RUN AND NOTHING TO RUN", which means the
+        OPPOSITE of a debt;
+      * rev. 1.207 matched on "sixteen planted NOT RUN rows" - the check
+        matching prose describing its own fault injection;
+      * rev. 1.205 matched a real debt that run 99 had already discharged,
+        because the log is HISTORY and this check was reading it as STATE.
+
+    It read 4 against a true debt of 0 and did not fire, because 4 < 15.  The
+    fault injection proved it FIRES; it did not prove it fires on the RIGHT
+    THING.  Had the ceiling been the 3 originally proposed, it would have fired
+    falsely on the revision that introduced it.
+
+    THE REPAIR IS TO STOP PARSING PROSE FOR A FACT.  A revision that carries
+    unrun MATLAB debt opens its Change cell with the literal token
+    "[O2-OPEN]"; a revision that discharges opens with
+    "[O2-DISCHARGED 1.a-1.b]".  The token is required AT THE START of the cell,
+    so prose mentioning it - this docstring, or a revision entry explaining the
+    convention - cannot be mistaken for it.  Counting stops at the most recent
+    discharge, because everything at or below it is settled.
     """
     ceiling = 15
     handover = os.path.join(ROOT, 'HANDOVER_referenceSystem.md')
@@ -653,17 +671,20 @@ def check_unrun_revisions_against_the_o37_ceiling():
         return
     text = open(handover, encoding='utf-8').read()
     rows = re.findall(r'^\| (1\.\d+) \| [^|]*\| (.*)$', text, re.M)
-    unrun = 0
-    for _revision, body in rows:
-        if re.search(r'NOT RUN|O2 is open', body, re.I):
-            unrun += 1
-        else:
+
+    unrun = []
+    for revision, body in rows:
+        cell = body.strip()
+        if cell.startswith('[O2-DISCHARGED'):
             break
-    if unrun > ceiling:
+        if cell.startswith('[O2-OPEN]'):
+            unrun.append(revision)
+
+    if len(unrun) > ceiling:
         warn('o37/unrunCeiling',
-             '%d consecutive revisions carry an unrun MATLAB tier (ceiling '
-             '%d). Run the suite and discharge O2 by naming the revisions it '
-             'clears.' % (unrun, ceiling))
+             '%d revisions carry open O2 debt (ceiling %d): %s. Run the suite '
+             'and discharge by opening the next row with [O2-DISCHARGED a-b].'
+             % (len(unrun), ceiling, ', '.join(unrun)))
 
 
 def main():
