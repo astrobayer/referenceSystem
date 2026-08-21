@@ -259,6 +259,7 @@ function [results, reportFile, summary] = runTestSuite(options)
         'versionInfo', referenceSystem.toolboxVersion(), ...
         'mexState', referenceSystem.mexInfo(), ...
         'requestedTags', options.Tags, ...
+        'dataFolder', localDescribeDataFolder(), ...
         'excludedClass', excludedClass);
 
     % THE INSTRUMENTS RUN AFTER THE SUITE AND CANNOT SPOIL IT (rev. 1.198).
@@ -491,6 +492,7 @@ function reportLine = headerBlock(environment)
         pad("MEX", 10) + ": " + mexState.summary; ...
         pad("Compiler", 10) + ": " + localCompilerLine(mexState); ...
         pad("Leap sec", 10) + ": " + mexState.leapSecondsSummary; ...
+        pad("Data", 10) + ": " + environment.dataFolder; ...
         heavyRule()];
 end
 
@@ -863,6 +865,25 @@ function heading = unexpectedFilterHeading()
 
     heading = "FILTERED - AN ASSUMPTION DID NOT HOLD ON THIS MACHINE " + ...
         "(NOT A FAILURE)";
+end
+
+function described = localDescribeDataFolder()
+%LOCALDESCRIBEDATAFOLDER Where this run read its kernels and EOP, and whether
+%   that was a preference or the shipped default.
+%
+%   D119 LET THE SUITE FOLLOW A USER PREFERENCE, SO THE REPORT MUST SAY WHICH
+%   FOLDER IT FOLLOWED. Coverage now depends on a setting that appears in no
+%   call: two runs of the same sources can cover different tests because one
+%   machine's preference points somewhere with kernels and the other's does
+%   not. A report that did not name the folder would make those two runs
+%   indistinguishable, which is the shape D113 exists to prevent.
+
+    folder = referenceSystem.dataFolder();
+    if ispref('referenceSystem', 'dataFolder')
+        described = folder + "   (preference)";
+    else
+        described = folder + "   (default)";
+    end
 end
 
 function summary = localRunSummary(results)

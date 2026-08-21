@@ -18,16 +18,26 @@ installer and no `.mltbx`.
 >> setupReferenceSystem
 ```
 
-That is the whole procedure. `setupReferenceSystem` is the installer: it sets
-**and saves** the path, compiles the MEX gateway, builds the function reference
-and the help search database, downloads the Earth orientation series and the
-SPICE kernels, and prints a summary — **each step only when it is out of date or
-absent**. A fresh copy takes a few minutes and about 700 MB, of which 650 MB is
-the small-body kernel; afterwards it costs milliseconds, so it is safe in
-`startup.m`.
+That is the whole procedure. `setupReferenceSystem` installs the **toolbox**: it
+sets **and saves** the path, compiles the MEX gateway, builds the function
+reference and the help search database, and prints a summary — **each step only
+when it is out of date or absent**. It needs no network and takes seconds, so it
+is safe in `startup.m`.
+
+It does **not** install the **data**, which is a second and much larger act. One
+call does that, and setup names it when nothing is installed yet:
 
 ```matlab
->> setupReferenceSystem(Fetch="none")      % offline: download nothing
+>> setupReferenceSystem(Fetch="all")       % EOP + kernels, ~700 MB once
+>> referenceSystem.dataFolder("E:\DATAPOOL\referenceSystem")   % put it elsewhere first
+```
+
+`dataFolder` is the one authority for where installed data lives; the choice
+persists across sessions, and `referenceSystem.dataFolder("reset")` returns to
+`data/` beside the package.
+
+```matlab
+>> setupReferenceSystem(Fetch="eop")       % Earth orientation only
 >> setupReferenceSystem(KernelSet="minimal")  % de440s.bsp alone, ~31 MB
 >> setupReferenceSystem(Save=false)        % this session only
 >> setupReferenceSystem(Verbose=false)     % no summary
@@ -36,10 +46,14 @@ the small-body kernel; afterwards it costs milliseconds, so it is safe in
 >> referenceSystem.runTestSuite            % writes referenceSystem_testReport.txt
 ```
 
-The defaults install rather than inspect, because the call with no arguments is
-what somebody makes once on a fresh clone and what they want out of it is a
-toolbox that still works in the next session. A failed download never stops
-setup; it is recorded in `status.fetch.failures` and reported.
+The default installs the toolbox and leaves the data alone, because those are
+two different acts with two different costs: the first is offline and takes
+seconds, the second is ~700 MB. The call with no arguments is what somebody
+makes once on a fresh clone, and what they want out of it is a toolbox that
+still works in the next session. When no data is installed, setup prints the
+call that installs it, so an empty `data/` is reported rather than merely left.
+A failed download never stops setup; it is recorded in `status.fetch.failures`
+and reported.
 
 **Add the parent folder to the path, never `+referenceSystem` itself.** A folder
 whose name begins with `+` is a namespace folder and is never on the path — that

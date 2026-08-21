@@ -190,11 +190,12 @@ classdef TestEphemeris < matlab.unittest.TestCase
             testCase.assumeTrue(exist('cspice_spkezr', 'file') == 2 || ...
                 exist('cspice_spkezr', 'file') == 3, ...
                 'MICE is not on the path; the kernel-backed tier is skipped.');
-            planetary = fullfile(testCase.toolboxRoot(), 'data', 'de440s.bsp');
+            planetary = fullfile(referenceSystem.dataFolder(), 'de440s.bsp');
             testCase.assumeTrue(isfile(planetary), ...
-                'de440s.bsp is not in data/; run downloadKernels.');
+                "de440s.bsp is not in " + referenceSystem.dataFolder() + ...
+                "; run setupReferenceSystem(Fetch = ""kernels"").");
 
-            found = dir(fullfile(testCase.toolboxRoot(), 'data', '*.bsp'));
+            found = dir(fullfile(referenceSystem.dataFolder(), '*.bsp'));
             kernel = string(fullfile({found.folder}, {found.name}));
             family = TestEphemeris.CompatibleGenerations;
 
@@ -268,7 +269,7 @@ classdef TestEphemeris < matlab.unittest.TestCase
             testCase.assumeTrue(exist('cspice_spkezr', 'file') == 2 || ...
                 exist('cspice_spkezr', 'file') == 3, ...
                 'MICE is not on the path; the kernel-backed tier is skipped.');
-            found = dir(fullfile(testCase.toolboxRoot(), 'data', '*.bsp'));
+            found = dir(fullfile(referenceSystem.dataFolder(), '*.bsp'));
             testCase.assumeGreaterThanOrEqual(numel(found), 2, ...
                 "Fewer than two SPKs are in data/, so no mixed set exists.");
             kernel = string(fullfile({found.folder}, {found.name}));
@@ -317,7 +318,7 @@ classdef TestEphemeris < matlab.unittest.TestCase
             testCase.assumeTrue(exist('cspice_spkezr', 'file') == 2 || ...
                 exist('cspice_spkezr', 'file') == 3, ...
                 'MICE is not on the path; the kernel-backed tier is skipped.');
-            found = dir(fullfile(testCase.toolboxRoot(), 'data', '*.bsp'));
+            found = dir(fullfile(referenceSystem.dataFolder(), '*.bsp'));
             testCase.assumeGreaterThanOrEqual(numel(found), 2, ...
                 "Fewer than two SPKs are in data/, so no mixed set exists.");
             kernel = string(fullfile({found.folder}, {found.name}));
@@ -379,9 +380,10 @@ classdef TestEphemeris < matlab.unittest.TestCase
             testCase.assumeTrue(exist('cspice_spkezr', 'file') == 2 || ...
                 exist('cspice_spkezr', 'file') == 3, ...
                 'MICE is not on the path; the kernel-backed tier is skipped.');
-            kernel = fullfile(testCase.toolboxRoot(), 'data', 'de440s.bsp');
+            kernel = fullfile(referenceSystem.dataFolder(), 'de440s.bsp');
             testCase.assumeTrue(isfile(kernel), ...
-                'de440s.bsp is not in data/; run downloadKernels.');
+                "de440s.bsp is not in " + referenceSystem.dataFolder() + ...
+                "; run setupReferenceSystem(Fetch = ""kernels"").");
 
             refused = false;
             reportedUnverified = false;
@@ -1716,9 +1718,10 @@ classdef TestEphemeris < matlab.unittest.TestCase
             testCase.assumeTrue(exist('cspice_spkezr', 'file') == 2 || ...
                 exist('cspice_spkezr', 'file') == 3, ...
                 'MICE is not on the path; the kernel-backed tier is skipped.');
-            kernel = fullfile(testCase.toolboxRoot(), 'data', 'de440s.bsp');
+            kernel = fullfile(referenceSystem.dataFolder(), 'de440s.bsp');
             testCase.assumeTrue(isfile(kernel), ...
-                'de440s.bsp is not in data/; run downloadKernels.');
+                "de440s.bsp is not in " + referenceSystem.dataFolder() + ...
+                "; run setupReferenceSystem(Fetch = ""kernels"").");
 
             ephemeris = referenceSystem.readEphemeris(string(kernel));
 

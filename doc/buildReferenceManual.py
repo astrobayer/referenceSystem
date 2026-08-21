@@ -478,11 +478,14 @@ def chapterInstall(story, st, info):
                                               'size reasons'],
     ], [32 * mm, 58 * mm, 60 * mm], st))
     story.append(Paragraph(
-        '<b>Everything is fetched by default</b>, roughly 700 MB on a first '
-        'run and nothing at all afterwards, because a file already on disk is '
-        'skipped. Pass <font face="Courier">\'Fetch\', "none"</font> for an '
-        'offline setup, or <font face="Courier">\'KernelSet\', "minimal"</font> '
-        'to leave out the 650 MB small-body kernel. The exploratory call '
+        '<b>Nothing is fetched by default</b>: setup installs the toolbox and '
+        'leaves the data alone. Pass <font face="Courier">\'Fetch\', "all"'
+        '</font> to install it, roughly 700 MB on a first run and nothing at '
+        'all afterwards, because a file already on disk is skipped; '
+        '<font face="Courier">\'KernelSet\', "minimal"</font> leaves out the '
+        '650 MB small-body kernel. Where it goes is <font face="Courier">'
+        'referenceSystem.dataFolder</font>, which remembers the choice. The '
+        'exploratory call '
         'remains the harmless one: <font face="Courier">downloadKernels()'
         '</font> returns the plan and touches neither network nor disk.',
         st['note']))

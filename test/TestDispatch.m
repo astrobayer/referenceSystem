@@ -417,6 +417,99 @@ classdef TestDispatch < matlab.unittest.TestCase
                 referenceSystem.toolboxVersion().version);
         end
 
+        function dataFolder_contract_queryDefaultsBesideThePackageAndCreatesIt(testCase)
+            % D119: WITHOUT A STORED PREFERENCE THE ANSWER IS data/ BESIDE THE
+            % PACKAGE, which is what ships and what every install before this
+            % revision hardcoded. The folder is created on query deliberately:
+            % every caller is about to read or write in it, and returning a
+            % path that does not exist moves the mkdir into each of them.
+            restorePreference = TestDispatch.preferenceRestorer();  %#ok<NASGU>
+            if ispref('referenceSystem', 'dataFolder')
+                rmpref('referenceSystem', 'dataFolder');
+            end
+
+            folder = referenceSystem.dataFolder();
+
+            expected = what(char(fullfile(testCase.toolboxRoot(), 'data')));
+            testCase.assertNotEmpty(expected, ...
+                'The default data folder did not resolve after the query.');
+            testCase.verifyEqual(folder, string(expected(1).path), ...
+                'A query without a preference must answer data/ beside the package.');
+            testCase.verifyTrue(isfolder(folder), ...
+                'dataFolder returned a path it did not create.');
+        end
+
+        function dataFolder_contract_setPersistsAndResetRestoresTheDefault(testCase)
+            % THE THREE SHAPES ARE ONE CONTRACT AND ARE TESTED AS ONE, because
+            % a setter without a reset is a trap rather than a setting: the
+            % shipped behaviour would be unreachable once a preference existed.
+            % shLowLevel.dataFolder in shAnalysis has the same three, and the
+            % two toolboxes are meant to feel identical here.
+            restorePreference = TestDispatch.preferenceRestorer();  %#ok<NASGU>
+
+            wanted = fullfile(tempname(), "rsPreferredData");
+            cleanupFolder = onCleanup(@() TestDispatch.removeIfPresent(wanted)); %#ok<NASGU>
+
+            stored = referenceSystem.dataFolder(wanted);
+            resolved = what(char(wanted));
+            testCase.assertNotEmpty(resolved, ...
+                "dataFolder did not create the folder it was given: " + wanted);
+            testCase.verifyEqual(stored, string(resolved(1).path), ...
+                'A set must return the resolved folder it stored.');
+            testCase.verifyEqual(referenceSystem.dataFolder(), stored, ...
+                'A set did not persist: the next query gave a different answer.');
+
+            afterReset = referenceSystem.dataFolder("reset");
+            testCase.verifyFalse(ispref('referenceSystem', 'dataFolder'), ...
+                '"reset" left the preference in place.');
+            testCase.verifyNotEqual(afterReset, stored, ...
+                '"reset" returned the folder it was supposed to discard.');
+        end
+
+        function dataFolder_contract_isTheOneAuthorityBothDownloadersResolve(testCase)
+            % D119's WHOLE POINT. downloadEop and downloadKernels each carried
+            % a private localDefaultCache composing data/ from their own
+            % mfilename, so the toolbox held two answers to one question and a
+            % caller who moved one was surprised by the other.
+            %
+            % CHECKED STATICALLY, AND THE REASON IS WORTH WRITING DOWN. No
+            % public surface reveals the resolved default without a network
+            % call: "list" returns before CacheDir is read, "verify" issues a
+            % HEAD per row, and "download" is 660 MB. A test that provoked a
+            % transfer to observe a path would be network-dependent and would
+            % pass vacuously on any machine that could not reach NAIF - the
+            % defect D116's second allow-list row exists to record. What is
+            % asserted here is a spelling, so it is read as one.
+            for name = ["downloadKernels", "downloadEop"]
+                source = string(fileread(which("referenceSystem." + name)));
+                testCase.verifyTrue(contains(source, ...
+                    "referenceSystem.dataFolder()"), ...
+                    name + " no longer resolves through referenceSystem." + ...
+                    "dataFolder; the second copy of the location is back.");
+                testCase.verifyFalse(contains(source, ...
+                    "fileparts(mfilename('fullpath'))), 'data')"), ...
+                    name + " composes data/ from its own mfilename again. " + ...
+                    "D119 deleted that copy; it must not return.");
+            end
+        end
+
+        function dataFolder_contract_refusesAPathThatIsAnExistingFile(testCase)
+            % A PATH THAT IS ALREADY A FILE IS REFUSED RATHER THAN WORKED
+            % AROUND. mkdir would otherwise fail later, inside a transfer, and
+            % report a kernel when the defect is in the argument.
+            restorePreference = TestDispatch.preferenceRestorer();  %#ok<NASGU>
+
+            occupied = [tempname() '.txt'];
+            fileId = fopen(occupied, 'w');
+            testCase.assertNotEqual(fileId, -1, 'Could not create the probe file.');
+            fclose(fileId);
+            cleanupFile = onCleanup(@() delete(occupied)); %#ok<NASGU>
+
+            testCase.verifyError(@() referenceSystem.dataFolder(occupied), ...
+                'referenceSystem:dataFolder:pathIsAFile', ...
+                'A file was accepted as a data folder.');
+        end
+
         function setupReferenceSystem_contract_dataFolderIsResolvedBeforeTheFetch(testCase)
             % D118: THE OPTION IS ONLY WORTH ANYTHING IF IT IS RESOLVED BEFORE
             % ANYTHING IS DOWNLOADED. Resolving it afterwards, or reporting it
@@ -459,11 +552,28 @@ classdef TestDispatch < matlab.unittest.TestCase
             % naming the default, and the omission must still land on
             % <toolboxRoot>/data. Without this the previous test would pass
             % against an implementation that had quietly moved the default.
+            %
+            % D119 GAVE "THE DEFAULT" TWO MEANINGS AND THIS TEST NOW PINS BOTH.
+            % With a stored preference the omission lands on the PREFERENCE -
+            % otherwise a user who moved their data and then ran setup with no
+            % arguments would fetch 700 MB back into the toolbox tree. Without
+            % one it still lands on <toolboxRoot>/data. Run 95 failed here
+            % against a real preference, which is the collision worth pinning
+            % rather than the accident it looked like.
             originalPath = path();
             restorePath = onCleanup(@() path(originalPath));
+            restorePreference = TestDispatch.preferenceRestorer(); %#ok<NASGU>
 
+            wanted = fullfile(tempname(), "rsPreferredDefault");
+            cleanupFolder = onCleanup(@() TestDispatch.removeIfPresent(wanted)); %#ok<NASGU>
+            preferred = referenceSystem.dataFolder(wanted);
             status = setupReferenceSystem(TestDispatch.setupOptionsForTesting{:});
+            testCase.verifyEqual(status.dataFolder, preferred, ...
+                ['An omitted DataFolder must follow a stored preference, ', ...
+                'or setup fetches into the toolbox tree behind the user.']);
 
+            referenceSystem.dataFolder("reset");
+            status = setupReferenceSystem(TestDispatch.setupOptionsForTesting{:});
             expected = what(char(fullfile(testCase.toolboxRoot(), 'data')));
             if isempty(expected)
                 testCase.verifyEqual(status.dataFolder, ...
@@ -1461,6 +1571,34 @@ classdef TestDispatch < matlab.unittest.TestCase
             option = {'Save', false, 'Fetch', "none", 'Verbose', false};
         end
 
+        function restorer = preferenceRestorer()
+            %PREFERENCERESTORER Put the user's dataFolder preference back.
+            %   A TEST THAT SETS A PREFERENCE AND DIES LEAVES THE MACHINE
+            %   RECONFIGURED, and unlike a path change that survives a restart.
+            %   Every dataFolder test goes through this, so the suite cannot
+            %   move where a person's data lives as a side effect of checking
+            %   that it can be moved. The same shape as shAnalysis's
+            %   testContract, which saves ispref before it touches anything.
+            group = 'referenceSystem';
+            name = 'dataFolder';
+            if ispref(group, name)
+                previous = getpref(group, name);
+                restorer = onCleanup(@() setpref(group, name, previous));
+            else
+                restorer = onCleanup(@() TestDispatch.removePreferenceIfPresent( ...
+                    group, name));
+            end
+        end
+
+        function removePreferenceIfPresent(group, name)
+            %REMOVEPREFERENCEIFPRESENT Discard a preference without failing.
+            %   A teardown that throws turns a passing test red for a reason
+            %   that has nothing to do with what it asserted.
+            if ispref(group, name)
+                rmpref(group, name);
+            end
+        end
+
         function removeIfPresent(folder)
             %REMOVEIFPRESENT Delete a scratch folder without failing the test.
             %   A teardown that throws turns a passing test red for a reason
@@ -2343,6 +2481,16 @@ classdef TestDispatch < matlab.unittest.TestCase
                 "against, and the value is an arbitrary label whose " + ...
                 "numerical precision means nothing - only its equality does, " + ...
                 "which is what the contract test asserts.");
+            exemption(end+1) = TestDispatch.exemption("dataFolder", ...
+                "precision", ...
+                "Resolves a path on THIS MACHINE. A path is not a computed " + ...
+                "quantity whose precision could be round-tripped - only its " + ...
+                "equality matters, which the contract tests assert across " + ...
+                "set, query and reset. REFERENCE IS NOT EXEMPTED AND WAS " + ...
+                "BRIEFLY CLAIMED TO BE: the kernel-backed tests call this " + ...
+                "function to find their kernels, so it earns reference " + ...
+                "coverage through them, and the staleness companion refused " + ...
+                "the wider claim at run 95.");
             exemption(end+1) = TestDispatch.exemption("toolboxVersion", ...
                 ["reference", "precision"], ...
                 "Reports the toolbox's own version and provenance.");

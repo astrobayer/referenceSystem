@@ -19,14 +19,19 @@ into one package with a single set of conventions.</p>
 &gt;&gt; setupReferenceSystem
 </pre>
 
-<p>That is all of it. <code>setupReferenceSystem</code> is the installer as well
-as the path setter: it compiles the MEX gateway, builds the documentation,
-saves the path and downloads the external data &mdash; each step only when it is
-missing or out of date, and nothing at all when everything is current. A few
-minutes and about 700 MB on a fresh copy, milliseconds afterwards, so it is safe
-in <code>startup.m</code>. Pass <code>Fetch="none"</code> for an offline
-install, or <code>KernelSet="minimal"</code> to leave out the 650 MB small-body
-kernel.</p>
+<p>That is all of it. <code>setupReferenceSystem</code> installs the
+<b>toolbox</b>: it compiles the MEX gateway, builds the documentation and saves
+the path &mdash; each step only when it is missing or out of date, and nothing at
+all when everything is current. It touches no network and takes seconds, so it is
+safe in <code>startup.m</code>.</p>
+
+<p>It does <b>not</b> download the external <b>data</b>. That is one further
+call, <code>setupReferenceSystem(Fetch="all")</code>, about 700 MB on a first run
+and nothing afterwards; <code>KernelSet="minimal"</code> leaves out the 650 MB
+small-body kernel. Setup prints this instruction itself when nothing is installed
+yet, so an empty data folder is never silent. Where the data goes is
+<code>referenceSystem.dataFolder</code>, which remembers the choice between
+sessions.</p>
 
 <p>It is also the only unqualified name the toolbox installs, and the one place
 permitted to print. It prints by default, and this is what it says:</p>
