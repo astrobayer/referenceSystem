@@ -143,11 +143,17 @@ function status = setupReferenceSystem(options)
 %
 %   Three things are checked, in the order in which they break a session.
 %
-%   The MATLAB release comes first: the toolbox uses string scalars in
-%   arguments blocks and pagemtimes, so it requires R2020b. The comparison is
-%   numeric on the version string rather than verLessThan or
-%   isMATLABReleaseOlderThan, so that it works on every release either of those
-%   two is missing from.
+%   The MATLAB release comes first, and the floor is R2026a (D120). It is not
+%   the oldest release the sources might run on - it is the only one they have
+%   ever been RUN on. R2020b stood here from the first revision as an inference
+%   from two language features, string scalars in arguments blocks and
+%   pagemtimes, and no run on any release below the current one has ever
+%   existed. A support claim nobody has tested is worse than a narrower one
+%   that has been, because it is believed. The comparison stays numeric on the
+%   version string rather than verLessThan or isMATLABReleaseOlderThan, so it
+%   works on every release either of those two is missing from - including the
+%   ones now refused, which must still reach the error rather than fail to
+%   parse it.
 %
 %   Then the path is cleaned. Two states are wrong and both are removed with a
 %   warning: a +referenceSystem folder on the path, which makes every function
@@ -198,7 +204,7 @@ function status = setupReferenceSystem(options)
 %       The +referenceSystem folder is not next to this file. The distribution
 %       folder has been split; unpack it again as one folder.
 %   referenceSystem:setupReferenceSystem:unsupportedRelease
-%       The MATLAB release is older than R2020b.
+%       The MATLAB release is older than R2026a (D120).
 %   referenceSystem:setupReferenceSystem:packageNotReachable
 %       The folder was added but referenceSystem.toolboxVersion still does not
 %       resolve, which means the package folder is unreadable or damaged. The
@@ -255,12 +261,14 @@ function status = setupReferenceSystem(options)
             'distribution folder next to +referenceSystem.'], packageFolder);
     end
 
-    minimumRelease = 9.9;
+    % D120: R2026a. 26.1 is its version number; see the METHOD block for why
+    % the floor is the tested release and not the oldest plausible one.
+    minimumRelease = 26.1;
     releaseNumber = str2double(regexp(version(), '^\d+\.\d+', 'match', 'once'));
     if releaseNumber < minimumRelease
         error('referenceSystem:setupReferenceSystem:unsupportedRelease', ...
-            ['referenceSystem requires MATLAB R2020b or later; this is %s. ', ...
-            'The toolbox uses string scalars in arguments blocks and pagemtimes.'], ...
+            ['referenceSystem requires MATLAB R2026a or later; this is %s. ', ...
+            'R2026a is the only release the toolbox has been run on (D120).'], ...
             version('-release'));
     end
 

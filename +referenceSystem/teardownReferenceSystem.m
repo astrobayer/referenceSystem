@@ -268,6 +268,13 @@ function openId = listOpenFiles()
 %   Checked with which() rather than a release comparison, because the question
 %   is whether the function exists here and that is what which() answers;
 %   isMATLABReleaseOlderThan would be an inference from a version string.
+%
+%   D120 PUT THE SUPPORTED FLOOR AT R2026a, WHERE openedFiles ALWAYS EXISTS, so
+%   the fopen('all') branch is unreachable on every supported release. It is
+%   kept deliberately and not deleted: which() asks whether the function is
+%   here, which stays the right question if the floor ever moves, and the
+%   branch costs one comparison. Recorded so the next reader knows it is dead
+%   by decision rather than by oversight.
 
     if isempty(which('openedFiles'))
         openId = reshape(fopen('all'), 1, []);
