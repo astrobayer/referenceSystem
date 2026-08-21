@@ -1054,7 +1054,7 @@ classdef TestRotation < matlab.unittest.TestCase
             % warnings nobody claimed, and an asserted warning is claimed.
             % Registered as a cleanup so it fires on pass, on failure and on a
             % filtered assumption alike. See WarningRecordingPlugin.
-            consumeWarning = onCleanup(@() lastwarn('', '')); %#ok<NASGU>
+            consumeWarning = onCleanup(@() lastwarn('', ''));
             % Decision D62: one warning per call, naming this function rather
             % than leapSecondTable, which is not the function the user called.
             validThrough = referenceSystem.leapSecondTable("validThrough");
@@ -1084,8 +1084,10 @@ classdef TestRotation < matlab.unittest.TestCase
             % Library code does not print. The captured variables shadow
             % nothing, which is the revision 1.43 lesson: a test that captures
             % output must not itself generate any.
-            eopSeries = testCase.cookbookEop();
-            utcEpoch = referenceSystem.daySecondToEpoch([57754 0], "UTC");
+            % Used inside the evalc string below; the analyser cannot see through it.
+            eopSeries = testCase.cookbookEop(); %#ok<NASGU>
+            % Used inside the evalc string below; the analyser cannot see through it.
+            utcEpoch = referenceSystem.daySecondToEpoch([57754 0], "UTC"); %#ok<NASGU>
             printed = evalc(['rotationValue = referenceSystem.' ...
                 'rotationItrsToGcrs(utcEpoch, ''Eop'', eopSeries);']);
 

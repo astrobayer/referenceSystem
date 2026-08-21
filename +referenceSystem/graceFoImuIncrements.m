@@ -378,7 +378,7 @@ function [continuous, wrap] = localUnwrap(t, raw, threshold, gyroId)
 end
 
 % -------------------------------------------------------------------------
-function [gridTime, epoch] = localGrid(imu, baseEpoch, gyroTime, triad, options)
+function [gridTime, epoch] = localGrid(~, baseEpoch, gyroTime, triad, options)
     if isempty(options.Epoch)
         first = max(cellfun(@(t) t(1), gyroTime(triad)));
         last = min(cellfun(@(t) t(end), gyroTime(triad)));

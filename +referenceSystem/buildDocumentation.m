@@ -196,7 +196,7 @@ function [action, reason] = localBuildReference(packageFolder, outputFile, force
         error('referenceSystem:buildDocumentation:outputNotWritable', ...
             'Cannot write %s: %s', outputFile, message);
     end
-    closer = onCleanup(@() fclose(fid)); %#ok<NASGU>
+    closer = onCleanup(@() fclose(fid));
     fwrite(fid, text, 'char');
     action = "written";
     reason = "a package file is newer than the reference page";

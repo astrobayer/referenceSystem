@@ -107,6 +107,22 @@ jobs:
       # The repository root is the MATLAB startup folder, so ciGate.m is
       # callable before any path is set. ciGate calls setupReferenceSystem
       # itself: install policy belongs with judgement policy, in one file.
+      # The MathWorks base layer, machine-enforced. codeIssues honours
+      # codeAnalyzerConfiguration.json in the repository root, so the Rules of
+      # the guidelines are checked here rather than remembered. It runs BEFORE
+      # ciGate: a style finding is cheaper to read than a suite log, and this
+      # is the same cheapest-first ordering as the three jobs themselves.
+      - uses: matlab-actions/run-command@v3
+        with:
+          command: |
+            issues = codeIssues(pwd);
+            if ~isempty(issues.Issues)
+                disp(issues.Issues(:, ["Location" "Severity" "CheckID" "Description"]));
+                error("codeAnalyzer:findings", "%d Code Analyzer finding(s).", ...
+                    height(issues.Issues));
+            end
+            disp("Code Analyzer: clean");
+
       - uses: matlab-actions/run-command@v3
         with:
           command: ciGate

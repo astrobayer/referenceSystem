@@ -45,10 +45,10 @@ classdef TestDispatch < matlab.unittest.TestCase
 
             source = struct('className', {}, 'fileName', {}, 'line', {});
             for k = 1:numel(file)
-                source(k).fileName = string(file(k).name); %#ok<AGROW>
-                source(k).className = erase(string(file(k).name), ".m"); %#ok<AGROW>
+                source(k).fileName = string(file(k).name);
+                source(k).className = erase(string(file(k).name), ".m");
                 source(k).line = split(string(fileread(fullfile( ...
-                    file(k).folder, file(k).name))), newline); %#ok<AGROW>
+                    file(k).folder, file(k).name))), newline);
             end
             testCase.SuiteSource = source;
             testCase.CategoryCoverageMap = testCase.categoryCoverage();
@@ -110,7 +110,7 @@ classdef TestDispatch < matlab.unittest.TestCase
             % source, not a stray: a test .c or a scratch .c dropped in mex/
             % would be compiled into the gateway without anyone deciding to.
             expected = ["mexGateway.c"; "rsCore.c"; "rsCheb.c"; "rsApi.c"];
-            found = sort(string({coreEntry.name})');
+            found = sort(string({coreEntry.name}))';
             testCase.verifyEqual(found, sort(expected), ...
                 ['The top of mex/ holds a file the build will compile that ', ...
                 'this test does not know about. Add it here deliberately or ', ...
@@ -448,7 +448,7 @@ classdef TestDispatch < matlab.unittest.TestCase
             restorePreference = TestDispatch.preferenceRestorer();  %#ok<NASGU>
 
             wanted = fullfile(tempname(), "rsPreferredData");
-            cleanupFolder = onCleanup(@() TestDispatch.removeIfPresent(wanted)); %#ok<NASGU>
+            cleanupFolder = onCleanup(@() TestDispatch.removeIfPresent(wanted));
 
             stored = referenceSystem.dataFolder(wanted);
             resolved = what(char(wanted));
@@ -503,7 +503,7 @@ classdef TestDispatch < matlab.unittest.TestCase
             fileId = fopen(occupied, 'w');
             testCase.assertNotEqual(fileId, -1, 'Could not create the probe file.');
             fclose(fileId);
-            cleanupFile = onCleanup(@() delete(occupied)); %#ok<NASGU>
+            cleanupFile = onCleanup(@() delete(occupied));
 
             testCase.verifyError(@() referenceSystem.dataFolder(occupied), ...
                 'referenceSystem:dataFolder:pathIsAFile', ...
@@ -565,7 +565,7 @@ classdef TestDispatch < matlab.unittest.TestCase
             restorePreference = TestDispatch.preferenceRestorer(); %#ok<NASGU>
 
             wanted = fullfile(tempname(), "rsPreferredDefault");
-            cleanupFolder = onCleanup(@() TestDispatch.removeIfPresent(wanted)); %#ok<NASGU>
+            cleanupFolder = onCleanup(@() TestDispatch.removeIfPresent(wanted));
             preferred = referenceSystem.dataFolder(wanted);
             status = setupReferenceSystem(TestDispatch.setupOptionsForTesting{:});
             testCase.verifyEqual(status.dataFolder, preferred, ...
@@ -607,7 +607,7 @@ classdef TestDispatch < matlab.unittest.TestCase
             % warnings nobody claimed, and an asserted warning is claimed.
             % Registered as a cleanup so it fires on pass, on failure and on a
             % filtered assumption alike. See WarningRecordingPlugin.
-            consumeWarning = onCleanup(@() lastwarn('', '')); %#ok<NASGU>
+            consumeWarning = onCleanup(@() lastwarn('', ''));
             % Section C.5 rule 1 is the misconfiguration setup exists to undo,
             % so the repair is asserted rather than assumed.
             originalPath = path();
@@ -1858,13 +1858,13 @@ classdef TestDispatch < matlab.unittest.TestCase
             % "updates when off: true, when on: true".
             probeId = 'referenceSystem:testDispatch:lastwarnProbe';
             previousState = warning('off', probeId);
-            restoreState = onCleanup(@() warning(previousState)); %#ok<NASGU>
+            restoreState = onCleanup(@() warning(previousState));
             % THE DOCUMENTED CONSUMING FORM, AND A CLEANUP RATHER THAN A
             % TRAILING STATEMENT so that it fires on pass, on failure and on a
             % filtered assumption alike - which a trailing lastwarn('') does
             % not, and that is the whole reason the plugin's help specifies a
             % cleanup.
-            consumeWarning = onCleanup(@() lastwarn('', '')); %#ok<NASGU>
+            consumeWarning = onCleanup(@() lastwarn('', ''));
 
             lastwarn('');
             warning(probeId, 'Probe for the disabled-warning question.');
@@ -2186,7 +2186,7 @@ classdef TestDispatch < matlab.unittest.TestCase
             % requested, so the test neither touches the shipped documentation
             % nor pays for builddocsearchdb.
             outputFile = string(tempname) + ".html";
-            cleaner = onCleanup(@() TestDispatch.deleteIfPresent(outputFile)); %#ok<NASGU>
+            cleaner = onCleanup(@() TestDispatch.deleteIfPresent(outputFile));
 
             report = referenceSystem.buildDocumentation('Output', outputFile, ...
                 'Steps', "reference", 'Force', true);
@@ -2212,7 +2212,7 @@ classdef TestDispatch < matlab.unittest.TestCase
             % nothing, or a startup.m that runs setup would reparse eighty help
             % blocks every morning.
             outputFile = string(tempname) + ".html";
-            cleaner = onCleanup(@() TestDispatch.deleteIfPresent(outputFile)); %#ok<NASGU>
+            cleaner = onCleanup(@() TestDispatch.deleteIfPresent(outputFile));
             referenceSystem.buildDocumentation('Output', outputFile, ...
                 'Steps', "reference", 'Force', true);
 
@@ -2285,10 +2285,12 @@ classdef TestDispatch < matlab.unittest.TestCase
                     end
                     code = char(TestDispatch.codeOnlyLine(string(oneLine)));
                     index = numel(methodKey);
-                    methodPackageCall{index} = union( ...
+                    % Indexed assignment at a computed index, not an append; nothing to preallocate.
+                    methodPackageCall{index} = union( ... %#ok<AGROW>
                         methodPackageCall{index}(:), ...
                         TestDispatch.capturedNames(code, 'referenceSystem\.(\w+)'));
-                    methodHelperCall{index} = union( ...
+                    % Indexed assignment at a computed index, not an append; nothing to preallocate.
+                    methodHelperCall{index} = union( ... %#ok<AGROW>
                         methodHelperCall{index}(:), ...
                         TestDispatch.capturedNames(code, '(\w+)\s*\('));
                 end

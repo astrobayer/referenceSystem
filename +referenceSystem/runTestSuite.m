@@ -219,7 +219,7 @@ function [results, reportFile, summary] = runTestSuite(options)
     % the path back, because a test harness that leaves the path changed is a
     % harness that changes what it measures.
     previousPath = path();
-    restorePath = onCleanup(@() path(previousPath)); %#ok<NASGU>
+    restorePath = onCleanup(@() path(previousPath));
     addpath(testFolder);
 
     warningPlugin = WarningRecordingPlugin();
@@ -350,8 +350,8 @@ function instrument = gatherInstruments(instrument)
             % twice - and it is consumed, per the plugin rule.
             previousState = warning('off', ...
                 'referenceSystem:probePlatformCost:scratchIsAlsoScanned');
-            restoreWarning = onCleanup(@() warning(previousState)); %#ok<NASGU>
-            lastwarnCleanup = onCleanup(@() lastwarn('', ''));      %#ok<NASGU>
+            restoreWarning = onCleanup(@() warning(previousState));
+            lastwarnCleanup = onCleanup(@() lastwarn('', ''));
             instrument.probe = probePlatformCost();
         else
             instrument.probe = probePlatformCost( ...
@@ -367,7 +367,7 @@ function instrument = gatherInstruments(instrument)
         % to exist, but a caller who asked for ONE report should not find a
         % second one beside it.
         temporaryReport = fullfile(tempdir, "rsHotPathProfile.txt");
-        removeTemporary = onCleanup(@() deleteIfPresent(temporaryReport)); %#ok<NASGU>
+        removeTemporary = onCleanup(@() deleteIfPresent(temporaryReport));
         [~, instrument.profileText] = profileRotationCall( ...
             Output = temporaryReport);
     catch profileFailure

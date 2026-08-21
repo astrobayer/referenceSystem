@@ -212,7 +212,8 @@ function status = teardownReferenceSystem(options)
 
     % 3. clear mex, deliberately not clear all: they are not synonyms here, and
     %    destroying the caller's workspace is not this function's business
-    clear mex
+    % clear mex UNLOADS the gateway. Windows locks a loaded MEX file, so
+    clear mex %#ok<CLMEX>
 
     % 4. leave the search path as it was before setupReferenceSystem
     removedFromPath = strings(1, 0);

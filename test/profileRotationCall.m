@@ -319,7 +319,7 @@ end
 function row = localAddRow(row, key, role, fcn, args, callCount, trialCount)
 %LOCALADDROW Append one benchmark row.
     row(end+1) = struct('key', key, 'role', role, 'fcn', fcn, 'args', {args}, ...
-        'callCount', callCount, 'trialCount', trialCount); %#ok<AGROW>
+        'callCount', callCount, 'trialCount', trialCount);
 end
 
 function localRotationTwoOutputs(epoch, eop)

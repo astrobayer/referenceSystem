@@ -415,7 +415,8 @@ function canonical = canonicalNode(name, adjacency)
     if any(isAlias)
         requested = adjacency.aliasTarget(isAlias);
     end
-    isNode = strcmp(requested, upper(adjacency.node));
+    % NOT strcmpi: frame names are normative (C.7) and matched exactly.
+    isNode = strcmp(requested, upper(adjacency.node)); %#ok<STCI>
     if ~any(isNode)
         error('referenceSystem:convertCoordinates:unknownFrame', ...
             ['"%s" is not a frame or representation in this graph. ', ...
@@ -537,7 +538,7 @@ function requireOptions(adjacency, edgeIndex, options, nodePath)
             continue
         end
         error('referenceSystem:convertCoordinates:missingOption', ...
-            ['The path %s needs the ''%s'' option: %s.'], ...
+            'The path %s needs the ''%s'' option: %s.', ...
             strjoin(nodePath, " -> "), name, explanation.(name));
     end
 end

@@ -99,7 +99,7 @@ function interval = secondsBetween(fromEpoch, toEpoch)
         % fromEpoch by the interval just computed must reach toEpoch, and
         % addSeconds refuses exactly the intervals for which that is untrue.
         anchor = fromEpoch;
-        if numel(anchor.day) == 1 && numel(interval) > 1
+        if isscalar(anchor.day) && numel(interval) > 1
             anchor.day = repmat(anchor.day, size(interval));
             anchor.sec = repmat(anchor.sec, size(interval));
         end

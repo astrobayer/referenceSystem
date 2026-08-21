@@ -154,7 +154,7 @@ function epochOut = normalizeEpoch(epochIn)
     source = "unspecified";
     if isfield(epochIn, 'source') && ...
             (isstring(epochIn.source) || ischar(epochIn.source)) && ...
-            numel(string(epochIn.source)) == 1
+            isscalar(string(epochIn.source))
         source = string(epochIn.source);
     end
 

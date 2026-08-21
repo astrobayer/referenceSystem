@@ -539,7 +539,7 @@ classdef TestRotationAlgebra < matlab.unittest.TestCase
             % warnings nobody claimed, and an asserted warning is claimed.
             % Registered as a cleanup so it fires on pass, on failure and on a
             % filtered assumption alike. See WarningRecordingPlugin.
-            consumeWarning = onCleanup(@() lastwarn('', '')); %#ok<NASGU>
+            consumeWarning = onCleanup(@() lastwarn('', ''));
             % Section C.6 rule 2 and seam item 9: one warning for the call,
             % never one per epoch, however many pages are singular.
             rng(61);
@@ -564,7 +564,7 @@ classdef TestRotationAlgebra < matlab.unittest.TestCase
             % warnings nobody claimed, and an asserted warning is claimed.
             % Registered as a cleanup so it fires on pass, on failure and on a
             % filtered assumption alike. See WarningRecordingPlugin.
-            consumeWarning = onCleanup(@() lastwarn('', '')); %#ok<NASGU>
+            consumeWarning = onCleanup(@() lastwarn('', ''));
             % What is lost at gimbal lock is the SPLIT of the two coincident
             % rotations, not the rotation. The rebuilt matrix must be exact,
             % for every sequence and both singular values of the second angle.
