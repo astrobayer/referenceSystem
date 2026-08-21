@@ -21,11 +21,15 @@ to MATLAB, to this toolbox, or to geodesy.*
     PRE-CHECK   Audit and any licence-free suites run in the container. Free,
                 no push, catches most of what CI would.
     PREDICT     State the expected test count BEFORE running anything.
+    OPEN        Push the branch and open a DRAFT pull request at once. The
+                draft is not the submission - it is what BUYS THE CI VERDICT.
+                With `on: pull_request`, a branch without a PR gets no runs
+                at all, however many times it is pushed.
     VERIFY      Two tiers, both recorded:
-                  CI       - hosted runners, on every push to the branch
+                  CI       - hosted runners, on every push once the PR exists
                   MCP      - the local machine, through the MATLAB MCP bridge
-    PR          Green → open the pull request, citing both verdicts.
-                Red → fix, back to PRE-CHECK.
+    PR          Green in both → mark the draft READY, citing both verdicts.
+                Red → fix, push again, back to PRE-CHECK.
     MERGE       Matthias alone. `main` is protected; the checks must pass.
     RECORD      The same PR carries the handover's revision entry.
 
@@ -162,17 +166,23 @@ when the run is red.
 3. **Pre-check.** Audit and C suites in the container. Free.
 4. **Predict.** State the expected count. A missed prediction is a finding even
    when the suite is green — this is what catches version/revision drift.
-5. **Verify.**
-   - Push the branch. CI runs there. *CI cannot run before a push: Actions
-     needs a ref, and `main` is protected, so the branch must exist first.*
+5. **Push, then open a draft PR immediately.** Two separate facts make this
+   one step. Actions needs a ref, so CI cannot run before a push at all. And
+   with `on: pull_request` and `push` restricted to `main`, a branch **without
+   a pull request gets no runs whatever** — four pushes to a branch can produce
+   zero runs, which reads exactly like a queue that has not started. The draft
+   PR is what buys the verdict; it is not the submission.
+6. **Verify, both tiers.**
+   - CI judges each push now that the PR exists.
    - Run the same gate through the MCP bridge on the local machine.
    - Both verdicts are recorded separately. "Green" without saying which tier
-     is not a verdict.
-6. **PR.** Both green → open it, citing both. Matthias reads *Files changed*
-   and the log artefact, comments, merges.
-7. **Record.** The PR carries the revision entry. No entry, no merge.
+     is not a verdict. A CI/MCP disagreement is a finding, not a nuisance —
+     the tiers cover different ground on purpose.
+7. **Ready.** Both green → mark the draft ready, citing both. Matthias reads
+   *Files changed* and the log artefact, comments, merges.
+8. **Record.** The PR carries the revision entry. No entry, no merge.
 
-Steps 1–5a work from a phone. Step 5b waits for the machine.
+Steps 1–6a work from a phone. The MCP tier waits for the machine.
 
 ---
 
@@ -216,7 +226,10 @@ Four files and two settings, independent of MATLAB:
 1. **A single gate entry point** the CI calls — one command, green or fail,
    which checks its own coverage rather than only its assertions.
 2. **`.github/workflows/ci.yml`** — copy it; swap the toolchain setup step and
-   the gate command. Keep the cheap-jobs-first ordering.
+   the gate command. Keep the cheap-jobs-first ordering, and **copy the
+   draft-PR practice along with the trigger block**: `on: pull_request` alone
+   is a silent no-op on a branch nobody has opened a PR for, and the two only
+   make sense together.
 3. **A pointer file** (`CLAUDE.md` or equivalent) naming that project's single
    source of truth, its commands and its hard rules.
 4. **`.gitignore`** that keeps data and build products out.
@@ -232,8 +245,10 @@ answer: CI is the verdict and the debt is recorded.
 
 - **The `matlab` job fails immediately with a licensing message** — is the
   repository still public? The free MATLAB exists only for public repositories.
-- **A push produces no CI run** — the branch may be protected against pushes,
-  or the workflow file is not on that branch yet.
+- **A push produces no CI run** — is there a pull request for that branch? With
+  `on: pull_request`, a branch without one gets no runs however often it is
+  pushed, and the Actions tab simply stays empty rather than saying so. Open a
+  draft PR. (Also check the workflow file is on that branch.)
 - **The bridge does nothing** — Desktop app fully restarted after installing
   the `.mcpb`? MATLAB on the system `PATH`?
 - **`git` or `matlab` "is not recognized"** — old terminal. Open a new one.
