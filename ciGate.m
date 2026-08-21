@@ -45,10 +45,22 @@ function ciGate()
 %   uploads the report a reader needs. That is runTestSuite's own ordering and
 %   this function does not undo it.
 %
+% ACCURACY
+%   Not applicable; the function judges a run and computes no numerical
+%   quantity. The figures it prints are counts taken from the results.
+%
 % EXAMPLE
 %   % exactly what the CI runs:
 %   %   matlab -batch "ciGate"
 %   ciGate();
+%
+% REFERENCES
+%   Handover section C.10 (installation and entry points), decision D116
+%   (the intended-filter allow-list). The workflow that calls this function
+%   is .github/workflows/ci.yml.
+%
+% KEYWORDS
+%   ci, gate, continuous integration, test suite, verdict
 %
 % See also SETUPREFERENCESYSTEM, REFERENCESYSTEM.RUNTESTSUITE
 %
