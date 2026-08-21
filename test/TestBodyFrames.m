@@ -60,10 +60,16 @@ classdef TestBodyFrames < matlab.unittest.TestCase
             testCase.assumeTrue(exist('cspice_pxform', 'file') == 2 || ...
                 exist('cspice_pxform', 'file') == 3, ...
                 'MICE is not on the path; the kernel-backed tier is skipped.');
-            kernel = fullfile(fileparts(fileparts(mfilename('fullpath'))), ...
-                'data', 'pck00011.tpc');
+            % D119: THE FOLDER IS ASKED FOR, NOT COMPOSED. This helper built
+            % <toolboxRoot>/data from its own mfilename - a third copy of the
+            % location after the two D119 deleted in the downloaders - so a
+            % user who moved their data with referenceSystem.dataFolder was
+            % told the kernels were missing while they sat where they had put
+            % them. Run 94 reported exactly that, through D117.
+            kernel = fullfile(referenceSystem.dataFolder(), 'pck00011.tpc');
             testCase.assumeTrue(isfile(kernel), ...
-                'pck00011.tpc is not in data/; run downloadKernels.');
+                "pck00011.tpc is not in " + referenceSystem.dataFolder() + ...
+                "; run setupReferenceSystem(Fetch = ""kernels"").");
             ephemeris = referenceSystem.readEphemeris(string(kernel));
         end
 

@@ -650,6 +650,17 @@ function dataFolder = resolveDataFolder(toolboxRoot, requested)
 %   the defect is in their argument.
 
     if strlength(strtrim(requested)) == 0
+        % D119: A STORED PREFERENCE IS THE DEFAULT, AND ONLY THEN data/.
+        % Setup computing its own default would be the copy D119 deleted,
+        % reintroduced in the installer: a user who moved their data and then
+        % ran setup with no arguments would have fetched 700 MB back into the
+        % toolbox tree. The warning below belongs to the SHIPPED folder only -
+        % a preference is a deliberate act, and an absent folder it names is
+        % created rather than complained about.
+        if ispref('referenceSystem', 'dataFolder')
+            dataFolder = referenceSystem.dataFolder();
+            return
+        end
         dataFolder = string(fullfile(toolboxRoot, 'data'));
         if ~isfolder(dataFolder)
             warning('referenceSystem:setupReferenceSystem:missingDataFolder', ...
