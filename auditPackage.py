@@ -633,6 +633,40 @@ def check_build_date_agrees_with_contents():
                  builtIso, listedIso))
 
 
+def check_no_unexpected_file_at_the_root():
+    """The distribution root holds a known set of files and nothing else.
+
+    Rev. 1.211: a scratch pull-request payload written by a session's container
+    was swept in by `git add -A`, committed, reviewed, merged, and sat on main
+    through two runs.  Nothing objected, because every existing structural
+    check looks INSIDE something - the package against Contents.m, the doc
+    folder against the generators, the test folder against the runner - and the
+    root itself was the one place with no inventory.
+
+    An allow-list rather than a pattern: a pattern describes the strays you
+    have already met, and the next one will be shaped differently.  A new file
+    at the root is a deliberate act, so adding it here costs one line and says
+    who meant it.
+    """
+    allowed = {
+        '.gitignore', '.gitattributes', 'LICENSE', 'README.md',
+        'BEST_PRACTICE.md', 'THIRD_PARTY_NOTICES.md',
+        'HANDOVER_referenceSystem.md', 'WORKFLOW_GUIDE.md', 'CODING_GUIDE.md',
+        'VALIDATION_GUIDE.md', 'DOCUMENTATION_GUIDE.md',
+        'auditPackage.py', 'ciGate.m', 'setupReferenceSystem.m',
+        'info.xml', 'codeAnalyzerConfiguration.json',
+    }
+    for leaf in sorted(os.listdir(ROOT)):
+        full = os.path.join(ROOT, leaf)
+        if os.path.isdir(full) or leaf.startswith('.git'):
+            continue
+        if leaf not in allowed:
+            fail('structure/unexpectedRootFile',
+                 '%s is at the distribution root and is not in the allow-list '
+                 'in auditPackage.py. Add it there deliberately, or move it '
+                 'out of the tree.' % leaf)
+
+
 def check_unrun_revisions_against_the_o37_ceiling():
     """Count OPEN O2 debt against the ceiling and warn past it.
 
@@ -689,6 +723,7 @@ def check_unrun_revisions_against_the_o37_ceiling():
 
 def main():
     check_patch_is_handover_revision()
+    check_no_unexpected_file_at_the_root()
     check_unrun_revisions_against_the_o37_ceiling()
     check_build_date_agrees_with_contents()
     check_handover_header_is_current()

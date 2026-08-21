@@ -55,3 +55,14 @@ data/*.tm
 *.m~
 slprj/
 .DS_Store
+
+# Scratch payloads written while driving the GitHub API from a session's
+# container. These were meant to live outside the tree and one of them -
+# pp5.json, a pull-request body - was swept in by `git add -A` at rev. 1.210
+# and survived a merge, because nothing looked at the repository ROOT. The
+# ignore is the cheap half of the repair; structure/unexpectedRootFile is the
+# half that would have caught it.
+pp*.json
+pr*.md
+body*.md
+*.payload.json
