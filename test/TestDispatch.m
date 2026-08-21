@@ -333,6 +333,61 @@ classdef TestDispatch < matlab.unittest.TestCase
             end
         end
 
+        function runTestSuite_contract_aNamedCapabilityIsOneTheTestProbes(testCase)
+            % D117 PUT A SECOND STATEMENT OF THE SAME FACT IN TWO FILES, AND
+            % THIS IS THE CHECK THAT KEEPS THEM EQUAL. A conditional row in
+            % intendedFilterCatalogue excuses a skip only while the symbol it
+            % names is absent, and the symbol is the one the test's own
+            % assumeTrue probes. Change the entry point a test probes - swap
+            % cspice_spkezr for cspice_spkgeo, say - and the catalogue would
+            % go on answering about a symbol nobody asks for: absent on every
+            % machine, so the row would excuse the skip FOREVER, including on
+            % the one machine where the test could have run. That is the exact
+            % failure D117 was written to prevent, arriving through the back
+            % door of an unrelated edit.
+            %
+            % Static for the same reason as the staleness check beside it:
+            % what is asserted is a spelling, and building the suite here
+            % would re-run every constructor to learn it.
+            runnerText = string(fileread(which('referenceSystem.runTestSuite')));
+            catalogueText = extractBetween(runnerText, ...
+                "function catalogue = intendedFilterCatalogue()", "reason = [");
+            testCase.assertNotEmpty(catalogueText, ...
+                ['The intentional-skip catalogue was not found in ', ...
+                'runTestSuite; this test is stale, not the list.']);
+
+            listed = TestDispatch.capturedNames(catalogueText(1), '"(Test\w+/\w+)"');
+            symbol = TestDispatch.capturedNames(catalogueText(1), '"(cspice_\w+)"');
+            if isempty(symbol)
+                return    % no conditional row; nothing to hold to anything.
+            end
+
+            % Every symbol the catalogue names must be probed by at least one
+            % of the classes it lists. The pairing is deliberately NOT checked
+            % row by row: the catalogue's own comment records which helper
+            % serves which test, and asserting the mapping here would be a
+            % third copy of it.
+            probed = strings(0, 1);
+            for k = 1:numel(listed)
+                part = split(listed(k), "/");
+                classFile = fullfile(testCase.toolboxRoot(), 'test', part(1) + ".m");
+                if isfile(classFile)
+                    found = regexp(string(fileread(classFile)), ...
+                        'cspice_\w+', 'match');
+                    probed = [probed; unique(string(found(:)))]; %#ok<AGROW>
+                end
+            end
+            probed = unique(probed);
+
+            for k = 1:numel(symbol)
+                testCase.verifyTrue(any(probed == symbol(k)), ...
+                    "The allow-list makes a skip conditional on " + ...
+                    symbol(k) + ", which no listed test class probes. A " + ...
+                    "symbol nobody asks for is absent everywhere, so the " + ...
+                    "row would excuse its test on every machine.");
+            end
+        end
+
         function setupReferenceSystem_contract_configuresAndReportsThePath(testCase)
             % Section C.10: setup is the documented way in, so it is tested like
             % any other entry point. The path is restored afterwards, because a
