@@ -60,6 +60,28 @@ jobs:
       REFERENCESYSTEM_CI: 1    # read by ciGate; the ONE CI policy switch
     steps:
       - uses: actions/checkout@v6
+
+      # data/ IS the toolbox's own kernel cache (downloadKernels'
+      # localDefaultCache resolves there), so caching the folder caches
+      # exactly what a fetch would write. Keyed on downloadKernels.m because
+      # the catalogue lives inside it: change the catalogue, lose the cache.
+      #
+      # MEASURED AT RUN 1, NOT ESTIMATED: the six kernels come to about
+      # 660 MB, of which sb441-n16.bsp alone is 615.8 MB. The catalogue's own
+      # approximateBytes row said 650e6 for it and was right; the "about
+      # 50 MB" this comment carried until now was a bad reading of that
+      # table, not a bad table. The committed EOP files ride along.
+      #
+      # RESTORE AND SAVE ARE SPLIT, AND THE SAVE RUNS ON A RED JOB. Runs 1
+      # and 2 both fetched all six kernels from NAIF and JPL because the
+      # combined action's post step was skipped when the job failed, so a
+      # red run paid 660 MB of somebody else's bandwidth and left nothing
+      # behind for the next one. `if: always()` is what stops that.
+      - uses: actions/cache/restore@v4
+        id: kernelCache
+        with:
+          path: data
+          key: rsKernels-${{ hashFiles('+referenceSystem/downloadKernels.m') }}
       # Set up MATLAB is GONE, not disabled. This repository went
       # private with the move to the organisation, and setup-matlab
       # licenses base MATLAB by itself only on a PUBLIC repository -
