@@ -91,23 +91,19 @@ jobs:
           path: data
           key: rsKernels-${{ hashFiles('+referenceSystem/downloadKernels.m') }}
 
-      # Set up MATLAB is GONE, not disabled. This repository went
-      # private with the move to the organisation, and setup-matlab
-      # licenses base MATLAB by itself only on a PUBLIC repository -
-      # so the step could not have worked again, with or without a
-      # self-hosted runner. The batch-licensing token that covers
-      # private repositories comes from a MathWorks pilot closed to
-      # new requests.
+      # The probe and the reasoning behind it live in
+      # astrobayer/ci-actions. Six repositories carried this step
+      # byte-for-byte identically, and a copied step is what let one
+      # editing mistake cost three repositories a checkout each.
       #
-      # The probe replaces it: seconds, and a missing or
-      # misconfigured MATLAB fails by name here instead of as a
-      # confusing error inside the suite.
-      - name: Verify MATLAB on PATH (self-hosted)
+      # PINNED TO AN IMMUTABLE TAG, not @v1 and not @main: a moving tag
+      # would let a commit in ci-actions change this repository's CI with
+      # nothing in its diff to explain it.
+      #
+      # timeout-minutes sits here and not in the action: GitHub's
+      # composite-action schema rejects the key on a step.
+      - uses: astrobayer/ci-actions/matlab-probe@v1.0.0
         timeout-minutes: 2
-        uses: matlab-actions/run-command@v3
-        with:
-          command: >
-            fprintf('MATLAB on self-hosted runner: %s\n', version);
 
       # THE PATH IS NOT IN THIS FILE. It comes from the repository variable
       # REF_DATA_POOL, so the mechanism is version controlled while the
