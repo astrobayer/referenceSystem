@@ -30,8 +30,8 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: '3.12' }
       # No pip install: auditPackage.py imports os, re, sys and collections
       # and nothing else. Verified against the source, not assumed.
@@ -40,13 +40,13 @@ jobs:
   csuites:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - run: sh test/c/runStandaloneTests.sh
       # fundargIers.csv is a BUILD PRODUCT of testIersModels and TestTime
       # reads it (obligation O3). Keeping the CI copy makes it possible to
       # compare the runner's D27 sweep against the one under revision
       # control when the two ever disagree.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: fundargIersSweep
@@ -59,7 +59,7 @@ jobs:
     env:
       REFERENCESYSTEM_CI: 1    # read by ciGate; the ONE CI policy switch
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       # data/ IS the toolbox's own kernel cache (downloadKernels'
       # localDefaultCache resolves there), so caching the folder caches
@@ -84,7 +84,7 @@ jobs:
       # per run for nothing. Both cache steps therefore stand down when the
       # variable is set, and stay exactly as they were when it is not, so a
       # GitHub-hosted runner is unaffected.
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         if: ${{ vars.REF_DATA_POOL == '' }}
         id: kernelCache
         with:
@@ -125,7 +125,7 @@ jobs:
       - name: Point referenceSystem.dataFolder at the local data pool
         if: ${{ vars.REF_DATA_POOL != '' }}
         timeout-minutes: 5
-        uses: matlab-actions/run-command@v3
+        uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
         env:
           REF_DATA_POOL: ${{ vars.REF_DATA_POOL }}
         with:
@@ -164,7 +164,7 @@ jobs:
             % one in the summary.
             fprintf('  MICE on path: %d\n', exist('cspice_tkvrsn', 'file') > 0);
 
-      - uses: matlab-actions/run-command@v3
+      - uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
         with:
           command: |
             issues = codeIssues(pwd);
@@ -175,17 +175,17 @@ jobs:
             end
             disp("Code Analyzer: clean");
 
-      - uses: matlab-actions/run-command@v3
+      - uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
         with:
           command: ciGate
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()           # the report is wanted MOST when the run is red
         with:
           name: referenceSystemTestReport
           path: referenceSystem_testReport.txt
 
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         if: ${{ always() && vars.REF_DATA_POOL == '' && steps.kernelCache.outputs.cache-hit != 'true' }}
         with:
           path: data
