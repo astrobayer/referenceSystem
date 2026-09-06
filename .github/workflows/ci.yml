@@ -54,7 +54,7 @@ jobs:
 
   matlab:
     needs: [audit, csuites]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Windows]
     timeout-minutes: 60        # backstop: no wedge sits for hours
     env:
       REFERENCESYSTEM_CI: 1    # read by ciGate; the ONE CI policy switch
@@ -77,41 +77,97 @@ jobs:
       # combined action's post step was skipped when the job failed, so a
       # red run paid 660 MB of somebody else's bandwidth and left nothing
       # behind for the next one. `if: always()` is what stops that.
+      #
+      # SUPERSEDED WHEN REF_DATA_POOL IS SET. A self-hosted machine holds
+      # the 701 MB once; restoring it from GitHub's cache into a workspace
+      # that actions/checkout wipes on the next run is 660 MB of traffic
+      # per run for nothing. Both cache steps therefore stand down when the
+      # variable is set, and stay exactly as they were when it is not, so a
+      # GitHub-hosted runner is unaffected.
       - uses: actions/cache/restore@v4
+        if: ${{ vars.REF_DATA_POOL == '' }}
         id: kernelCache
         with:
           path: data
           key: rsKernels-${{ hashFiles('+referenceSystem/downloadKernels.m') }}
 
-      # setup-matlab can wedge on a cache restore or a stalled download.
-      # Each attempt dies at 12 minutes instead of hanging, and a wedged
-      # first attempt gets ONE automatic retry - only two wedges in a row
-      # turn the job red. The check name stays `matlab` so branch protection
-      # is unaffected.
-      - uses: matlab-actions/setup-matlab@v3
-        id: matlabSetupFirst
-        continue-on-error: true
-        timeout-minutes: 12
+      # Set up MATLAB is GONE, not disabled. This repository went
+      # private with the move to the organisation, and setup-matlab
+      # licenses base MATLAB by itself only on a PUBLIC repository -
+      # so the step could not have worked again, with or without a
+      # self-hosted runner. The batch-licensing token that covers
+      # private repositories comes from a MathWorks pilot closed to
+      # new requests.
+      #
+      # The probe replaces it: seconds, and a missing or
+      # misconfigured MATLAB fails by name here instead of as a
+      # confusing error inside the suite.
+      - name: Verify MATLAB on PATH (self-hosted)
+        timeout-minutes: 2
+        uses: matlab-actions/run-command@v3
         with:
-          release: R2026a      # == the local release; the local run has been
-                               # ground truth throughout, so CI matches it
-                               # rather than tracking "latest"
-          cache: true
-      - uses: matlab-actions/setup-matlab@v3
-        if: steps.matlabSetupFirst.outcome != 'success'
-        timeout-minutes: 12
-        with:
-          release: R2026a
-          cache: true
+          command: >
+            fprintf('MATLAB on self-hosted runner: %s\n', version);
 
-      # The repository root is the MATLAB startup folder, so ciGate.m is
-      # callable before any path is set. ciGate calls setupReferenceSystem
-      # itself: install policy belongs with judgement policy, in one file.
-      # The MathWorks base layer, machine-enforced. codeIssues honours
-      # codeAnalyzerConfiguration.json in the repository root, so the Rules of
-      # the guidelines are checked here rather than remembered. It runs BEFORE
-      # ciGate: a style finding is cheaper to read than a suite log, and this
-      # is the same cheapest-first ordering as the three jobs themselves.
+      # THE PATH IS NOT IN THIS FILE. It comes from the repository variable
+      # REF_DATA_POOL, so the mechanism is version controlled while the
+      # machine-specific location is not, and a second runner needs no code
+      # change. Unset: the cache above runs and nothing here happens.
+      #
+      # Passed through env rather than interpolated into the command text:
+      # the value is read by getenv, so a path containing spaces - this one
+      # has two - cannot break the script.
+      #
+      # referenceSystem.dataFolder persists via setpref, which is per USER,
+      # so it lands in the prefdir of whatever account the runner service
+      # uses. Setting it here rather than by hand on the machine is what
+      # makes that irrelevant.
+      #
+      # Reported as a named list against downloadKernels' own catalogue,
+      # because a pool that is absent and a pool with the wrong layout both
+      # end as a silent re-download and are otherwise indistinguishable.
+      - name: Point referenceSystem.dataFolder at the local data pool
+        if: ${{ vars.REF_DATA_POOL != '' }}
+        timeout-minutes: 5
+        uses: matlab-actions/run-command@v3
+        env:
+          REF_DATA_POOL: ${{ vars.REF_DATA_POOL }}
+        with:
+          command: |
+            addpath(pwd);
+            pool = string(getenv("REF_DATA_POOL"));
+            assert(isfolder(pool), 'referenceSystem:ci:dataPoolMissing', ...
+                'REF_DATA_POOL points at %s, which is not a folder.', pool);
+            referenceSystem.dataFolder(pool);
+            fprintf('data folder set to: %s\n', referenceSystem.dataFolder());
+            want = ["eopc04_20.1962-now"
+                    "finals2000A.all"
+                    "de440s.bsp"
+                    "pck00011.tpc"
+                    "pck00011_n0066.tpc"
+                    "moon_pa_de440_200625.bpc"
+                    "moon_de440_250416.tf"
+                    "sb441-n16.bsp"];
+            for k = 1:numel(want)
+                f = fullfile(pool, want(k));
+                if isfile(f)
+                    d = dir(f);
+                    fprintf('  FOUND   %-28s %11d B\n', want(k), d.bytes);
+                else
+                    fprintf('  ABSENT  %s\n', want(k));
+                end
+            end
+            % de440.bsp is catalogued but only fetched for KernelSet="all"
+            % with a long span; ciGate asks for "short". Reported, not
+            % required, so its absence is not read as a broken pool.
+            fprintf('  optional de440.bsp present: %d\n', ...
+                isfile(fullfile(pool, "de440.bsp")));
+            % MICE is optional: TestBodyFrames assumes it and skips when it
+            % is missing. Whether the runner account has it on the path has
+            % never been measured, and a skipped tier looks like a passing
+            % one in the summary.
+            fprintf('  MICE on path: %d\n', exist('cspice_tkvrsn', 'file') > 0);
+
       - uses: matlab-actions/run-command@v3
         with:
           command: |
@@ -134,7 +190,7 @@ jobs:
           path: referenceSystem_testReport.txt
 
       - uses: actions/cache/save@v4
-        if: always() && steps.kernelCache.outputs.cache-hit != 'true'
+        if: ${{ always() && vars.REF_DATA_POOL == '' && steps.kernelCache.outputs.cache-hit != 'true' }}
         with:
           path: data
           key: rsKernels-${{ hashFiles('+referenceSystem/downloadKernels.m') }}
