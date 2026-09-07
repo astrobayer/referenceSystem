@@ -1937,7 +1937,7 @@ Created: 2026-07-25 11:20 (CEST, UTC+02:00)
                                                  sense is "regularization".
                                                  See METHOD before setting it.</pre>
 <h4>OUTPUT ARGUMENTS</h4>
-<pre>Name                  Size   Type     Units  Description
+<pre>  Name                  Size   Type     Units  Description
   ----                  ----   ----     -----  -----------
   eopAtEpoch            1x1    struct   -      Values at the epochs.
   .xp, .yp              Nx1    double   rad    Polar motion.
@@ -1950,13 +1950,17 @@ Created: 2026-07-25 11:20 (CEST, UTC+02:00)
   .meta.extrapolationPolicy
                         1x1    string   -      Policy in force.
   .meta.nExtrapolated   1x1    double   -      Epochs outside the table.
+  .meta.nPreUtcRowsIgnored
+                        1x1    double   -      Series rows dropped because
+                                               they precede the first row of
+                                               leapSecondTable. See METHOD.
   .meta.corrections     1xK    string   -      Source of each correction
                                                applied, "" where none.
   .meta.regularized     1x1    logical  -      True where a regularization
                                                correction was applied, so
                                                dut1 is UT1R - UTC.</pre>
 <h4>METHOD</h4>
-<pre>The whole arc is interpolated in one call. Interpolating per epoch is a
+<pre>  The whole arc is interpolated in one call. Interpolating per epoch is a
   defect, not a style choice: it turns one sorted lookup into N of them.
 
   LEAP-SECOND-SAFE UT1, which is handover approximation #4 and the single
@@ -1969,6 +1973,43 @@ Created: 2026-07-25 11:20 (CEST, UTC+02:00)
   leap table of its own, frozen at 2017 (finding M-2); the table here is
   leapSecondTable, which is the only leap-second authority in the toolbox, and
   the lookup is vectorised rather than an arrayfun per row.
+
+  THE SERIES IS RESTRICTED TO THE MODERN UTC ERA BEFORE ANYTHING IS
+  INTERPOLATED, which is the leap-second argument above taken one step
+  further back. From 1972-01-01 TAI - UTC is an integer, so removing it is a
+  shift and the reconstruction is exact. Before that date UTC ran at its own
+  rate with a fractional offset, which this toolbox does not model, and such
+  rows cannot enter the stencil at all: the published EOP 20 C04 series steps
+  by 0.107873 s of UT1 - UTC between MJD 41316 and 41317 - the last
+  fractional step, not a leap second - and no removal of an integer TAI - UTC
+  makes that continuous.
+
+  WHAT THOSE ROWS COST WAS MEASURED, NOT ASSUMED, over the 111-row fixture
+  that straddles the date. Under "linear" they are invisible away from the
+  boundary - the difference is exactly zero, a linear stencil being two nodes
+  wide - and the whole 0.1079 s, about 50 m at the equator, is smeared only
+  into 1971-12-31 itself. Under "spline" they are never invisible: interp1's
+  spline is a global not-a-knot fit, so fifty pre-1972 rows move dut1 by up
+  to 2.1e-4 s, some 99 mm at the equator, at EVERY epoch of the series, and
+  xp by 0.4 uas. That second case is what decides the design: restricting
+  only the leap-second conversion to a window, and leaving the fit alone,
+  would have left it in place and silent.
+
+  Those rows are therefore dropped once, with one mask for every channel so
+  that dut1 and xp are interpolated from the same table, and the drop is
+  announced with preUtcRowsIgnored and counted in meta.nPreUtcRowsIgnored.
+  The boundary is not a literal here: it is the first row of leapSecondTable,
+  so an override installed with leapSecondTable("load", file) moves it. A
+  series that already begins in the modern era loses no row and its result is
+  bit-identical to what it was before this rule existed.
+
+  A QUERY epoch before that boundary is refused under every
+  ExtrapolationPolicy, with beforeUtcEpoch. The policy governs epochs outside
+  the TABLE, which is a property of the file the caller supplied; this one is
+  outside the MODEL, and no option can relax that. Until this rule existed
+  the whole call failed inside leapSecondTable instead, naming rows the query
+  never used, which is how an epoch in 2020 came to be reported as preceding
+  1972 whenever the series shipped with this toolbox was passed whole.
 
   THE CORRECTION SENSE CONTRACT, decision D30. Two corrections exist and they
   are not interchangeable:
@@ -1995,7 +2036,7 @@ Created: 2026-07-25 11:20 (CEST, UTC+02:00)
   is the whole hazard: with Regularize true the correction is SUBTRACTED, so
   that dut1 becomes UT1R - UTC, and meta.regularized records that it happened.</pre>
 <h4>ACCURACY</h4>
-<pre>Linear interpolation of a daily-tabulated series is the IERS-recommended
+<pre>  Linear interpolation of a daily-tabulated series is the IERS-recommended
   treatment and is the default here. Its error is the curvature of the
   underlying signal over one day: about 0.1 mas peak in polar motion, which is
   3 mm at the Earth's surface, and a few microseconds in UT1. Spline
@@ -2011,6 +2052,14 @@ Created: 2026-07-25 11:20 (CEST, UTC+02:00)
   number of seconds from 1972 onward and removing it is a shift, so UT1 - TAI
   is interpolated with no step and the reconstruction adds back an integer.
 
+  That exactness is what the 1972-01-01 restriction protects. UT1 - UTC steps
+  across that date by an amount that is not an integer, so no removal of
+  TAI - UTC makes it continuous, and the rows before it are dropped rather
+  than interpolated through; METHOD carries the measured size of what they
+  would otherwise contribute under each method. Dropping them costs nothing
+  at any epoch this toolbox can work with, because UT1 - UTC there is not
+  representable in the first place.
+
   Applying zonalTideEopCorrection to an unregularised series, or applying it
   with the wrong sign, costs up to 168 ms of UT1 for the full 62-term model
   and about 2.1 ms for its short-period part alone. Both measured in session
@@ -2024,8 +2073,10 @@ Created: 2026-07-25 11:20 (CEST, UTC+02:00)
   than a prediction; "nan" marks the epochs; "error" refuses. Polynomial
   extrapolation of an EOP series is never appropriate and is not offered.</pre>
 <h4>ERRORS</h4>
-<pre>referenceSystem:interpolateEop:wrongScale
+<pre>  referenceSystem:interpolateEop:wrongScale
   referenceSystem:interpolateEop:outOfRange
+  referenceSystem:interpolateEop:beforeUtcEpoch
+  referenceSystem:interpolateEop:tooFewUsableRows
   referenceSystem:interpolateEop:wrongCorrectionSense
   referenceSystem:interpolateEop:missingMeta
   referenceSystem:interpolateEop:sizeMismatch</pre>
@@ -10723,6 +10774,6 @@ Created: 2026-07-26 12:30 (CEST, UTC+02:00) - session S4, folder-lock report
 -------------------------------------------------------------------------</pre>
 <p class="top"><a href="#contents">back to contents</a></p>
 </div>
-<p class="foot">referenceSystem v2.1.214 &mdash; generated from the
+<p class="foot">referenceSystem v2.1.215 &mdash; generated from the
 package help blocks. See the handover document for the design.</p>
 </body></html>

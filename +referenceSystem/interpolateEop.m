@@ -44,6 +44,10 @@ function eopAtEpoch = interpolateEop(eop, epoch, options)
 %   .meta.extrapolationPolicy
 %                         1x1    string   -      Policy in force.
 %   .meta.nExtrapolated   1x1    double   -      Epochs outside the table.
+%   .meta.nPreUtcRowsIgnored
+%                         1x1    double   -      Series rows dropped because
+%                                                they precede the first row of
+%                                                leapSecondTable. See METHOD.
 %   .meta.corrections     1xK    string   -      Source of each correction
 %                                                applied, "" where none.
 %   .meta.regularized     1x1    logical  -      True where a regularization
@@ -64,6 +68,43 @@ function eopAtEpoch = interpolateEop(eop, epoch, options)
 %   leap table of its own, frozen at 2017 (finding M-2); the table here is
 %   leapSecondTable, which is the only leap-second authority in the toolbox, and
 %   the lookup is vectorised rather than an arrayfun per row.
+%
+%   THE SERIES IS RESTRICTED TO THE MODERN UTC ERA BEFORE ANYTHING IS
+%   INTERPOLATED, which is the leap-second argument above taken one step
+%   further back. From 1972-01-01 TAI - UTC is an integer, so removing it is a
+%   shift and the reconstruction is exact. Before that date UTC ran at its own
+%   rate with a fractional offset, which this toolbox does not model, and such
+%   rows cannot enter the stencil at all: the published EOP 20 C04 series steps
+%   by 0.107873 s of UT1 - UTC between MJD 41316 and 41317 - the last
+%   fractional step, not a leap second - and no removal of an integer TAI - UTC
+%   makes that continuous.
+%
+%   WHAT THOSE ROWS COST WAS MEASURED, NOT ASSUMED, over the 111-row fixture
+%   that straddles the date. Under "linear" they are invisible away from the
+%   boundary - the difference is exactly zero, a linear stencil being two nodes
+%   wide - and the whole 0.1079 s, about 50 m at the equator, is smeared only
+%   into 1971-12-31 itself. Under "spline" they are never invisible: interp1's
+%   spline is a global not-a-knot fit, so fifty pre-1972 rows move dut1 by up
+%   to 2.1e-4 s, some 99 mm at the equator, at EVERY epoch of the series, and
+%   xp by 0.4 uas. That second case is what decides the design: restricting
+%   only the leap-second conversion to a window, and leaving the fit alone,
+%   would have left it in place and silent.
+%
+%   Those rows are therefore dropped once, with one mask for every channel so
+%   that dut1 and xp are interpolated from the same table, and the drop is
+%   announced with preUtcRowsIgnored and counted in meta.nPreUtcRowsIgnored.
+%   The boundary is not a literal here: it is the first row of leapSecondTable,
+%   so an override installed with leapSecondTable("load", file) moves it. A
+%   series that already begins in the modern era loses no row and its result is
+%   bit-identical to what it was before this rule existed.
+%
+%   A QUERY epoch before that boundary is refused under every
+%   ExtrapolationPolicy, with beforeUtcEpoch. The policy governs epochs outside
+%   the TABLE, which is a property of the file the caller supplied; this one is
+%   outside the MODEL, and no option can relax that. Until this rule existed
+%   the whole call failed inside leapSecondTable instead, naming rows the query
+%   never used, which is how an epoch in 2020 came to be reported as preceding
+%   1972 whenever the series shipped with this toolbox was passed whole.
 %
 %   THE CORRECTION SENSE CONTRACT, decision D30. Two corrections exist and they
 %   are not interchangeable:
@@ -107,6 +148,14 @@ function eopAtEpoch = interpolateEop(eop, epoch, options)
 %   number of seconds from 1972 onward and removing it is a shift, so UT1 - TAI
 %   is interpolated with no step and the reconstruction adds back an integer.
 %
+%   That exactness is what the 1972-01-01 restriction protects. UT1 - UTC steps
+%   across that date by an amount that is not an integer, so no removal of
+%   TAI - UTC makes it continuous, and the rows before it are dropped rather
+%   than interpolated through; METHOD carries the measured size of what they
+%   would otherwise contribute under each method. Dropping them costs nothing
+%   at any epoch this toolbox can work with, because UT1 - UTC there is not
+%   representable in the first place.
+%
 %   Applying zonalTideEopCorrection to an unregularised series, or applying it
 %   with the wrong sign, costs up to 168 ms of UT1 for the full 62-term model
 %   and about 2.1 ms for its short-period part alone. Both measured in session
@@ -123,9 +172,19 @@ function eopAtEpoch = interpolateEop(eop, epoch, options)
 % ERRORS
 %   referenceSystem:interpolateEop:wrongScale
 %   referenceSystem:interpolateEop:outOfRange
+%   referenceSystem:interpolateEop:beforeUtcEpoch
+%   referenceSystem:interpolateEop:tooFewUsableRows
 %   referenceSystem:interpolateEop:wrongCorrectionSense
 %   referenceSystem:interpolateEop:missingMeta
 %   referenceSystem:interpolateEop:sizeMismatch
+%
+% WARNINGS
+%   referenceSystem:interpolateEop:extrapolatedEop   One per call, however
+%       large N is. Raised only under 'ExtrapolationPolicy' "hold", naming how
+%       many epochs were clamped to an edge value of the table.
+%   referenceSystem:interpolateEop:preUtcRowsIgnored   One per call. Raised
+%       when the series reaches back before the first row of leapSecondTable,
+%       naming how many rows were dropped and what remains. See METHOD.
 %
 % REFERENCES
 %   IERS Conventions (2010), IERS Technical Note 36, Ch. 5.5.
@@ -178,6 +237,19 @@ function eopAtEpoch = interpolateEop(eop, epoch, options)
     end
 
     queryMjd = epoch.day + epoch.sec / referenceSystem.iersConstants().secondsPerDay;
+
+    % THE BOUNDARY OF THE MODERN UTC ERA IS READ FROM THE LEAP-SECOND TABLE
+    % AND IS NOT A LITERAL HERE, so a session override installed with
+    % leapSecondTable("load", file) moves it. The two lines are the idiom
+    % addSeconds and carryEpoch already use to consume that table.
+    leapTable = referenceSystem.leapSecondTable("list");
+    firstUtcDay = leapTable.mjd(1);
+    firstUtcDate = leapTable.Time(1);
+
+    localRefuseQueryBeforeUtcEpoch(queryMjd, firstUtcDay, firstUtcDate, eop.mjd);
+    [eop, nPreUtcRowsIgnored] = localTrimToUtcEpoch(eop, firstUtcDay, ...
+        firstUtcDate, eop.meta.series);
+
     tableMjd = eop.mjd;
 
     [queryMjd, isOutside, nOutside] = localApplyPolicy(queryMjd, tableMjd, ...
@@ -214,17 +286,97 @@ function eopAtEpoch = interpolateEop(eop, epoch, options)
     eopAtEpoch.meta.method = options.Method;
     eopAtEpoch.meta.extrapolationPolicy = options.ExtrapolationPolicy;
     eopAtEpoch.meta.nExtrapolated = nOutside;
+    eopAtEpoch.meta.nPreUtcRowsIgnored = nPreUtcRowsIgnored;
     eopAtEpoch.meta.corrections = correctionSource;
     eopAtEpoch.meta.regularized = regularized;
 end
 
 % =========================== local functions ===========================
 
+function localRefuseQueryBeforeUtcEpoch(queryMjd, firstUtcDay, firstUtcDate, tableMjd)
+%LOCALREFUSEQUERYBEFOREUTCEPOCH Refuse an epoch the toolbox cannot represent.
+%   The extrapolation policy governs epochs outside the TABLE, which is a
+%   property of the file the caller supplied. This one is outside the MODEL, so
+%   no policy relaxes it and the refusal is unconditional. It is raised here,
+%   under this function's own identifier, rather than left to leapSecondTable:
+%   a caller who asked for 2020 must not read that their epoch precedes 1972.
+
+    tooEarly = queryMjd < firstUtcDay;
+    if ~any(tooEarly)
+        return
+    end
+
+    first = find(tooEarly, 1);
+    error('referenceSystem:interpolateEop:beforeUtcEpoch', ...
+        ['%d of %d query epochs precede %s (MJD %d), where UTC is a ', ...
+        'rate-based fractional offset that this toolbox does not model; ', ...
+        'index %d is the first, at MJD %.6f. That is a limit of the ', ...
+        'toolbox and not of the series, which spans MJD %.2f to %.2f, so ', ...
+        'no ExtrapolationPolicy relaxes it.'], ...
+        sum(tooEarly), numel(tooEarly), string(firstUtcDate, 'yyyy-MM-dd'), ...
+        firstUtcDay, first, queryMjd(first), tableMjd(1), tableMjd(end));
+end
+
+function [eop, nIgnored] = localTrimToUtcEpoch(eop, firstUtcDay, firstUtcDate, seriesName)
+%LOCALTRIMTOUTCEPOCH Drop the rows that precede the modern UTC era, once.
+%   ONE MASK FOR EVERY CHANNEL, so that dut1 and xp are interpolated from the
+%   same rows. Cutting only the channel that needs it would give one result two
+%   tables, and under "spline" - a global fit rather than a local stencil - two
+%   different fits as well.
+%
+%   The early return is what makes the rule free: a series that already begins
+%   in the modern era is not copied, not masked and not announced, so its
+%   result is bit-identical to what it was before this function existed.
+
+    keep = eop.mjd >= firstUtcDay;
+    nIgnored = sum(~keep);
+    if nIgnored == 0
+        return
+    end
+
+    nKept = sum(keep);
+    if nKept < 2
+        error('referenceSystem:interpolateEop:tooFewUsableRows', ...
+            ['The %s series holds %d rows of which %d are at or after %s ', ...
+            '(MJD %d), fewer than the two an interpolation needs. UTC ', ...
+            'before that date is a rate-based fractional offset that this ', ...
+            'toolbox does not model, so the earlier rows cannot be used.'], ...
+            seriesName, numel(keep), nKept, ...
+            string(firstUtcDate, 'yyyy-MM-dd'), firstUtcDay);
+    end
+
+    for name = ["mjd", "xp", "yp", "dut1", "lod", "dX", "dY"]
+        eop.(name) = eop.(name)(keep);
+    end
+    if isfield(eop, 'sigma')
+        for name = string(fieldnames(eop.sigma))'
+            eop.sigma.(name) = eop.sigma.(name)(keep);
+        end
+    end
+
+    warning('referenceSystem:interpolateEop:preUtcRowsIgnored', ...
+        ['%d of %d rows of the %s series precede %s (MJD %d) and were ', ...
+        'ignored. UTC before that date is a rate-based fractional offset ', ...
+        'that this toolbox does not model, so those rows cannot enter a ', ...
+        'leap-second-safe UT1 interpolation. The %d rows that remain span ', ...
+        'MJD %.2f to %.2f.'], ...
+        nIgnored, numel(keep), seriesName, ...
+        string(firstUtcDate, 'yyyy-MM-dd'), firstUtcDay, ...
+        nKept, eop.mjd(1), eop.mjd(end));
+end
+
 function dut1 = localInterpolateDut1(tableMjd, tableDut1, queryMjd, method)
 %LOCALINTERPOLATEDUT1 Interpolate UT1 - UTC across leap seconds without a step.
 %   UT1 - TAI is continuous where UT1 - UTC is not, so the integer TAI - UTC is
 %   removed before interpolating and added back afterwards. Both lookups are
 %   vectorised; v1 called arrayfun once per table row and once per epoch.
+%
+%   NEITHER LOOKUP NEEDS A RANGE GUARD AND ONE MUST NOT BE ADDED HERE. The
+%   caller has already refused a query before the modern UTC era and trimmed
+%   the table to it, so every row and every epoch reaching this function is
+%   inside leapSecondTable's domain by construction. A guard here would be a
+%   second answer to the same question and would eventually give a different
+%   one.
 
     tableEpoch = referenceSystem.daySecondToEpoch( ...
         [floor(tableMjd), (tableMjd - floor(tableMjd)) * 86400], "UTC");
