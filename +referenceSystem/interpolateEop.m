@@ -93,7 +93,7 @@ function eopAtEpoch = interpolateEop(eop, epoch, options)
 %   Those rows are therefore dropped once, with one mask for every channel so
 %   that dut1 and xp are interpolated from the same table, and the drop is
 %   announced with preUtcRowsIgnored and counted in meta.nPreUtcRowsIgnored.
-%   The boundary is not a literal here: it is the first row of leapSecondTable,
+%   The boundary is not a literal here: it is leapSecondTable("validFromDay"),
 %   so an override installed with leapSecondTable("load", file) moves it. A
 %   series that already begins in the modern era loses no row and its result is
 %   bit-identical to what it was before this rule existed.
@@ -240,11 +240,11 @@ function eopAtEpoch = interpolateEop(eop, epoch, options)
 
     % THE BOUNDARY OF THE MODERN UTC ERA IS READ FROM THE LEAP-SECOND TABLE
     % AND IS NOT A LITERAL HERE, so a session override installed with
-    % leapSecondTable("load", file) moves it. The two lines are the idiom
-    % addSeconds and carryEpoch already use to consume that table.
-    leapTable = referenceSystem.leapSecondTable("list");
-    firstUtcDay = leapTable.mjd(1);
-    firstUtcDate = leapTable.Time(1);
+    % leapSecondTable("load", file) moves it. Rev. 1.215 took the first row of
+    % the "list" timetable apart to get this; rev. 1.216 asks for the bound by
+    % name, in both the form that is compared and the form that is printed.
+    firstUtcDay = referenceSystem.leapSecondTable("validFromDay");
+    firstUtcDate = referenceSystem.leapSecondTable("validFrom");
 
     localRefuseQueryBeforeUtcEpoch(queryMjd, firstUtcDay, firstUtcDate, eop.mjd);
     [eop, nPreUtcRowsIgnored] = localTrimToUtcEpoch(eop, firstUtcDay, ...

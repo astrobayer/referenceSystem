@@ -1057,8 +1057,7 @@ classdef TestRotation < matlab.unittest.TestCase
             consumeWarning = onCleanup(@() lastwarn('', ''));
             % Decision D62: one warning per call, naming this function rather
             % than leapSecondTable, which is not the function the user called.
-            validThrough = referenceSystem.leapSecondTable("validThrough");
-            beyond = floor(days(validThrough - datetime(1858, 11, 17))) + 400;
+            beyond = referenceSystem.leapSecondTable("validThroughDay") + 400;
             eop = testCase.syntheticEop(beyond);
             utc = referenceSystem.daySecondToEpoch( ...
                 [beyond 0; beyond 3600], "UTC");

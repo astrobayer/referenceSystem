@@ -5,7 +5,10 @@ function result = leapSecondTable(command, argument)
 %   table     = leapSecondTable("list")             the full step table
 %   table     = leapSecondTable("load", file)       install a session override
 %   table     = leapSecondTable("reset")            drop the override
-%   lastDate  = leapSecondTable("validThrough")     end of the table's coverage
+%   firstDate = leapSecondTable("validFrom")        start of the coverage
+%   firstDay  = leapSecondTable("validFromDay")     the same instant, as an MJD
+%   lastDate  = leapSecondTable("validThrough")     end of the coverage
+%   lastDay   = leapSecondTable("validThroughDay")  the same instant, as an MJD
 %   state     = leapSecondTable("state")            which table is in force
 %
 %   No other file in this toolbox contains a leap-second value or date. v1
@@ -31,7 +34,10 @@ function result = leapSecondTable(command, argument)
 %                                                 effect, variables mjd (the
 %                                                 same instant as an integer
 %                                                 MJD) and deltaAt (seconds).
-%                       1x1    datetime    -      "validThrough".
+%                       1x1    datetime    -      "validFrom", "validThrough".
+%                       1x1    double      d      "validFromDay",
+%                                                 "validThroughDay": the same
+%                                                 two instants as integer MJD.
 %                       1x1    struct      -      "state", fields below.
 %   .source             1x1    string      -      "SOFA iauDat" or the override
 %                                                 file that replaced it.
@@ -52,6 +58,24 @@ function result = leapSecondTable(command, argument)
 %   The coverage end date is discovered the same way: iauDat flags a year more
 %   than five years beyond its own release with status +1, and validThrough is
 %   the day before the first such day. It is not a literal here either.
+%
+%   EACH COVERAGE BOUND IS PUBLISHED TWICE, AS A DATE AND AS A DAY NUMBER, and
+%   the second form is not a convenience. Consumers compare a bound against
+%   epoch.day, which is an MJD, so a date-only bound forces every one of them to
+%   write days(bound - datetime(1858, 11, 17)) - and that is the MJD epoch,
+%   copied out of this file into theirs. Four such copies had accumulated by
+%   rev. 1.215, one of them in package code, which is the same shape as finding
+%   M-2 one layer down: a constant with no single owner, free to diverge, and
+%   invisible to the contract test that greps for leap-second dates because
+%   1858-11-17 is not one. The day numbers cost nothing to hand back - both are
+%   already cached, one by localScanSofaTable and one by localColumnsOf - and
+%   they are what removes the copies.
+%
+%   THE TWO BOUNDS ARE NOT SYMMETRIC UNDER AN OVERRIDE AND THAT IS DELIBERATE.
+%   validFrom follows the ACTIVE table, so leapSecondTable("load", file) moves
+%   it and every consumer that trims to it. validThrough reports where SOFA
+%   stops being willing to answer, which is a property of the bundled iauDat
+%   rather than of the step list, so an override does not move it.
 %
 %   TRAP, measured against SOFA 20231011 and the reason this function
 %   range-checks rather than trusting the status. iauDat answers a pre-1960
@@ -135,7 +159,8 @@ function result = leapSecondTable(command, argument)
 
     arguments
         command (1,1) string {mustBeMember(command, ...
-            ["deltaAT", "list", "load", "reset", "validThrough", "state"])}
+            ["deltaAT", "list", "load", "reset", "validFrom", "validFromDay", ...
+            "validThrough", "validThroughDay", "state"])}
         argument = []
     end
 
@@ -191,8 +216,22 @@ function result = leapSecondTable(command, argument)
         case "list"
             result = localActiveTable(cachedTable, overrideTable);
 
+        case "validFrom"
+            % THE ACTIVE COLUMNS, NOT THE SOFA SCAN. An override installed with
+            % "load" moves this bound, and interpolateEop trims to it.
+            result = activeColumns.firstDate;
+
+        case "validFromDay"
+            result = activeColumns.mjd(1);
+
         case "validThrough"
             result = cachedValidThrough;
+
+        case "validThroughDay"
+            % The number localScanSofaTable already computed. Until rev. 1.216
+            % it stopped at this boundary and four consumers rebuilt it from
+            % the datetime, each with its own copy of the MJD epoch.
+            result = cachedValidThroughDay;
 
         case "state"
             activeTable = localActiveTable(cachedTable, overrideTable);

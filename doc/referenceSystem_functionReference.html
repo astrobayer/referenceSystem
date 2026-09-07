@@ -1227,11 +1227,14 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 <h3>referenceSystem.leapSecondTable</h3>
 <p class="h1">The single leap-second authority of the toolbox.</p>
 <h4>SYNTAX</h4>
-<pre>deltaAt   = leapSecondTable("deltaAT", epoch)   TAI - UTC per epoch, seconds
+<pre>  deltaAt   = leapSecondTable("deltaAT", epoch)   TAI - UTC per epoch, seconds
   table     = leapSecondTable("list")             the full step table
   table     = leapSecondTable("load", file)       install a session override
   table     = leapSecondTable("reset")            drop the override
-  lastDate  = leapSecondTable("validThrough")     end of the table's coverage
+  firstDate = leapSecondTable("validFrom")        start of the coverage
+  firstDay  = leapSecondTable("validFromDay")     the same instant, as an MJD
+  lastDate  = leapSecondTable("validThrough")     end of the coverage
+  lastDay   = leapSecondTable("validThroughDay")  the same instant, as an MJD
   state     = leapSecondTable("state")            which table is in force
 
   No other file in this toolbox contains a leap-second value or date. v1
@@ -1246,7 +1249,7 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
              1x1    string | char   -      For "load": the file to read.
                                            Not accepted by other commands.</pre>
 <h4>OUTPUT ARGUMENTS</h4>
-<pre>Name                Size   Type        Units  Description
+<pre>  Name                Size   Type        Units  Description
   ----                ----   ----        -----  -----------
   result              Nx1    double      s      "deltaAT": TAI - UTC.
                       Mx2    timetable   -      "list", "load", "reset": the
@@ -1255,7 +1258,10 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
                                                 effect, variables mjd (the
                                                 same instant as an integer
                                                 MJD) and deltaAt (seconds).
-                      1x1    datetime    -      "validThrough".
+                      1x1    datetime    -      "validFrom", "validThrough".
+                      1x1    double      d      "validFromDay",
+                                                "validThroughDay": the same
+                                                two instants as integer MJD.
                       1x1    struct      -      "state", fields below.
   .source             1x1    string      -      "SOFA iauDat" or the override
                                                 file that replaced it.
@@ -1264,7 +1270,7 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
   .lastDeltaAt        1x1    double      s      TAI - UTC after that step.
   .validThrough       1x1    datetime    -      As the command of that name.</pre>
 <h4>METHOD</h4>
-<pre>The table is not stored here. It is discovered by asking the bundled,
+<pre>  The table is not stored here. It is discovered by asking the bundled,
   unmodified SOFA iauDat through the MEX gateway for TAI - UTC on every day
   from 1972-01-01 to 2200-01-01 and recording where the answer changes. There
   is therefore exactly one copy of the data in the toolbox, in mex/sofa/dat.c,
@@ -1275,6 +1281,24 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
   The coverage end date is discovered the same way: iauDat flags a year more
   than five years beyond its own release with status +1, and validThrough is
   the day before the first such day. It is not a literal here either.
+
+  EACH COVERAGE BOUND IS PUBLISHED TWICE, AS A DATE AND AS A DAY NUMBER, and
+  the second form is not a convenience. Consumers compare a bound against
+  epoch.day, which is an MJD, so a date-only bound forces every one of them to
+  write days(bound - datetime(1858, 11, 17)) - and that is the MJD epoch,
+  copied out of this file into theirs. Four such copies had accumulated by
+  rev. 1.215, one of them in package code, which is the same shape as finding
+  M-2 one layer down: a constant with no single owner, free to diverge, and
+  invisible to the contract test that greps for leap-second dates because
+  1858-11-17 is not one. The day numbers cost nothing to hand back - both are
+  already cached, one by localScanSofaTable and one by localColumnsOf - and
+  they are what removes the copies.
+
+  THE TWO BOUNDS ARE NOT SYMMETRIC UNDER AN OVERRIDE AND THAT IS DELIBERATE.
+  validFrom follows the ACTIVE table, so leapSecondTable("load", file) moves
+  it and every consumer that trims to it. validThrough reports where SOFA
+  stops being willing to answer, which is a property of the bundled iauDat
+  rather than of the step list, so an override does not move it.
 
   TRAP, measured against SOFA 20231011 and the reason this function
   range-checks rather than trusting the status. iauDat answers a pre-1960
@@ -1998,7 +2022,7 @@ Created: 2026-07-25 11:20 (CEST, UTC+02:00)
   Those rows are therefore dropped once, with one mask for every channel so
   that dut1 and xp are interpolated from the same table, and the drop is
   announced with preUtcRowsIgnored and counted in meta.nPreUtcRowsIgnored.
-  The boundary is not a literal here: it is the first row of leapSecondTable,
+  The boundary is not a literal here: it is leapSecondTable("validFromDay"),
   so an override installed with leapSecondTable("load", file) moves it. A
   series that already begins in the modern era loses no row and its result is
   bit-identical to what it was before this rule existed.
@@ -3786,7 +3810,7 @@ Created: 2026-07-25 22:15 (CEST, UTC+02:00)
   .dubiousEpochCount 1x1  double   -        Epochs beyond the leap-second
                                             table's coverage.</pre>
 <h4>METHOD</h4>
-<pre>ONE ROTATION, NO DIRECTION FLAG (decision D23). This function returns the
+<pre>  ONE ROTATION, NO DIRECTION FLAG (decision D23). This function returns the
   ITRS to GCRS rotation, full stop. The inverse is the transpose, exactly,
   because R is a product of orthogonal factors: use invertRotation for the
   matrices or applyRotation(..., 'Inverse', true) to apply it without forming
@@ -3865,7 +3889,8 @@ Created: 2026-07-25 22:15 (CEST, UTC+02:00)
   raises its own warning when a UTC conversion crosses them. That warning
   names leapSecondTable, which is not the function the user called, and it
   fires once per internal conversion rather than once per call. The condition
-  is therefore determined here, once, from leapSecondTable("validThrough"),
+  is therefore determined here, once, from leapSecondTable("validThroughDay")
+  and its matching date,
   the inner warning is suppressed for the duration of the internal
   conversions and restored afterwards, and one aggregated warning is raised
   naming this function and the epoch range. The count is also in
@@ -10774,6 +10799,6 @@ Created: 2026-07-26 12:30 (CEST, UTC+02:00) - session S4, folder-lock report
 -------------------------------------------------------------------------</pre>
 <p class="top"><a href="#contents">back to contents</a></p>
 </div>
-<p class="foot">referenceSystem v2.1.215 &mdash; generated from the
+<p class="foot">referenceSystem v2.1.216 &mdash; generated from the
 package help blocks. See the handover document for the design.</p>
 </body></html>

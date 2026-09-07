@@ -169,7 +169,8 @@ function [R, Rdot, Rddot, info] = rotationItrsToGcrs(epoch, options)
 %   raises its own warning when a UTC conversion crosses them. That warning
 %   names leapSecondTable, which is not the function the user called, and it
 %   fires once per internal conversion rather than once per call. The condition
-%   is therefore determined here, once, from leapSecondTable("validThrough"),
+%   is therefore determined here, once, from leapSecondTable("validThroughDay")
+%   and its matching date,
 %   the inner warning is suppressed for the duration of the internal
 %   conversions and restored afterwards, and one aggregated warning is raised
 %   naming this function and the epoch range. The count is also in
@@ -619,8 +620,12 @@ function [dubiousCount, cleanup] = localBeginDubiousScope(epochUtc)
 %   warning is switched off for the caller's scope and restored by onCleanup,
 %   and one aggregated warning is raised.
 
+    % BOTH FORMS COME FROM THE AUTHORITY, rev. 1.216. The day number is what
+    % epochUtc.day is compared against and the date is what the message
+    % prints; rebuilding the first from the second, as this line did until
+    % rev. 1.215, put a copy of the MJD epoch in this file.
     validThrough = referenceSystem.leapSecondTable("validThrough");
-    lastDay = floor(days(validThrough - datetime(1858, 11, 17)));
+    lastDay = referenceSystem.leapSecondTable("validThroughDay");
     dubious = epochUtc.day > lastDay;
     dubiousCount = sum(dubious);
 
