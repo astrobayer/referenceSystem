@@ -94,7 +94,7 @@ function versionInfo = toolboxVersion()
     majorMinorVersion = "2.1";
     % D107: THE PATCH IS THE HANDOVER REVISION. Bump this in the same edit that
     % writes the revision log entry; the two are checked against each other.
-    patchVersion = "215";
+    patchVersion = "216";
     buildDate = "2026-09-07";
     toolboxAuthor = "Matthias Weigelt";
     generatorModel = "Claude Opus 5 (Anthropic)";

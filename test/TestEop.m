@@ -683,6 +683,48 @@ classdef TestEop < matlab.unittest.TestCase
 
     methods (Test, TestTags = {'diagnostics'})
 
+        function interpolateEop_diagnostics_theUtcBoundaryFollowsAnOverride(testCase)
+            % THE CLAIM THE HELP MAKES, TESTED ACROSS THE SEAM. interpolateEop
+            % trims to leapSecondTable("validFromDay") rather than to 41317, so
+            % installing an override with a later first row must move the trim
+            % - and the way to prove the boundary is really being read, rather
+            % than being read once and hardcoded, is that the SAME call which
+            % succeeds before the load is refused after it.
+            %
+            % Without this test the two layers could agree by coincidence: the
+            % SOFA table and the fixture both begin in the era the literal 41317
+            % names, so a hardcoded boundary would pass every other test here.
+            testCase.assumeTrue(referenceSystem.mexInfo().built, ...
+                'The MEX gateway is not built.');
+            consumeWarning = onCleanup(@() lastwarn('', ''));
+            restore = onCleanup(@() referenceSystem.leapSecondTable("reset"));
+
+            eop = referenceSystem.readEop(testCase.fixture('eop20c04PreUtc.txt'));
+            utc = referenceSystem.daySecondToEpoch([41320, 0], "UTC");
+
+            % Before the override the epoch is inside the usable span.
+            sampled = testCase.verifyWarning( ...
+                @() referenceSystem.interpolateEop(eop, utc), ...
+                'referenceSystem:interpolateEop:preUtcRowsIgnored');
+            testCase.verifyTrue(isfinite(sampled.dut1));
+
+            overrideFile = fullfile(tempdir, "referenceSystem_eopLeapOverride.txt");
+            removeFile = onCleanup(@() TestEop.deleteIfPresent(overrideFile));
+            % A fictitious table whose coverage begins at MJD 41500, well after
+            % the fixture ends, so every row of the series falls before it.
+            writematrix([41500 10; 58000 99], overrideFile, ...
+                'FileType', 'text', 'Delimiter', ' ');
+            referenceSystem.leapSecondTable("load", overrideFile);
+
+            testCase.assertEqual( ...
+                referenceSystem.leapSecondTable("validFromDay"), 41500, ...
+                'The override did not move the published coverage start.');
+            testCase.verifyError( ...
+                @() referenceSystem.interpolateEop(eop, utc), ...
+                'referenceSystem:interpolateEop:beforeUtcEpoch', ...
+                'interpolateEop did not follow the override to the new boundary.');
+        end
+
         function interpolateEop_diagnostics_acceptsAdditiveCorrection(testCase)
             % Seam contract S2 item 1, acceptance direction. An additive
             % correction is applied without ceremony and moves the values.
@@ -829,9 +871,12 @@ classdef TestEop < matlab.unittest.TestCase
             %FIRSTUTCDAY First day the leap-second table covers, as an MJD.
             %   Read from the authority rather than written as 41317, so that a
             %   session override installed with leapSecondTable("load", file)
-            %   moves the tests and the function it tests together.
-            leapTable = referenceSystem.leapSecondTable("list");
-            day = leapTable.mjd(1);
+            %   moves the tests and the function it tests together. This asks
+            %   for the bound by name, which is the same call the function
+            %   under test makes - so the test would not catch that call being
+            %   swapped for a different one, and the contract test on the
+            %   command itself is what covers that.
+            day = referenceSystem.leapSecondTable("validFromDay");
         end
 
         function eop = selectRows(eop, keep)

@@ -665,6 +665,32 @@ classdef TestTime < matlab.unittest.TestCase
 
             testCase.verifyClass(referenceSystem.leapSecondTable("validThrough"), ...
                 'datetime');
+            testCase.verifyClass(referenceSystem.leapSecondTable("validFrom"), ...
+                'datetime');
+
+            % THE TWO FORMS OF EACH BOUND MUST BE THE SAME INSTANT, which is
+            % the whole reason the day numbers are published: a consumer that
+            % compares against epoch.day must not have to rebuild one from the
+            % other and put a copy of the MJD epoch in its own file. The
+            % conversion is written out HERE, once, precisely because it is
+            % what the rest of the toolbox no longer does.
+            mjdOrigin = datetime(1858, 11, 17, 0, 0, 0);
+            for bound = ["validFrom", "validThrough"]
+                asDate = referenceSystem.leapSecondTable(bound);
+                asDay = referenceSystem.leapSecondTable(bound + "Day");
+                testCase.verifyClass(asDay, 'double');
+                testCase.verifyEqual(asDay, floor(days(asDate - mjdOrigin)), ...
+                    "The two forms of " + bound + " are different instants.");
+            end
+
+            % validFrom is the first row of the ACTIVE table, so it is also the
+            % day before which deltaAT refuses outright.
+            testCase.verifyEqual(referenceSystem.leapSecondTable("validFromDay"), ...
+                stepTable.mjd(1));
+            testCase.verifyError(@() referenceSystem.leapSecondTable("deltaAT", ...
+                referenceSystem.daySecondToEpoch( ...
+                [referenceSystem.leapSecondTable("validFromDay") - 1, 0], "UTC")), ...
+                'referenceSystem:leapSecondTable:beforeUtcEpoch');
 
             state = referenceSystem.leapSecondTable("state");
             testCase.verifyEqual(sort(string(fieldnames(state))), ...
@@ -1108,8 +1134,8 @@ classdef TestTime < matlab.unittest.TestCase
             % than five beyond its own, so epochs past the coverage end raise the
             % dubious-year warning - once per call, not once per epoch.
             epochCount = 10000;
-            validThrough = referenceSystem.leapSecondTable("validThrough");
-            beyond = floor(days(validThrough - datetime(1858,11,17))) + (1:epochCount)';
+            beyond = referenceSystem.leapSecondTable("validThroughDay") ...
+                + (1:epochCount)';
             epoch = referenceSystem.daySecondToEpoch( ...
                 [beyond zeros(epochCount,1)], "UTC");
 

@@ -1231,7 +1231,10 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
   table     = leapSecondTable("list")             the full step table
   table     = leapSecondTable("load", file)       install a session override
   table     = leapSecondTable("reset")            drop the override
-  lastDate  = leapSecondTable("validThrough")     end of the table's coverage
+  firstDate = leapSecondTable("validFrom")        start of the coverage
+  firstDay  = leapSecondTable("validFromDay")     the same instant, as an MJD
+  lastDate  = leapSecondTable("validThrough")     end of the coverage
+  lastDay   = leapSecondTable("validThroughDay")  the same instant, as an MJD
   state     = leapSecondTable("state")            which table is in force
 
   No other file in this toolbox contains a leap-second value or date. v1
@@ -1255,7 +1258,10 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
                                                 effect, variables mjd (the
                                                 same instant as an integer
                                                 MJD) and deltaAt (seconds).
-                      1x1    datetime    -      "validThrough".
+                      1x1    datetime    -      "validFrom", "validThrough".
+                      1x1    double      d      "validFromDay",
+                                                "validThroughDay": the same
+                                                two instants as integer MJD.
                       1x1    struct      -      "state", fields below.
   .source             1x1    string      -      "SOFA iauDat" or the override
                                                 file that replaced it.
@@ -1275,6 +1281,24 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
   The coverage end date is discovered the same way: iauDat flags a year more
   than five years beyond its own release with status +1, and validThrough is
   the day before the first such day. It is not a literal here either.
+
+  EACH COVERAGE BOUND IS PUBLISHED TWICE, AS A DATE AND AS A DAY NUMBER, and
+  the second form is not a convenience. Consumers compare a bound against
+  epoch.day, which is an MJD, so a date-only bound forces every one of them to
+  write days(bound - datetime(1858, 11, 17)) - and that is the MJD epoch,
+  copied out of this file into theirs. Four such copies had accumulated by
+  rev. 1.215, one of them in package code, which is the same shape as finding
+  M-2 one layer down: a constant with no single owner, free to diverge, and
+  invisible to the contract test that greps for leap-second dates because
+  1858-11-17 is not one. The day numbers cost nothing to hand back - both are
+  already cached, one by localScanSofaTable and one by localColumnsOf - and
+  they are what removes the copies.
+
+  THE TWO BOUNDS ARE NOT SYMMETRIC UNDER AN OVERRIDE AND THAT IS DELIBERATE.
+  validFrom follows the ACTIVE table, so leapSecondTable("load", file) moves
+  it and every consumer that trims to it. validThrough reports where SOFA
+  stops being willing to answer, which is a property of the bundled iauDat
+  rather than of the step list, so an override does not move it.
 
   TRAP, measured against SOFA 20231011 and the reason this function
   range-checks rather than trusting the status. iauDat answers a pre-1960
@@ -1937,7 +1961,7 @@ Created: 2026-07-25 11:20 (CEST, UTC+02:00)
                                                  sense is "regularization".
                                                  See METHOD before setting it.</pre>
 <h4>OUTPUT ARGUMENTS</h4>
-<pre>  Name                  Size   Type     Units  Description
+<pre>Name                  Size   Type     Units  Description
   ----                  ----   ----     -----  -----------
   eopAtEpoch            1x1    struct   -      Values at the epochs.
   .xp, .yp              Nx1    double   rad    Polar motion.
@@ -1960,7 +1984,7 @@ Created: 2026-07-25 11:20 (CEST, UTC+02:00)
                                                correction was applied, so
                                                dut1 is UT1R - UTC.</pre>
 <h4>METHOD</h4>
-<pre>  The whole arc is interpolated in one call. Interpolating per epoch is a
+<pre>The whole arc is interpolated in one call. Interpolating per epoch is a
   defect, not a style choice: it turns one sorted lookup into N of them.
 
   LEAP-SECOND-SAFE UT1, which is handover approximation #4 and the single
@@ -1998,7 +2022,7 @@ Created: 2026-07-25 11:20 (CEST, UTC+02:00)
   Those rows are therefore dropped once, with one mask for every channel so
   that dut1 and xp are interpolated from the same table, and the drop is
   announced with preUtcRowsIgnored and counted in meta.nPreUtcRowsIgnored.
-  The boundary is not a literal here: it is the first row of leapSecondTable,
+  The boundary is not a literal here: it is leapSecondTable("validFromDay"),
   so an override installed with leapSecondTable("load", file) moves it. A
   series that already begins in the modern era loses no row and its result is
   bit-identical to what it was before this rule existed.
@@ -2036,7 +2060,7 @@ Created: 2026-07-25 11:20 (CEST, UTC+02:00)
   is the whole hazard: with Regularize true the correction is SUBTRACTED, so
   that dut1 becomes UT1R - UTC, and meta.regularized records that it happened.</pre>
 <h4>ACCURACY</h4>
-<pre>  Linear interpolation of a daily-tabulated series is the IERS-recommended
+<pre>Linear interpolation of a daily-tabulated series is the IERS-recommended
   treatment and is the default here. Its error is the curvature of the
   underlying signal over one day: about 0.1 mas peak in polar motion, which is
   3 mm at the Earth's surface, and a few microseconds in UT1. Spline
@@ -2073,13 +2097,20 @@ Created: 2026-07-25 11:20 (CEST, UTC+02:00)
   than a prediction; "nan" marks the epochs; "error" refuses. Polynomial
   extrapolation of an EOP series is never appropriate and is not offered.</pre>
 <h4>ERRORS</h4>
-<pre>  referenceSystem:interpolateEop:wrongScale
+<pre>referenceSystem:interpolateEop:wrongScale
   referenceSystem:interpolateEop:outOfRange
   referenceSystem:interpolateEop:beforeUtcEpoch
   referenceSystem:interpolateEop:tooFewUsableRows
   referenceSystem:interpolateEop:wrongCorrectionSense
   referenceSystem:interpolateEop:missingMeta
   referenceSystem:interpolateEop:sizeMismatch</pre>
+<h4>WARNINGS</h4>
+<pre>referenceSystem:interpolateEop:extrapolatedEop   One per call, however
+      large N is. Raised only under 'ExtrapolationPolicy' "hold", naming how
+      many epochs were clamped to an edge value of the table.
+  referenceSystem:interpolateEop:preUtcRowsIgnored   One per call. Raised
+      when the series reaches back before the first row of leapSecondTable,
+      naming how many rows were dropped and what remains. See METHOD.</pre>
 <h4>REFERENCES</h4>
 <pre>IERS Conventions (2010), IERS Technical Note 36, Ch. 5.5.
   IERS EOP Product Centre, interp.f, the reference interpolation utility.</pre>
@@ -3865,7 +3896,8 @@ Created: 2026-07-25 22:15 (CEST, UTC+02:00)
   raises its own warning when a UTC conversion crosses them. That warning
   names leapSecondTable, which is not the function the user called, and it
   fires once per internal conversion rather than once per call. The condition
-  is therefore determined here, once, from leapSecondTable("validThrough"),
+  is therefore determined here, once, from leapSecondTable("validThroughDay")
+  and its matching date,
   the inner warning is suppressed for the duration of the internal
   conversions and restored afterwards, and one aggregated warning is raised
   naming this function and the epoch range. The count is also in
@@ -10774,6 +10806,6 @@ Created: 2026-07-26 12:30 (CEST, UTC+02:00) - session S4, folder-lock report
 -------------------------------------------------------------------------</pre>
 <p class="top"><a href="#contents">back to contents</a></p>
 </div>
-<p class="foot">referenceSystem v2.1.215 &mdash; generated from the
+<p class="foot">referenceSystem v2.1.216 &mdash; generated from the
 package help blocks. See the handover document for the design.</p>
 </body></html>
