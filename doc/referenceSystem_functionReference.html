@@ -1227,7 +1227,7 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 <h3>referenceSystem.leapSecondTable</h3>
 <p class="h1">The single leap-second authority of the toolbox.</p>
 <h4>SYNTAX</h4>
-<pre>  deltaAt   = leapSecondTable("deltaAT", epoch)   TAI - UTC per epoch, seconds
+<pre>deltaAt   = leapSecondTable("deltaAT", epoch)   TAI - UTC per epoch, seconds
   table     = leapSecondTable("list")             the full step table
   table     = leapSecondTable("load", file)       install a session override
   table     = leapSecondTable("reset")            drop the override
@@ -1249,7 +1249,7 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
              1x1    string | char   -      For "load": the file to read.
                                            Not accepted by other commands.</pre>
 <h4>OUTPUT ARGUMENTS</h4>
-<pre>  Name                Size   Type        Units  Description
+<pre>Name                Size   Type        Units  Description
   ----                ----   ----        -----  -----------
   result              Nx1    double      s      "deltaAT": TAI - UTC.
                       Mx2    timetable   -      "list", "load", "reset": the
@@ -1270,7 +1270,7 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
   .lastDeltaAt        1x1    double      s      TAI - UTC after that step.
   .validThrough       1x1    datetime    -      As the command of that name.</pre>
 <h4>METHOD</h4>
-<pre>  The table is not stored here. It is discovered by asking the bundled,
+<pre>The table is not stored here. It is discovered by asking the bundled,
   unmodified SOFA iauDat through the MEX gateway for TAI - UTC on every day
   from 1972-01-01 to 2200-01-01 and recording where the answer changes. There
   is therefore exactly one copy of the data in the toolbox, in mex/sofa/dat.c,
@@ -1961,7 +1961,7 @@ Created: 2026-07-25 11:20 (CEST, UTC+02:00)
                                                  sense is "regularization".
                                                  See METHOD before setting it.</pre>
 <h4>OUTPUT ARGUMENTS</h4>
-<pre>  Name                  Size   Type     Units  Description
+<pre>Name                  Size   Type     Units  Description
   ----                  ----   ----     -----  -----------
   eopAtEpoch            1x1    struct   -      Values at the epochs.
   .xp, .yp              Nx1    double   rad    Polar motion.
@@ -1984,7 +1984,7 @@ Created: 2026-07-25 11:20 (CEST, UTC+02:00)
                                                correction was applied, so
                                                dut1 is UT1R - UTC.</pre>
 <h4>METHOD</h4>
-<pre>  The whole arc is interpolated in one call. Interpolating per epoch is a
+<pre>The whole arc is interpolated in one call. Interpolating per epoch is a
   defect, not a style choice: it turns one sorted lookup into N of them.
 
   LEAP-SECOND-SAFE UT1, which is handover approximation #4 and the single
@@ -2060,7 +2060,7 @@ Created: 2026-07-25 11:20 (CEST, UTC+02:00)
   is the whole hazard: with Regularize true the correction is SUBTRACTED, so
   that dut1 becomes UT1R - UTC, and meta.regularized records that it happened.</pre>
 <h4>ACCURACY</h4>
-<pre>  Linear interpolation of a daily-tabulated series is the IERS-recommended
+<pre>Linear interpolation of a daily-tabulated series is the IERS-recommended
   treatment and is the default here. Its error is the curvature of the
   underlying signal over one day: about 0.1 mas peak in polar motion, which is
   3 mm at the Earth's surface, and a few microseconds in UT1. Spline
@@ -2097,13 +2097,20 @@ Created: 2026-07-25 11:20 (CEST, UTC+02:00)
   than a prediction; "nan" marks the epochs; "error" refuses. Polynomial
   extrapolation of an EOP series is never appropriate and is not offered.</pre>
 <h4>ERRORS</h4>
-<pre>  referenceSystem:interpolateEop:wrongScale
+<pre>referenceSystem:interpolateEop:wrongScale
   referenceSystem:interpolateEop:outOfRange
   referenceSystem:interpolateEop:beforeUtcEpoch
   referenceSystem:interpolateEop:tooFewUsableRows
   referenceSystem:interpolateEop:wrongCorrectionSense
   referenceSystem:interpolateEop:missingMeta
   referenceSystem:interpolateEop:sizeMismatch</pre>
+<h4>WARNINGS</h4>
+<pre>referenceSystem:interpolateEop:extrapolatedEop   One per call, however
+      large N is. Raised only under 'ExtrapolationPolicy' "hold", naming how
+      many epochs were clamped to an edge value of the table.
+  referenceSystem:interpolateEop:preUtcRowsIgnored   One per call. Raised
+      when the series reaches back before the first row of leapSecondTable,
+      naming how many rows were dropped and what remains. See METHOD.</pre>
 <h4>REFERENCES</h4>
 <pre>IERS Conventions (2010), IERS Technical Note 36, Ch. 5.5.
   IERS EOP Product Centre, interp.f, the reference interpolation utility.</pre>
@@ -3810,7 +3817,7 @@ Created: 2026-07-25 22:15 (CEST, UTC+02:00)
   .dubiousEpochCount 1x1  double   -        Epochs beyond the leap-second
                                             table's coverage.</pre>
 <h4>METHOD</h4>
-<pre>  ONE ROTATION, NO DIRECTION FLAG (decision D23). This function returns the
+<pre>ONE ROTATION, NO DIRECTION FLAG (decision D23). This function returns the
   ITRS to GCRS rotation, full stop. The inverse is the transpose, exactly,
   because R is a product of orthogonal factors: use invertRotation for the
   matrices or applyRotation(..., 'Inverse', true) to apply it without forming
