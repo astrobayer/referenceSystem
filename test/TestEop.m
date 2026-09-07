@@ -13,6 +13,16 @@ classdef TestEop < matlab.unittest.TestCase
 %   fixture that avoided one would make the most likely defect in this layer
 %   untestable.
 %
+%   ONE FIXTURE SITS SOMEWHERE ELSE ON PURPOSE. eop20c04PreUtc.txt is 111 rows
+%   of the same EOP 20 C04 product spanning MJD 41267 to 41377, straddling
+%   1972-01-01 - the start of the modern UTC era rather than a leap second. It
+%   is not in the fixtureName sweep, which enumerates FORMATS and would be
+%   saying something different if a second entry of one format were added to
+%   it. Issue #15 is why it exists: the series this toolbox ships begins in
+%   1962, and the rows before 1972 have to be dropped rather than interpolated
+%   through, because UT1 - UTC steps 0.107873 s across that date and the step
+%   is not an integer.
+%
 %   The class lives outside +referenceSystem and calls referenceSystem.*
 %   explicitly; it must never import the package (handover section C.5 rule 4).
 %
@@ -193,6 +203,74 @@ classdef TestEop < matlab.unittest.TestCase
             marked = referenceSystem.interpolateEop(eop, outside, ...
                 'ExtrapolationPolicy', "nan");
             testCase.verifyTrue(isnan(marked.xp));
+        end
+
+        function interpolateEop_contract_ignoresPreUtcRowsAndSaysSo(testCase)
+            % ISSUE #15. The series this toolbox ships begins in 1962 and the
+            % leap-second machinery begins in 1972, so every row in between is
+            % outside the model. Before this rule the whole call failed inside
+            % leapSecondTable, naming rows a 2020 query never touched.
+            %
+            % THIS TEST ASSERTS A WARNING, SO IT CONSUMES IT (D72).
+            consumeWarning = onCleanup(@() lastwarn('', ''));
+            eop = referenceSystem.readEop(testCase.fixture('eop20c04PreUtc.txt'));
+            firstUtcDay = TestEop.firstUtcDay();
+
+            % The fixture must actually straddle the boundary, or this test
+            % passes while testing nothing. Derived from the table, not from a
+            % literal, so an override moves both together.
+            nBefore = sum(eop.mjd < firstUtcDay);
+            testCase.assertGreaterThan(nBefore, 0, ...
+                'The fixture no longer reaches back before the UTC epoch.');
+
+            utc = referenceSystem.daySecondToEpoch([firstUtcDay + 10, 0], "UTC");
+            sampled = testCase.verifyWarning( ...
+                @() referenceSystem.interpolateEop(eop, utc), ...
+                'referenceSystem:interpolateEop:preUtcRowsIgnored');
+
+            testCase.verifyEqual(sampled.meta.nPreUtcRowsIgnored, nBefore, ...
+                'The count in meta must be the number of rows actually dropped.');
+            testCase.verifyTrue(all(isfinite([sampled.xp, sampled.yp, ...
+                sampled.dut1, sampled.lod, sampled.dX, sampled.dY])), ...
+                'A query inside the usable span returned a non-finite value.');
+        end
+
+        function interpolateEop_contract_refusesAQueryBeforeTheUtcEpoch(testCase)
+            % The extrapolation policy governs epochs outside the TABLE, which
+            % is a property of the file. This one is outside the MODEL, so no
+            % policy relaxes it - asserted for all three rather than for the
+            % default alone, because a policy that quietly returned NaN or the
+            % 1972 edge value here would be the silent degradation D3 forbids.
+            eop = referenceSystem.readEop(testCase.fixture('eop20c04PreUtc.txt'));
+            early = referenceSystem.daySecondToEpoch( ...
+                [TestEop.firstUtcDay() - 5, 0], "UTC");
+
+            for policy = ["error", "hold", "nan"]
+                testCase.verifyError( ...
+                    @() referenceSystem.interpolateEop(eop, early, ...
+                    'ExtrapolationPolicy', policy), ...
+                    'referenceSystem:interpolateEop:beforeUtcEpoch', ...
+                    "Policy " + policy + " must not relax the UTC-era limit.");
+            end
+        end
+
+        function interpolateEop_contract_refusesASeriesWithTooFewUsableRows(testCase)
+            % Trimming makes a new state reachable: a series that keeps fewer
+            % than the two rows an interpolation needs. Left to interp1 it
+            % would surface as a MATLAB internal identifier naming a grid
+            % vector, which says nothing about why the rows went away.
+            consumeWarning = onCleanup(@() lastwarn('', ''));
+            eop = referenceSystem.readEop(testCase.fixture('eop20c04PreUtc.txt'));
+            firstUtcDay = TestEop.firstUtcDay();
+
+            keep = eop.mjd < firstUtcDay;
+            keep(find(eop.mjd >= firstUtcDay, 1)) = true;   % exactly one usable row
+            cut = TestEop.selectRows(eop, keep);
+            utc = referenceSystem.daySecondToEpoch([firstUtcDay, 0], "UTC");
+
+            testCase.verifyError( ...
+                @() referenceSystem.interpolateEop(cut, utc), ...
+                'referenceSystem:interpolateEop:tooFewUsableRows');
         end
 
         function interpolateEop_contract_sigmaIsOptional(testCase)
@@ -395,6 +473,56 @@ classdef TestEop < matlab.unittest.TestCase
             testCase.verifyGreaterThan(max(abs(diff(interpolated.dut1))), 0.5, ...
                 ['UT1 - UTC shows no step across the leap second, which ', ...
                 'means the leap second was not applied at all.']);
+        end
+
+        function interpolateEop_precision_theUtcTrimIsNeutral(testCase)
+            % THE WHOLE CLAIM OF THE REPAIR, IN ONE ASSERTION: dropping the
+            % pre-1972 rows inside the function gives exactly what the caller
+            % would have got by dropping them beforehand - bitwise, on every
+            % channel, under BOTH methods. Spline is the one that matters:
+            % interp1's spline is a global not-a-knot fit rather than a local
+            % stencil, so a trim done for one channel and not another, or done
+            % at a different place, would move every coefficient.
+            %
+            % The second half asserts the other direction - that a series which
+            % never reaches back is untouched - which is what makes the rule
+            % free for every user who is not affected by it.
+            %
+            % AbsTol 0 IS NOT A VACUOUS DEMAND HERE. A cross-language mirror
+            % measured what the defect would produce over this fixture: fifty
+            % pre-1972 rows left in a spline fit move dut1 by 2.1e-4 s and xp
+            % by 0.4 uas at every epoch, so the assertion has four orders of
+            % headroom over the difference it is looking for. Under "linear"
+            % the same rows are worth exactly zero away from the boundary,
+            % which is why the spline leg is the one that carries this test.
+            consumeWarning = onCleanup(@() lastwarn('', ''));
+            eop = referenceSystem.readEop(testCase.fixture('eop20c04PreUtc.txt'));
+            firstUtcDay = TestEop.firstUtcDay();
+            preTrimmed = TestEop.selectRows(eop, eop.mjd >= firstUtcDay);
+
+            mjd = (firstUtcDay + 3 : 7 : eop.mjd(end) - 3)';
+            utc = referenceSystem.daySecondToEpoch( ...
+                [mjd, 3600*ones(numel(mjd), 1)], "UTC");
+
+            for method = ["linear", "spline"]
+                whole = referenceSystem.interpolateEop(eop, utc, 'Method', method);
+                cut = referenceSystem.interpolateEop(preTrimmed, utc, ...
+                    'Method', method);
+                for name = ["xp", "yp", "dut1", "lod", "dX", "dY"]
+                    testCase.verifyEqual(whole.(name), cut.(name), 'AbsTol', 0, ...
+                        "The trim moved " + name + " under " + method + ".");
+                end
+            end
+
+            % The untouched series announces nothing and counts nothing. The
+            % reset happens immediately before the clean call, because the
+            % loop above has just raised the warning on purpose.
+            lastwarn('', '');
+            untouched = referenceSystem.interpolateEop(preTrimmed, utc);
+            [~, identifier] = lastwarn();
+            testCase.verifyEqual(untouched.meta.nPreUtcRowsIgnored, 0);
+            testCase.verifyEmpty(char(identifier), ...
+                'A series that begins in the modern era must warn about nothing.');
         end
 
         function interpolateEop_precision_reproducesTableAtNodes(testCase, fixtureName)
@@ -696,6 +824,29 @@ classdef TestEop < matlab.unittest.TestCase
     end
 
     methods (Static, Access = private)
+
+        function day = firstUtcDay()
+            %FIRSTUTCDAY First day the leap-second table covers, as an MJD.
+            %   Read from the authority rather than written as 41317, so that a
+            %   session override installed with leapSecondTable("load", file)
+            %   moves the tests and the function it tests together.
+            leapTable = referenceSystem.leapSecondTable("list");
+            day = leapTable.mjd(1);
+        end
+
+        function eop = selectRows(eop, keep)
+            %SELECTROWS Cut an eop series to a logical row mask, meta intact.
+            %   Every channel and every sigma is cut with the SAME mask, which
+            %   is the property the function under test must also have.
+            for name = ["mjd", "xp", "yp", "dut1", "lod", "dX", "dY"]
+                eop.(name) = eop.(name)(keep);
+            end
+            if isfield(eop, 'sigma')
+                for name = string(fieldnames(eop.sigma))'
+                    eop.sigma.(name) = eop.sigma.(name)(keep);
+                end
+            end
+        end
 
         function deleteIfPresent(file)
             %DELETEIFPRESENT Remove a scratch file, tolerating its absence.
