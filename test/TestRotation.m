@@ -1274,13 +1274,24 @@ classdef TestRotation < matlab.unittest.TestCase
             testCase.verifyEqual(fittedInfo.sampleSource, "panels", ...
                 'The interpolated path still read the series.');
 
-            % 5e-12 on a direction cosine is about 1e-3 uas, the bound the
-            % six-channel path has met since rev. 1.90 and which P19c was
-            % required to hold unchanged. If it fails, the length-of-day fit
-            % is the suspect and its degree is the knob - not this tolerance
-            % (obligation O8).
+            % R: 5e-12 on a direction cosine is 1.03 uas (5e-12 x 2.063e11
+            % uas/rad), not the "1e-3 uas" this comment said until rev. 1.217.
+            % It is the bound P19c was required to hold unchanged, and it
+            % bounds the error the panels add to the chain; the measured floor
+            % and the wrong-panel control are in interpolatedMatchesDirect.
+            %
+            % Rdot: 5e-12/h, THE SAME CLAIM IN RATE UNITS (D123), and on THIS
+            % test it is the bound that matters. The LOD channel enters only
+            % the rate, through omega, so R cannot see it. The whole
+            % length-of-day term is 1.2e-12 1/s on this arc (8.5 um/s at
+            % 7000 km), and an interpolant with its LOD channel zeroed PASSED
+            % the old 5e-12 on Rdot - this test passed whether or not the
+            % channel was read. It fails 5e-12/h 49 times over. If it fails,
+            % the length-of-day fit is the suspect and its degree is the knob
+            % - not this tolerance (obligation O8).
             testCase.verifyEqual(fitted, direct, 'AbsTol', 5e-12);
-            testCase.verifyEqual(fittedDot, directDot, 'AbsTol', 5e-12);
+            testCase.verifyEqual(fittedDot, directDot, 'AbsTol', ...
+                5e-12 / fittedInfo.differenceStep);
         end
 
         function rotationItrsToGcrs_reference_interpolatedMatchesDirect(testCase)
@@ -1310,12 +1321,27 @@ classdef TestRotation < matlab.unittest.TestCase
             testCase.verifyEqual(fittedInfo.path, "interpolated");
             testCase.verifyLessThan(fittedInfo.interpolantResidual, 0.5);
 
-            % 5e-12 on a direction cosine is about 1e-3 uas of angle. The fit
-            % itself measures 2.6e-7 uas, so this is four orders of headroom -
-            % loose enough to survive a compiler, tight enough that a panel
-            % chosen one index wrong could not pass it.
+            % R: 5e-12 on a direction cosine is 1.03 uas of angle (5e-12 x
+            % 2.063e11 uas/rad; rev. 1.217 corrects "1e-3 uas", a factor of
+            % 1000 out). It is P19c's accuracy requirement, and the term it
+            % bounds is the error the panels add to the chain, which the
+            % builder caps at 0.5 uas per fitted angle (Tolerance default).
+            % Measured on this arc: 2.2e-16, ONE ULP - the roundoff of the
+            % assembly dominates, not the fit (worst channel Y, 4.0e-5 uas,
+            % is 2e-16 rad). Loose enough to survive a compiler; a panel chosen
+            % one index wrong measured 3.9e-7, 7.7e4 times over.
+            %
+            % Rdot: NOT THE SAME NUMBER, BECAUSE A RATE IS NOT AN ANGLE (D123).
+            % Both paths difference the samples at t-h and t+h, so a sample
+            % disagreement e reaches Rdot as e/h: measured 5.5e-19 1/s against
+            % |dR(t+h) - dR(t-h)|/2h = 5.6e-19, while omega*dR is 1.6e-20. The
+            % R claim in rate units is therefore 5e-12/h - 2.5e-14 1/s at the
+            % default h = 200 s, 0.18 um/s at 7000 km. The 5e-12 it replaces
+            % is 35 um/s and admitted the whole length-of-day term (1.2e-12
+            % 1/s); see panelsAloneMatchTheDirectChain.
             testCase.verifyEqual(fitted, direct, 'AbsTol', 5e-12);
-            testCase.verifyEqual(fittedDot, directDot, 'AbsTol', 5e-12);
+            testCase.verifyEqual(fittedDot, directDot, 'AbsTol', ...
+                5e-12 / fittedInfo.differenceStep);
         end
 
         function earthOrientationInterpolant_reference_matchesTheDirectChain(testCase)
