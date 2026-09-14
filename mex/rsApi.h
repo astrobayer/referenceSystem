@@ -120,6 +120,18 @@ int rsApiRotation(const rsApiInterpolant *interpolant, double mjdUtc,
  *          could be differentiated analytically instead and that is a separate
  *          prompt, not a variation to be slipped in here.
  *   rdot   [9], may not be NULL
+ *
+ * THE EARTH ROTATION RATE IS THE ONE referenceSystem.rotationItrsToGcrs USES BY
+ * DEFAULT (rev. 1.222). The ERA part of Rdot is analytic in omega and does not
+ * come from the difference, so omega must match or the two APIs disagree by
+ * about 1e-12 1/s (7 um/s at 7000 km):
+ *   omega = rsEarthRotationAngleRate() * (1 - lod / 86400)
+ * where rsEarthRotationAngleRate is the ERA slope (decision D63), and lod is
+ * the excess length of day in seconds, read from the panels at mjdUtc when the
+ * interpolant carries it (quantityCount 7, format 2) - MATLAB's default
+ * 'ApplyLengthOfDay' true. With six channels there is no lod to read and lod is
+ * 0, which is MATLAB's 'ApplyLengthOfDay' false. Until rev. 1.222 this used the
+ * nominal 7.292115e-5 and no lod: 5.8e-13 1/s from MATLAB's default.
  */
 int rsApiRotationRate(const rsApiInterpolant *interpolant, double mjdUtc,
                       double step, double *r, double *rdot);
@@ -159,7 +171,8 @@ int rsApiReadInterpolant(const char *path, rsApiInterpolant *interpolant,
                          double *coefficient, int coefficientLength,
                          double *taiMinusUtc, int taiLength);
 
-/* Number of doubles the coefficient array needs: (degree+1) * 6 * panelCount. */
+/* Number of doubles the coefficient array needs:
+ * (degree+1) * quantityCount * panelCount, with quantityCount 0 meaning 6. */
 int rsApiInterpolantSize(const rsApiInterpolant *interpolant);
 
 #ifdef __cplusplus

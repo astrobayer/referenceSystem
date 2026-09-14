@@ -403,6 +403,20 @@ void rsEarthRotationAngle(int n, const double *day, const double *secOfDay,
     }
 }
 
+double rsEarthRotationAngleRate(void)
+{
+    /* The same two epochs and the same subtraction as earthRotationAngleRate,
+     * so the two values are equal bit for bit rather than to a tolerance. The
+     * difference is exact in the expression - ERA is linear in UT1 - and 1000 s
+     * keeps it clear of the 2pi wrap at this epoch. */
+    const double day[2] = {51544.0, 51544.0};
+    const double sec[2] = {0.0, 1000.0};
+    double era[2];
+
+    rsEarthRotationAngle(2, day, sec, era);
+    return (era[1] - era[0]) / 1000.0;
+}
+
 void rsTioLocator(int n, const double *day, const double *secOfDay, double *sp)
 {
     int k;

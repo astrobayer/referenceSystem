@@ -1,12 +1,12 @@
 function value = evaluateInterpolant(interpolant, mjd, panelIndex)
 %EVALUATEINTERPOLANT Evaluate one panel of an Earth orientation interpolant.
-%   value = evaluateInterpolant(interpolant, mjd, panelIndex) returns the six
-%   quantities named by interpolant.quantity at the given UTC MJD, read from
-%   the panel at panelIndex.
+%   value = evaluateInterpolant(interpolant, mjd, panelIndex) returns the
+%   fitted quantities at the given UTC MJD, one column per entry of
+%   interpolant.quantity, read from the panel at panelIndex.
 %
-%   This is the low-level reader. rotationItrsToGcrs will select the panel and
-%   assemble the rotation itself; until that option is wired this is how the
-%   panels are reached, and it is what the C API exposes.
+%   This is the low-level reader. rotationItrsToGcrs selects the panel and
+%   assembles the rotation itself when given 'Interpolant'; this function is
+%   how the panels are reached directly, and it is what the C API exposes.
 %
 % INPUT ARGUMENTS
 %   Name          Size   Type     Units  Description
@@ -19,9 +19,11 @@ function value = evaluateInterpolant(interpolant, mjd, panelIndex)
 % OUTPUT ARGUMENTS
 %   Name    Size   Type     Units  Description
 %   ----    ----   ----     -----  -----------
-%   value   Nx6    double   mixed  The six quantities in the order given by
-%                                  interpolant.quantity: radians for the first
-%                                  five, seconds for dut1.
+%   value   NxQ    double   mixed  One column per entry of interpolant.quantity,
+%                                  Q = numel(interpolant.quantity), in that
+%                                  order. Units by name: radians for X, Y, s,
+%                                  xp and yp; seconds for dut1; seconds per day
+%                                  for lod.
 %
 % METHOD
 %   Clenshaw evaluation in mex/rsCheb.c, reached through the gateway, so this

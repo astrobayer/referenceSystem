@@ -286,6 +286,14 @@ int rsCipXys(int n, const double *day, const double *secOfDay, int model,
 void rsEarthRotationAngle(int n, const double *day, const double *secOfDay,
                           double *era);
 
+/* Rate of the Earth rotation angle, rad/s, DERIVED from iauEra00 (decision
+ * D63): rsEarthRotationAngle at MJD 51544 + 1000 s minus at MJD 51544 + 0 s,
+ * over 1000. That is the arithmetic referenceSystem.earthRotationAngleRate
+ * performs through the gateway, so the C API and MATLAB take the same value
+ * from the same authority. It is NOT iersConstants.earthRotationRate
+ * (7.292115e-5, a nominal mean), which differs by 1.47e-12 rad/s. */
+double rsEarthRotationAngleRate(void);
+
 /* TIO locator s', radians, from a TT epoch (iauSp00). */
 void rsTioLocator(int n, const double *day, const double *secOfDay, double *sp);
 
