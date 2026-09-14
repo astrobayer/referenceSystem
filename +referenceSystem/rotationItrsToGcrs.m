@@ -707,7 +707,7 @@ end
 
 function [cipX, cipY, cipS, sampled] = localSampleInterpolant(interpolant, ...
         sampleUtc, sampled)
-%LOCALSAMPLEINTERPOLANT The six fitted quantities at the sample epochs.
+%LOCALSAMPLEINTERPOLANT The fitted quantities at the sample epochs, by name.
 %   Returns the CIP as three columns and overwrites the pole and UT1 in the
 %   struct the direct path built, so that everything downstream is unchanged.
 %
