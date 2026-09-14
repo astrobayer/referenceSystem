@@ -2602,11 +2602,12 @@ Created: 2026-07-25 21:40 (CEST, UTC+02:00)
 <h3>referenceSystem.earthOrientationInterpolant</h3>
 <p class="h1">Chebyshev panels for the ITRS to GCRS chain.</p>
 <h4>SYNTAX</h4>
-<pre>interpolant = earthOrientationInterpolant(epoch, 'Eop', eop) fits the six
-  quantities the terrestrial-to-celestial rotation needs - the CIP X and Y,
-  the CIO locator s, the two pole coordinates and UT1 minus UTC - over the
-  span covered by epoch, and returns them as Chebyshev coefficients on
-  consecutive panels.
+<pre>interpolant = earthOrientationInterpolant(epoch, 'Eop', eop) fits the
+  quantities the terrestrial-to-celestial rotation and its rate need - the
+  CIP X and Y, the CIO locator s, the two pole coordinates, UT1 minus UTC
+  and the excess length of day - over the span covered by epoch, and returns
+  them as Chebyshev coefficients on consecutive panels, one channel per
+  entry of .quantity.
 
   The result is accepted by rotationItrsToGcrs through its 'Interpolant'
   option, and it is the same object the public C API evaluates, so an
@@ -2642,7 +2643,11 @@ Created: 2026-07-25 21:40 (CEST, UTC+02:00)
                                        microarcseconds. Checked against
                                        samples the fit has NOT seen. A fit
                                        that misses it raises toleranceNotMet
-                                       rather than returning quietly.</pre>
+                                       rather than returning quietly. The
+                                       same number gates every channel but
+                                       lod: the five angles in uas and dut1
+                                       in us. lod is reported, not gated,
+                                       because it is not an angle.</pre>
 <h4>OUTPUT ARGUMENTS</h4>
 <pre>Name              Size          Type     Units  Description
   ----              ----          ----     -----  -----------
@@ -2662,22 +2667,29 @@ Created: 2026-07-25 21:40 (CEST, UTC+02:00)
                                                   because panels are aligned
                                                   to whole UTC days, so a leap
                                                   second falls on a boundary.
-  .quantity         1x7           string   -      Column order of the
-                                                  coefficients. THE SINGLE
-                                                  AUTHORITY for that order;
-                                                  no caller may assume it.
-  .coefficient      (D+1)x6xP     double   mixed  Chebyshev coefficients,
-                                                  D = degree. Units follow
-                                                  .quantity: radians for the
-                                                  first five, seconds for
-                                                  dut1.
+  .quantity         1xQ           string   -      Channel names, in column
+                                                  order. THE SINGLE AUTHORITY
+                                                  for the count Q and the
+                                                  order; no caller may assume
+                                                  either.
+  .coefficient      (D+1)xQxP     double   mixed  Chebyshev coefficients,
+                                                  D = degree, one column per
+                                                  entry of .quantity. Units
+                                                  by name: radians for X, Y,
+                                                  s, xp and yp; seconds for
+                                                  dut1; seconds per day for
+                                                  lod.
   .meta             1x1           struct   -      Provenance. Fields below.
-  .meta.residual    1x6           double   uas    Worst error against the
+  .meta.residual    1xQ           double   mixed  Worst error against the
                                                   direct chain at samples the
-                                                  fit did not see. The dut1
-                                                  entry is microseconds, not
-                                                  microarcseconds.
-  .meta.tolerance   1x1           double   uas    Tolerance that was met.
+                                                  fit did not see, one entry
+                                                  per entry of .quantity:
+                                                  microarcseconds for the
+                                                  five angles, microseconds
+                                                  for dut1 and for lod.
+  .meta.tolerance   1x1           double   uas    Tolerance that was met, by
+                                                  every channel but lod (see
+                                                  Tolerance).
   .meta.cipModel    1x1           string   -      Frame of the CIP offsets.
   .meta.eopFile     1x1           string   -      Series the fit was built on.
   .meta.spanMjd     1x2           double   d      Span actually covered,
@@ -2720,6 +2732,11 @@ Created: 2026-07-25 21:40 (CEST, UTC+02:00)
     CIP X, Y, s              better than 1e-4 uas
     pole xp, yp              better than 1e-3 uas
     UT1 - UTC                better than 1e-4 us
+    excess length of day     better than 1e-8 us (of seconds per day)
+  Measured at rev. 1.219 on six spans of test/fixtures/eop20c04.txt between
+  MJD 57655 and 57853: the worst readings were 6.8e-5 uas (Y), 4.9e-7 uas
+  (xp), 3.2e-8 us (dut1) and 7.7e-10 us (lod). The lod figure enters only
+  the Earth rotation rate, where 1e-8 us per day is below 1e-23 1/s.
   These are fit errors only. They do not improve on the EOP series itself,
   whose own formal errors are tens of microarcseconds, and they are not a
   claim about the accuracy of the rotation - only that interpolating it costs
@@ -2745,7 +2762,7 @@ Created: 2026-07-25 21:40 (CEST, UTC+02:00)
   R = referenceSystem.rotationItrsToGcrs(epoch, 'Interpolant', ip);</pre>
 <h4>KEYWORDS</h4>
 <pre>Chebyshev, interpolation, Earth orientation, CIP, polar motion, UT1,
-  precise orbit determination
+  length of day, precise orbit determination
 
 See also rotationItrsToGcrs, cipCoordinates, interpolateEop, readEop
 
@@ -3035,13 +3052,13 @@ Created: 2026-08-05 09:30 (CEST, UTC+02:00)
 <h3>referenceSystem.evaluateInterpolant</h3>
 <p class="h1">Evaluate one panel of an Earth orientation interpolant.</p>
 <h4>SYNTAX</h4>
-<pre>value = evaluateInterpolant(interpolant, mjd, panelIndex) returns the six
-  quantities named by interpolant.quantity at the given UTC MJD, read from
-  the panel at panelIndex.
+<pre>value = evaluateInterpolant(interpolant, mjd, panelIndex) returns the
+  fitted quantities at the given UTC MJD, one column per entry of
+  interpolant.quantity, read from the panel at panelIndex.
 
-  This is the low-level reader. rotationItrsToGcrs will select the panel and
-  assemble the rotation itself; until that option is wired this is how the
-  panels are reached, and it is what the C API exposes.</pre>
+  This is the low-level reader. rotationItrsToGcrs selects the panel and
+  assembles the rotation itself when given 'Interpolant'; this function is
+  how the panels are reached directly, and it is what the C API exposes.</pre>
 <h4>INPUT ARGUMENTS</h4>
 <pre>Name          Size   Type     Units  Description
   ----          ----   ----     -----  -----------
@@ -3052,9 +3069,11 @@ Created: 2026-08-05 09:30 (CEST, UTC+02:00)
 <h4>OUTPUT ARGUMENTS</h4>
 <pre>Name    Size   Type     Units  Description
   ----    ----   ----     -----  -----------
-  value   Nx6    double   mixed  The six quantities in the order given by
-                                 interpolant.quantity: radians for the first
-                                 five, seconds for dut1.</pre>
+  value   NxQ    double   mixed  One column per entry of interpolant.quantity,
+                                 Q = numel(interpolant.quantity), in that
+                                 order. Units by name: radians for X, Y, s,
+                                 xp and yp; seconds for dut1; seconds per day
+                                 for lod.</pre>
 <h4>METHOD</h4>
 <pre>Clenshaw evaluation in mex/rsCheb.c, reached through the gateway, so this
   function and the public C API share one evaluator rather than agreeing by
@@ -10806,6 +10825,6 @@ Created: 2026-07-26 12:30 (CEST, UTC+02:00) - session S4, folder-lock report
 -------------------------------------------------------------------------</pre>
 <p class="top"><a href="#contents">back to contents</a></p>
 </div>
-<p class="foot">referenceSystem v2.1.217 &mdash; generated from the
+<p class="foot">referenceSystem v2.1.220 &mdash; generated from the
 package help blocks. See the handover document for the design.</p>
 </body></html>
