@@ -159,7 +159,8 @@ int rsApiReadInterpolant(const char *path, rsApiInterpolant *interpolant,
                          double *coefficient, int coefficientLength,
                          double *taiMinusUtc, int taiLength);
 
-/* Number of doubles the coefficient array needs: (degree+1) * 6 * panelCount. */
+/* Number of doubles the coefficient array needs:
+ * (degree+1) * quantityCount * panelCount, with quantityCount 0 meaning 6. */
 int rsApiInterpolantSize(const rsApiInterpolant *interpolant);
 
 #ifdef __cplusplus

@@ -337,7 +337,13 @@ int rsApiReadInterpolant(const char *path, rsApiInterpolant *interpolant,
         }
     }
 
-    if (version != 1 || !seenCoefficient || interpolant->degree < 1 ||
+    /* BOTH VERSIONS, HERE AS WELL AS AT THE VERSION LINE. Until rev. 1.221
+     * this test still read "version != 1": the version line admitted format 2
+     * and this check then refused it, so every file writeInterpolant has
+     * written since P19c came back RS_API_BAD_FILE. The only file the C suite
+     * read was the format-1 fixture, which is why nothing noticed; testApi
+     * now reads a format-2 one too. */
+    if ((version != 1 && version != 2) || !seenCoefficient || interpolant->degree < 1 ||
         interpolant->panelCount < 1 || interpolant->cipModel < 0 ||
         !(interpolant->panelSpan > 0.0)) {
         fclose(stream);

@@ -82,7 +82,10 @@ echo
 # control, and TestTime reads it (handover obligation O3).
 "$buildDir/testIersModels" "$rootDir/test/fixtures/fundargIers.csv"
 echo
-"$buildDir/testApi" "$rootDir/test/fixtures/arc.eopi"
+# Both interpolant formats: arc.eopi is format 1 and arcFormat2.eopi is what
+# writeInterpolant has written since P19c (rev. 1.221).
+"$buildDir/testApi" "$rootDir/test/fixtures/arc.eopi" \
+    "$rootDir/test/fixtures/arcFormat2.eopi"
 echo
 "$buildDir/testCheb"
 echo

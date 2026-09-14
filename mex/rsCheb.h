@@ -3,7 +3,7 @@
  * --------
  * Chebyshev panel interpolation for the Earth orientation chain (prompt P19).
  * Numerical core only: this file knows nothing about SOFA, about the IERS
- * models, about MATLAB or about what the six quantities mean.
+ * models, about MATLAB or about what the fitted quantities mean.
  *
  * WHY THE FIT DOES NOT SAMPLE ANYTHING ITSELF
  *   rsChebFit takes VALUES, not a callback. The caller asks rsChebNodes where

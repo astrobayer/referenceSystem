@@ -99,10 +99,22 @@ static void chainAt(double mjdUtc, double *value)
  */
 static const char *fixturePath = "test/fixtures/arc.eopi";
 
+/* THE FORMAT-2 FIXTURE, THE FORMAT MATLAB HAS WRITTEN SINCE P19c. Until rev.
+ * 1.221 the suite read only arc.eopi, which is format 1, and the reader refused
+ * every format-2 file without anything here noticing. Written by
+ * earthOrientationInterpolant over MJD 57754-57757 from eop20c04.txt with the
+ * defaults, then writeInterpolant; its first six channels agree with arc.eopi's
+ * coefficients to 2.2e-17. The second argument, for the same reason as the
+ * first. */
+static const char *fixturePath2 = "test/fixtures/arcFormat2.eopi";
+
 int main(int argc, char *argv[])
 {
     if (argc > 1) {
         fixturePath = argv[1];
+    }
+    if (argc > 2) {
+        fixturePath2 = argv[2];
     }
     static double coefficient[PANELS * 6 * STRIDE];
     double taiMinusUtc[PANELS];
@@ -319,6 +331,57 @@ int main(int argc, char *argv[])
                                    NULL, 0, NULL, 0) == RS_API_BAD_FILE,
               "a missing file is refused");
         (void)rBuilt;
+    }
+
+    /* ---- reading the format MATLAB writes today (rev. 1.221) ------------ */
+    {
+        /* A FORMAT-2 FILE MUST READ, CARRY SEVEN CHANNELS, AND GIVE THE SAME
+         * ROTATION AS THE FORMAT-1 FILE OF THE SAME PANELS. The last check is
+         * what makes the striding visible: a reader that took seven channels
+         * as six would read panel 1 out of panel 0's lod column and rotate
+         * wrongly by far more than the bound. The bound is P19c's 5e-12 on a
+         * direction cosine (1.03 uas); the two files' first six channels agree
+         * to 2.2e-17 in their coefficients, so what is left is roundoff. */
+        rsApiInterpolant one;
+        rsApiInterpolant two;
+        static double coefficientOne[64 * RS_API_MAX_QUANTITIES * 64];
+        static double coefficientTwo[64 * RS_API_MAX_QUANTITIES * 64];
+        double taiOne[64];
+        double taiTwo[64];
+        double rOne[9];
+        double rTwo[9];
+        double worstFormat = 0.0;
+        int statusOne;
+        int statusTwo;
+
+        statusTwo = rsApiReadInterpolant(fixturePath2, &two, NULL, 0, NULL, 0);
+        check(statusTwo == RS_API_OK, "the header of a format-2 file parses");
+        /* Conditional on the status, because the parser counts the quantity
+         * line before its final check: under the rev. 1.220 defect the count
+         * read 7 on a file that was then refused. */
+        check(statusTwo == RS_API_OK && two.quantityCount == RS_API_MAX_QUANTITIES,
+              "a format-2 file is read with its seven channels");
+        statusTwo = rsApiReadInterpolant(fixturePath2, &two, coefficientTwo,
+            (int)(sizeof coefficientTwo / sizeof *coefficientTwo), taiTwo, 64);
+        check(statusTwo == RS_API_OK, "the body of a format-2 file parses");
+        statusOne = rsApiReadInterpolant(fixturePath, &one, coefficientOne,
+            (int)(sizeof coefficientOne / sizeof *coefficientOne), taiOne, 64);
+
+        if (statusOne == RS_API_OK && statusTwo == RS_API_OK) {
+            for (i = 0; i < 6; i++) {
+                double mjd = firstPanel + 0.13579 + 0.61803 * (double)i;
+                check(rsApiRotation(&one, mjd, rOne) == RS_API_OK &&
+                      rsApiRotation(&two, mjd, rTwo) == RS_API_OK,
+                      "both formats rotate across the panels");
+                for (j = 0; j < 9; j++) {
+                    double d = fabs(rOne[j] - rTwo[j]);
+                    if (d > worstFormat) worstFormat = d;
+                }
+            }
+            printf("  format 2 vs format 1 : R %.3g\n", worstFormat);
+            check(worstFormat < 5.0e-12,
+                  "a format-2 file gives the rotation its format-1 twin gives");
+        }
     }
 
     /* ------------------------------------------------------------------ *
