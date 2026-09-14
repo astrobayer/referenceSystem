@@ -108,6 +108,9 @@ int main(int argc, char *argv[])
     double taiMinusUtc[PANELS];
     rsApiInterpolant interpolant;
     const double firstPanel = 57754.0;
+    /* The central-difference step of the rate check, in seconds. ONE literal,
+     * because the Rdot bound below is derived from it (D124, obligation O33). */
+    const double step = 60.0;
     double node[STRIDE];
     double sampled[6][STRIDE];
     double value[6];
@@ -185,12 +188,12 @@ int main(int argc, char *argv[])
             double omega[1];
             int sample;
 
-            check(rsApiRotationRate(&interpolant, query[i], 60.0, r, rdot)
+            check(rsApiRotationRate(&interpolant, query[i], step, r, rdot)
                   == RS_API_OK, "rsApiRotationRate succeeds inside the panels");
 
             for (sample = 0; sample < 3; sample++) {
-                double shift = ((sample == 0) ? -60.0 :
-                                ((sample == 2) ? 60.0 : 0.0)) / 86400.0;
+                double shift = ((sample == 0) ? -step :
+                                ((sample == 2) ? step : 0.0)) / 86400.0;
                 chainAt(query[i] + shift, value);
                 xp[sample] = value[3];
                 yp[sample] = value[4];
@@ -201,7 +204,7 @@ int main(int argc, char *argv[])
             }
             omega[0] = 7.292115e-5;
             rsRotationItrsToGcrs(1, &ttDay, &ttSec, &ut1Day, &ut1Sec, xp, yp,
-                zeros, zeros, omega, 2006, 1, 60.0, truthR, truthRdot, NULL);
+                zeros, zeros, omega, 2006, 1, step, truthR, truthRdot, NULL);
 
             for (j = 0; j < 9; j++) {
                 double d = fabs(r[j] - truthR[j]);
@@ -212,11 +215,28 @@ int main(int argc, char *argv[])
         }
     }
     printf("  rsApi vs the direct chain : R %.3g, Rdot %.3g\n", worst, worstRate);
-    /* 5e-12 on a direction cosine is about 1e-3 uas, four orders above the
-     * fit's own 2.6e-7 uas. It is the same limit the MATLAB end-to-end test
-     * asserts, deliberately: the two are the same claim in two languages. */
+    /* R: 5e-12 on a direction cosine is 1.03 uas (5e-12 x 2.063e11 uas/rad),
+     * not the "about 1e-3 uas, four orders above the fit's own 2.6e-7 uas"
+     * this comment said until rev. 1.218 (D124); it is 4e6 above that. It is
+     * P19c's requirement, the bound the MATLAB end-to-end tests assert on R,
+     * and it bounds the error the panels add to the chain. Measured: 1.16e-16,
+     * about one ulp of a direction cosine, from gcc on the Linux CI runner and
+     * from MinGW gcc 14.2 on Windows alike - the roundoff of the assembly sets
+     * the floor, 4.3e4 below the bound.
+     *
+     * Rdot: 5e-12/step, THE SAME CLAIM IN RATE UNITS (D123). The MATLAB tests
+     * have asserted it since rev. 1.217, and this line kept 5e-12 1/s until
+     * rev. 1.218, so "the same claim in two languages" was false for a round.
+     * Both paths difference samples at t-step and t+step, so a sample error e
+     * reaches the rate as e/step: measured 9.28e-19 1/s, against
+     * 1.16e-16/60 = 1.9e-18. No LOD term can hide here - rsApi reads no LOD
+     * channel and both paths are handed the nominal omega - so what this bound
+     * sees is a rate the two paths construct differently, which R cannot see
+     * at all. Fault-injected: rsApi's omega set 1.5 ms of excess LOD off gives
+     * Rdot 1.27e-12 with R unchanged at 1.16e-16; it passed 5e-12 and fails
+     * 5e-12/step 15 times over. */
     check(worst < 5.0e-12, "R matches the direct chain across panel boundaries");
-    check(worstRate < 5.0e-12, "Rdot matches the direct chain");
+    check(worstRate < 5.0e-12 / step, "Rdot matches the direct chain");
 
     /* Refusals. A failed call must leave the caller's array alone, or a
      * plausible stale matrix survives into an orbit. */

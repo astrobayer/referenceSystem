@@ -1402,10 +1402,28 @@ classdef TestRotation < matlab.unittest.TestCase
                     interpolant, queryMjd(k), panel);
             end
 
-            % 5e-12 rad is about 1e-3 uas, three orders above the 2.6e-7 uas
-            % section B.9.2 measured and comfortably below the 0.5 uas the
-            % builder enforces, so it fails on a broken fit and not on a
-            % compiler changing its mind about a cosine.
+            % 5e-12 rad IS 1.03 uas (5e-12 x 2.063e11 uas/rad), not the "about
+            % 1e-3 uas" this comment said until rev. 1.218 (D124) - rad to mas,
+            % labelled uas. So it is TWICE the 0.5 uas gate the builder applies
+            % at its midpoints, not below it, and 4e6 above section B.9.2's
+            % 2.6e-7 uas, not three orders.
+            %
+            % It bounds the error the panels add to each angle before the
+            % rotation, which carries an angle error about one for one into
+            % R: it is P19c's 5e-12 on R (section H.4), asserted per input.
+            % Measured on these five epochs: worst column Y, 8.4e-17 rad
+            % (1.7e-5 uas). That is the CIP series' own evaluation noise, not
+            % the fit - Y reads 8.4e-17 to 1.4e-16 at every degree from 8 to
+            % 20 - while the truncation shows in xp and yp at 8.8e-19 rad
+            % (1.8e-7 uas, B.9.2's order). 5.9e4 above that floor, it fails on
+            % a broken fit and not on a compiler changing its mind about a
+            % cosine.
+            %
+            % WHAT IT CANNOT SEE, MEASURED: degree 12 reaches xp at 9.1e-13
+            % (0.19 uas) and PASSES, as it passes the builder's own gate;
+            % degree 10 (1.4e-11) and a fit without the sub-daily tides
+            % (2.5e-9) fail. residualIsRecordedAndSmall is what tells degree 12
+            % from degree 20, not this test (obligation O8).
             testCase.verifyEqual(fitted(:, 1:5), direct(:, 1:5), 'AbsTol', 5e-12);
             testCase.verifyEqual(fitted(:, 6), direct(:, 6), 'AbsTol', 1e-10);
             % Excess LOD is seconds per day of order 1e-3 and is fitted from
@@ -1439,7 +1457,15 @@ classdef TestRotation < matlab.unittest.TestCase
 
             % The panel start is a node, so the CIP X there must match the
             % direct chain to the same roundoff, not merely to the fit
-            % tolerance. 1e-14 rad is about 2e-6 uas.
+            % tolerance. 1e-14 rad IS 2.1e-3 uas (1e-14 x 2.063e11 uas/rad),
+            % not the "about 2e-6 uas" this comment said until rev. 1.218
+            % (D124). The term it bounds is the arithmetic of the fit and of
+            % Clenshaw at u = -1, where the expansion interpolates its node
+            % exactly and no truncation enters. Measured here: 6.5e-18 rad,
+            % 30 ulp of X (1.3e-6 uas). The bound is 1.5e3 above that floor
+            % and 240 times below the 0.5 uas fit tolerance it has to be told
+            % apart from. In time it is 2.4 ms of X's motion (4.1e-12 rad/s):
+            % the same node read 1 s late measured 4.1e-12, 411 times over.
             utc = referenceSystem.daySecondToEpoch( ...
                 [interpolant.panelStartMjd(1), 0], "UTC");
             eopAt = referenceSystem.interpolateEop(eop, utc, ...
