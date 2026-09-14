@@ -83,9 +83,12 @@ echo
 "$buildDir/testIersModels" "$rootDir/test/fixtures/fundargIers.csv"
 echo
 # Both interpolant formats: arc.eopi is format 1 and arcFormat2.eopi is what
-# writeInterpolant has written since P19c (rev. 1.221).
+# writeInterpolant has written since P19c (rev. 1.221). arcFormat2Rate.csv is
+# MATLAB's rate on the latter, the truth that does not share rsApi's omega
+# (rev. 1.222).
 "$buildDir/testApi" "$rootDir/test/fixtures/arc.eopi" \
-    "$rootDir/test/fixtures/arcFormat2.eopi"
+    "$rootDir/test/fixtures/arcFormat2.eopi" \
+    "$rootDir/test/fixtures/arcFormat2Rate.csv"
 echo
 "$buildDir/testCheb"
 echo

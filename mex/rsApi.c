@@ -67,10 +67,14 @@ int rsApiPanelIndex(const rsApiInterpolant *interpolant, double mjdUtc)
  * to 6.53e-07 - small enough to look like a tolerance and entirely wrong.
  * Caught by the standalone C suite before the change left the container.
  *
- * The six quantities the rotation needs, at one epoch inside a known panel.
- * A format-2 file carries a seventh, the excess length of day; it is stridden
- * over rather than read, because nothing in this API uses it - rsApiRotationRate
- * differences rather than differentiates. */
+ * Every fitted quantity at one epoch inside a known panel: the six the rotation
+ * needs and, in a format-2 interpolant, the excess length of day as value[6].
+ * UNTIL REV. 1.222 THE SEVENTH WAS STRIDDEN OVER, on the reasoning that
+ * rsApiRotationRate "differences rather than differentiates". That named the
+ * wrong mechanism: the samples are differenced, but the ERA part of Rdot is
+ * analytic in omega, and the length of day enters only through omega. Leaving
+ * it out cost up to 1.25e-12 1/s against MATLAB on the P19c test arc (rev.
+ * 1.220). value must hold RS_API_MAX_QUANTITIES doubles. */
 static int rsApiSample(const rsApiInterpolant *ip, int panel, double mjdUtc,
                        double *value)
 {
@@ -79,7 +83,7 @@ static int rsApiSample(const rsApiInterpolant *ip, int panel, double mjdUtc,
     int channels = (ip->quantityCount > 0) ? ip->quantityCount : RS_API_QUANTITIES;
     int q;
 
-    for (q = 0; q < RS_API_QUANTITIES; q++) {
+    for (q = 0; q < channels && q < RS_API_MAX_QUANTITIES; q++) {
         const double *c = ip->coefficient +
             (size_t)((panel * channels) + q) * (size_t)stride;
         int status = rsChebEval(c, ip->degree, panelStart, ip->panelSpan,
@@ -112,7 +116,8 @@ static int rsApiRotationCore(const rsApiInterpolant *ip, double mjdUtc,
     double cipX[3];
     double cipY[3];
     double cipS[3];
-    double value[RS_API_QUANTITIES];   /* only the first six are read */
+    double value[RS_API_MAX_QUANTITIES];
+    double lengthOfDay = 0.0;          /* s; stays 0 without a lod channel */
     double localR[9];
     double localRdot[9];
     double dayShift;
@@ -164,10 +169,22 @@ static int rsApiRotationCore(const rsApiInterpolant *ip, double mjdUtc,
             ttDay[0] = floor(mjdUtc);
             ut1Sec[0] = (mjdUtc - floor(mjdUtc)) * 86400.0 + value[5];
             ut1Day[0] = floor(mjdUtc);
+            if (ip->quantityCount >= RS_API_MAX_QUANTITIES) {
+                lengthOfDay = value[6];
+            }
         }
     }
 
-    omega[0] = 7.292115e-5;
+    /* OMEGA IS MATLAB'S DEFAULT, TERM FOR TERM (rev. 1.222). rotationItrsToGcrs
+     * takes the ERA slope from earthRotationAngleRate and, with
+     * 'ApplyLengthOfDay' true, scales it by (1 - lod / secondsPerDay) at the
+     * epoch; rsEarthRotationAngleRate is the same derivation, and the lod is the
+     * same channel of the same panels. Until this revision the value here was
+     * the nominal 7.292115e-5 with no lod, and rev. 1.220 measured the two
+     * omissions at 1.467e-12 and up to 1.25e-12 1/s, partly cancelling to
+     * 5.8e-13 against MATLAB's default. Either repaired alone would have
+     * widened that gap, which is why both changed together. */
+    omega[0] = rsEarthRotationAngleRate() * (1.0 - lengthOfDay / 86400.0);
 
     status = rsRotationItrsToGcrsFromCip(1, ttDay, ttSec, ut1Day, ut1Sec,
         xp, yp, dX, dY, omega, cipX, cipY, cipS,

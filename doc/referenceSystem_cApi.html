@@ -60,7 +60,7 @@ accuracy of the fast path is reported at run time rather than assumed.</p>
 <tr><td><code>rsApiReadInterpolant</code></td><td>Read a file written by
 <code>writeInterpolant</code>. Two-call protocol; see below.</td></tr>
 <tr><td><code>rsApiInterpolantSize</code></td><td>Doubles the coefficient array
-needs: <code>(degree+1) * 6 * panelCount</code>.</td></tr>
+needs: <code>(degree+1) * quantityCount * panelCount</code>.</td></tr>
 <tr><td><code>rsApiRotation</code></td><td>The 3&times;3 rotation at one UTC MJD,
 column-major, ITRS to GCRS.</td></tr>
 <tr><td><code>rsApiRotationRate</code></td><td>The rotation and its time
@@ -90,9 +90,19 @@ then be wrong in a way that produces smooth, plausible coefficients. The version
 guards one thing: an <i>unknown</i> format is refused rather than read
 hopefully.</p>
 
-<p>The C side needs only the first six channels &mdash; the seventh feeds the
-ERA rate in MATLAB, and <code>rsApiRotationRate</code> differences rather than
-differentiates. What the count buys here is correct <b>striding</b>.</p>
+<p><b>The C reader has read format 2 only since v2.1.221</b>; MATLAB's
+<code>readInterpolant</code> always did. Until then
+<code>rsApiReadInterpolant</code> admitted format 2 at the version line and
+refused it at its final check, so every file <code>writeInterpolant</code> had
+written since v2.1.179 came back <code>RS_API_BAD_FILE</code>. The C suite read
+only a format-1 file, which is why nothing noticed; it now reads one of each.</p>
+
+<p><b>The C side uses the seventh channel since v2.1.222.</b> The excess length
+of day enters only the Earth rotation <i>rate</i>, and it enters through omega,
+not through the central difference &mdash; see
+<a href="#derivative">below</a>. Until v2.1.222 the C side read six channels,
+and its rate differed from MATLAB's default by 5.8e-13&nbsp;1/s (4&nbsp;&micro;m/s
+at 7000&nbsp;km).</p>
 
 <div class="warn">
 <p><b>If you fill in an <code>rsApiInterpolant</code> yourself</b> &mdash; as the
@@ -142,6 +152,24 @@ so the two agree. Differentiating the Chebyshev panels analytically would be
 faster and is a reasonable thing to want &mdash; it is a separate prompt, not a
 variation to be slipped in here, because the two would then disagree at a level
 nobody had measured.</p>
+
+<div class="key">
+<p><b>The Earth rotation part of the rate is not differenced.</b> It is
+analytic in omega, so omega has to be MATLAB's or the two APIs disagree whatever
+the step. Since v2.1.222 <code>rsApiRotationRate</code> uses exactly what
+<code>rotationItrsToGcrs</code> uses by default:</p>
+<pre>omega = rsEarthRotationAngleRate() * (1 - lod / 86400)</pre>
+<p><code>rsEarthRotationAngleRate</code> is the ERA slope, derived from SOFA's
+<code>iauEra00</code> by the same arithmetic as
+<code>earthRotationAngleRate</code> (decision D63). It is <b>not</b> the nominal
+7.292115e-5&nbsp;rad/s, which is 1.47e-12&nbsp;rad/s away. <code>lod</code> is the
+excess length of day in seconds, read from the panels at the epoch. A format-1
+interpolant has no <code>lod</code> channel, so lod is 0 there, which is MATLAB's
+<code>'ApplyLengthOfDay', false</code>. On the P19c test arc the C and MATLAB
+rates now agree bit for bit. <code>test/c/testApi.c</code> holds them to a
+MATLAB-computed fixture, because a C-only truth would share whatever omega the C
+side used.</p>
+</div>
 
 <h2 id="example">Worked example</h2>
 

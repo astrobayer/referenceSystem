@@ -139,6 +139,52 @@ classdef TestRotation < matlab.unittest.TestCase
             testCase.verifyEqual(info.sampleSource, "panels+series");
         end
 
+        function rotationItrsToGcrs_contract_cApiRateFixtureIsCurrent(testCase)
+            % THE C API'S RATE TRUTH MUST STILL BE WHAT MATLAB COMPUTES (rev.
+            % 1.222). test/c/testApi.c holds rsApiRotationRate to
+            % test/fixtures/arcFormat2Rate.csv, because every C-only truth
+            % shares rsApi's omega: none of them could see the nominal constant
+            % and the unread length of day that kept the C rate 5.8e-13 1/s
+            % from this function's default until rev. 1.222. That file is a
+            % truth only while this function still produces it, so this test
+            % recomputes it from the committed arcFormat2.eopi. A failure here
+            % means the interpolated rotation or rate changed: decide which
+            % side is right and regenerate the CSV as its header says, rather
+            % than widening these bounds (obligation O8).
+            %
+            % Bounds as in the C test: P19c's 5e-12 on R and 5e-12/h on Rdot
+            % (D123), with h read from the fixture (O33).
+            testCase.assumeTrue(referenceSystem.mexInfo().built, ...
+                'The MEX gateway is not built.');
+            folder = fullfile(testCase.toolboxRoot(), 'test', 'fixtures');
+            text = string(fileread(fullfile(folder, 'arcFormat2Rate.csv')));
+            lines = splitlines(strtrim(text));
+            stepLine = lines(startsWith(lines, "step "));
+            testCase.assertNumElements(stepLine, 1, 'The rate fixture names no step.');
+            step = str2double(extractAfter(stepLine, "step "));
+            rows = str2double(split(lines(~startsWith(lines, ["#", "step"])), ","));
+            testCase.assertSize(rows, [24, 19], 'The rate fixture lost rows or columns.');
+
+            interpolant = referenceSystem.readInterpolant( ...
+                string(fullfile(folder, 'arcFormat2.eopi')));
+            mjd = rows(:, 1);
+            epoch = referenceSystem.daySecondToEpoch( ...
+                [floor(mjd), (mjd - floor(mjd)) * 86400], "UTC");
+            [R, Rdot, ~, info] = referenceSystem.rotationItrsToGcrs(epoch, ...
+                'Interpolant', interpolant, 'DifferenceStep', step);
+
+            testCase.verifyEqual(info.sampleSource, "panels");
+            testCase.verifyTrue(info.lengthOfDayApplied, ...
+                'The fixture is the DEFAULT rate, which applies the length of day.');
+            expectedR = reshape(rows(:, 2:10)', 3, 3, []);
+            expectedRdot = reshape(rows(:, 11:19)', 3, 3, []);
+            testCase.log(1, sprintf(['C API rate fixture: max|dR| %.3g, ', ...
+                'max|dRdot| %.3g 1/s at h = %g s'], max(abs(R - expectedR), [], 'all'), ...
+                max(abs(Rdot - expectedRdot), [], 'all'), info.differenceStep));
+            testCase.verifyEqual(R, expectedR, 'AbsTol', 5e-12);
+            testCase.verifyEqual(Rdot, expectedRdot, 'AbsTol', 5e-12 / info.differenceStep);
+        end
+
         function rotationItrsToGcrsPartials_contract_eopIsRequired(testCase)
             % The same refusal rotationItrsToGcrs makes, for the same reason:
             % a Jacobian built from zero EOP is as plausible and as wrong as a

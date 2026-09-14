@@ -24,6 +24,7 @@
 #include "sofa/sofa.h"
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
@@ -108,6 +109,16 @@ static const char *fixturePath = "test/fixtures/arc.eopi";
  * first. */
 static const char *fixturePath2 = "test/fixtures/arcFormat2.eopi";
 
+/* MATLAB'S RATE ON THAT FILE, THE ONLY TRUTH HERE THAT DOES NOT SHARE rsApi's
+ * OMEGA (rev. 1.222). Every other rate check in this file compares rsApi with
+ * rsRotationItrsToGcrs handed the same omega, so a wrong omega passes them all -
+ * which is how a nominal constant and a missing length of day stood for forty
+ * revisions at 5.8e-13 1/s from MATLAB's default. The file holds
+ * rotationItrsToGcrs(..., 'Interpolant', ...) at its defaults, and
+ * TestRotation/rotationItrsToGcrs_contract_cApiRateFixtureIsCurrent holds MATLAB
+ * to it, so a change on either side fails a test on that side. */
+static const char *rateFixturePath = "test/fixtures/arcFormat2Rate.csv";
+
 int main(int argc, char *argv[])
 {
     if (argc > 1) {
@@ -115,6 +126,9 @@ int main(int argc, char *argv[])
     }
     if (argc > 2) {
         fixturePath2 = argv[2];
+    }
+    if (argc > 3) {
+        rateFixturePath = argv[3];
     }
     static double coefficient[PANELS * 6 * STRIDE];
     double taiMinusUtc[PANELS];
@@ -214,7 +228,9 @@ int main(int argc, char *argv[])
                     ut1Sec = (query[i] - ttDay) * 86400.0 + value[5];
                 }
             }
-            omega[0] = 7.292115e-5;
+            /* The omega rsApi takes for a six-channel interpolant (rev. 1.222):
+             * the ERA slope, with no length of day to apply. */
+            omega[0] = rsEarthRotationAngleRate();
             rsRotationItrsToGcrs(1, &ttDay, &ttSec, &ut1Day, &ut1Sec, xp, yp,
                 zeros, zeros, omega, 2006, 1, step, truthR, truthRdot, NULL);
 
@@ -241,10 +257,13 @@ int main(int argc, char *argv[])
      * rev. 1.218, so "the same claim in two languages" was false for a round.
      * Both paths difference samples at t-step and t+step, so a sample error e
      * reaches the rate as e/step: measured 9.28e-19 1/s, against
-     * 1.16e-16/60 = 1.9e-18. No LOD term can hide here - rsApi reads no LOD
-     * channel and both paths are handed the nominal omega - so what this bound
-     * sees is a rate the two paths construct differently, which R cannot see
-     * at all. Fault-injected: rsApi's omega set 1.5 ms of excess LOD off gives
+     * 1.16e-16/60 = 1.9e-18. No LOD term can hide here - the interpolant built
+     * above has six channels, so rsApi has no lod to apply, and both paths are
+     * handed the same ERA slope (the nominal omega until rev. 1.222) - so what
+     * this bound sees is a rate the two paths construct differently, which R
+     * cannot see at all. Because both paths share that omega, this block cannot
+     * tell a wrong omega from a right one; the MATLAB rate fixture below can.
+     * Fault-injected: rsApi's omega set 1.5 ms of excess LOD off gives
      * Rdot 1.27e-12 with R unchanged at 1.16e-16; it passed 5e-12 and fails
      * 5e-12/step 15 times over. */
     check(worst < 5.0e-12, "R matches the direct chain across panel boundaries");
@@ -381,6 +400,70 @@ int main(int argc, char *argv[])
             printf("  format 2 vs format 1 : R %.3g\n", worstFormat);
             check(worstFormat < 5.0e-12,
                   "a format-2 file gives the rotation its format-1 twin gives");
+        }
+
+        /* ---- and it must give MATLAB's RATE (rev. 1.222) ---------------- */
+        if (statusTwo == RS_API_OK) {
+            /* Bounds as everywhere else in this file: 5e-12 on R, P19c's
+             * requirement, and 5e-12/step on Rdot, the same claim in rate
+             * units (D123), with the step read from the fixture rather than
+             * written here a second time (O33). Measured when the fixture was
+             * written, MinGW gcc against the MATLAB MEX on one host: 0 and 0,
+             * bit for bit. Before rev. 1.222 the rate missed by 5.8e-13, 23
+             * times this bound at step 200 s: 1.467e-12 from the nominal omega
+             * and up to 1.25e-12 from the unread length of day, partly
+             * cancelling. */
+            FILE *rates = fopen(rateFixturePath, "r");
+            char line[1024];
+            double rateStep = 0.0;
+            double worstMatlabR = 0.0;
+            double worstMatlabRdot = 0.0;
+            int rows = 0;
+            int rowsOk = 1;
+
+            check(rates != NULL, "the MATLAB rate fixture opens");
+            while (rates != NULL && fgets(line, (int)sizeof line, rates) != NULL) {
+                double field[19];
+                double rApi[9];
+                double rdotApi[9];
+                char *cursor = line;
+                char *end;
+                int n = 0;
+
+                if (line[0] == '#') continue;
+                if (sscanf(line, "step %lf", &rateStep) == 1) continue;
+                while (n < 19) {
+                    field[n] = strtod(cursor, &end);
+                    if (end == cursor) break;
+                    n++;
+                    cursor = (*end == ',') ? end + 1 : end;
+                }
+                if (n != 19 || !(rateStep > 0.0)) {
+                    rowsOk = 0;
+                    continue;
+                }
+                if (rsApiRotationRate(&two, field[0], rateStep, rApi, rdotApi)
+                    != RS_API_OK) {
+                    rowsOk = 0;
+                    continue;
+                }
+                for (j = 0; j < 9; j++) {
+                    double d = fabs(rApi[j] - field[1 + j]);
+                    if (d > worstMatlabR) worstMatlabR = d;
+                    d = fabs(rdotApi[j] - field[10 + j]);
+                    if (d > worstMatlabRdot) worstMatlabRdot = d;
+                }
+                rows++;
+            }
+            if (rates != NULL) {
+                fclose(rates);
+            }
+            printf("  rsApi vs MATLAB's rate : R %.3g, Rdot %.3g over %d epochs, step %g\n",
+                   worstMatlabR, worstMatlabRdot, rows, rateStep);
+            check(rowsOk && rows == 24, "every row of the MATLAB rate fixture is evaluated");
+            check(rows > 0 && worstMatlabR < 5.0e-12, "R matches MATLAB's interpolated R");
+            check(rows > 0 && worstMatlabRdot < 5.0e-12 / rateStep,
+                  "Rdot matches MATLAB's default interpolated Rdot");
         }
     }
 
