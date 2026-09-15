@@ -653,6 +653,15 @@ classdef TestRotation < matlab.unittest.TestCase
             rate = referenceSystem.earthRotationAngleRate();
             constants = referenceSystem.iersConstants();
 
+            % THE VALUE IS LOGGED, BECAUSE THE HELP QUOTES IT (rev. 1.227, H.11
+            % item 11). Until then both help blocks quoted 7.292115146705669e-5,
+            % which is 1.31e-17 from the exact value and would fail the 1e-17
+            % below - so it was a transcription, not a reading from any host
+            % this suite passes on. The log is how each runner's reading reaches
+            % the record.
+            testCase.log(1, sprintf(['earthRotationAngleRate = %.16e rad/s, ', ...
+                '%.3g from the defining 7.292115146706979e-5'], rate, ...
+                rate - constants.eraRatePerUt1Second));
             testCase.verifyEqual(rate, 7.292115146706979e-5, 'AbsTol', 1e-17, ...
                 'The rate must be the defining rate of advance of ERA.');
             testCase.verifyGreaterThan( ...

@@ -47,9 +47,13 @@ function rate = earthRotationAngleRate()
 %   small enough that no wrap of iauEra00 into [0, 2*pi) can fall inside it.
 %
 % ACCURACY
-%   Measured 7.292115146705669e-5 rad/s against the exact defining value
-%   7.292115146706979e-5, a difference of 1.3e-18 rad/s carried entirely by the
-%   differencing interval. At 7000 km that is 9 picometres per second.
+%   Measured 7.292115146706913e-5 rad/s on R2026a/PCWIN64 against the exact
+%   defining value 7.292115146706979e-5 (iersConstants.eraRatePerUt1Second): a
+%   difference of 6.8e-19 rad/s, the rounding of two angles of order unity
+%   divided by the 1000 s interval, and 4.7 picometres per second at 7000 km.
+%   The reference test logs the reading on every host and holds it to 1e-17.
+%   Until rev. 1.227 this block quoted 7.292115146705669e-5 and "1.3e-18"; that
+%   number is 1.31e-17 from exact, fails the test, and was a transcription.
 %
 % ERRORS
 %   referenceSystem:earthRotationAngleRate:gatewayMissing

@@ -77,10 +77,11 @@ function [era, eraRate] = earthRotationAngle(epoch, options)
 %   Delta UT1: of order 10 us for an IERS C04 series, which is 7.3e-10 rad of
 %   rotation, or 4.6 mm at the equator.
 %
-%   The derived rate measures 7.292115146705669e-5 rad/s against the exact
-%   7.292115146706979e-5, a difference of 1.3e-18 rad/s carried by the
-%   1000 s differencing interval. At 7000 km that is 9 picometres per second,
-%   eleven orders below the LOD term it sits beside.
+%   The derived rate measures 7.292115146706913e-5 rad/s on R2026a/PCWIN64
+%   against the exact 7.292115146706979e-5, a difference of 6.8e-19 rad/s
+%   carried by the 1000 s differencing interval. At 7000 km that is 4.7
+%   picometres per second, six orders below the LOD term it sits beside. See
+%   earthRotationAngleRate, which states the reading on every host it has.
 %
 % ERRORS
 %   referenceSystem:earthRotationAngle:wrongScale
