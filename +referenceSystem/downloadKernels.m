@@ -160,6 +160,10 @@ function manifest = downloadKernels(options)
 %   referenceSystem:downloadKernels:cacheNotWritable
 %   referenceSystem:downloadKernels:badCatalogue
 %   referenceSystem:downloadKernels:leapSecondKernelInCatalogue
+%   referenceSystem:downloadKernels:notReachable
+%       Raised for one catalogue entry in Mode "verify" when the server does
+%       not answer OK, and caught: that row's Status reads "FAILED | " and the
+%       message, and incompleteFetch is warned. It never leaves the function.
 %
 % WARNINGS
 %   referenceSystem:downloadKernels:incompleteFetch

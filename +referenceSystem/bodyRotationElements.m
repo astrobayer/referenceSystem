@@ -134,6 +134,7 @@ function [rightAscension, declination, primeMeridian, info] = ...
 %   is the kind of thing only a check against an outside quantity can tell you.
 %
 % ERRORS
+%   referenceSystem:bodyRotationElements:unknownSource
 %   referenceSystem:bodyRotationElements:unknownBody
 %   referenceSystem:bodyRotationElements:earthNotTabulated
 %       The 2015 report REMOVED the approximate expressions for the Earth

@@ -122,14 +122,25 @@ function [results, reportFile, summary] = runTestSuite(options)
 %
 % ERRORS
 %   referenceSystem:runTestSuite:testFolderMissing
-%
-% WARNINGS
-%   None raised by this function. It RECORDS the warnings raised by the tests
-%   it runs, in the WARNINGS section of the report; see WarningRecordingPlugin.
 %       The test folder is not where the package expects it, next to the
 %       package folder. Reinstall the toolbox as one distribution folder.
 %   referenceSystem:runTestSuite:cannotWriteReport
 %       The report file could not be opened for writing.
+%   referenceSystem:runTestSuite:packageNotResolvable
+%       The referenceSystem namespace does not resolve, so no test could
+%       reach the toolbox; the suite is not run.
+%   referenceSystem:runTestSuite:testClassExcluded
+%       A test class contributed no tests. Raised after the report is
+%       written, so the results that did run can still be read.
+%
+% WARNINGS
+%   referenceSystem:runTestSuite:missingReportLine
+%       A report block produced a missing string; the line is marked and the
+%       rest of the report is written.
+%   referenceSystem:runTestSuite:controlCharacterInReport
+%       A report line carried a control character; it is replaced by a space.
+%   The warnings raised BY THE TESTS are recorded in the report's own WARNINGS
+%   section, not raised again; see WarningRecordingPlugin.
 %
 % REFERENCES
 %   Handover section D.1 (test categories), D.2 (structure), D.3 (this report).

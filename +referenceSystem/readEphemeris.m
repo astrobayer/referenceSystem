@@ -190,7 +190,7 @@ function ephemeris = readEphemeris(kernelFile, options)
         absolutePath, options.ExpectedEphemeris, options.AllowGenerations);
 
     % Loaded last, after every refusal above, in place of the previous set.
-    ephemerisPool("furnish", absolutePath);
+    localFurnish(absolutePath);
 
     ephemeris = struct('meta', struct( ...
         'file', absolutePath, ...
@@ -203,6 +203,25 @@ function ephemeris = readEphemeris(kernelFile, options)
 end
 
 % =========================== local functions ===========================
+
+function localFurnish(absolutePath)
+%LOCALFURNISH Unload the set loaded last, then load this one.
+%   The record is this function's own: only readEphemeris furnishes kernels
+%   (decision D26), so only it can know what it loaded. Kernels loaded outside
+%   this toolbox are left alone.
+    persistent furnished
+    if isempty(furnished)
+        furnished = strings(0, 1);
+    end
+    for k = 1:numel(furnished)
+        cspice_unload(char(furnished(k)));
+    end
+    furnished = strings(0, 1);
+    for k = 1:numel(absolutePath)
+        cspice_furnsh(char(absolutePath(k)));
+        furnished(end + 1, 1) = absolutePath(k); %#ok<AGROW> a handful of kernels
+    end
+end
 
 function localRefuseLeapSecondKernel(kernelFile)
 %LOCALREFUSELEAPSECONDKERNEL Decision D89, enforced rather than documented.

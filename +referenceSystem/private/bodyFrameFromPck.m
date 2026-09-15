@@ -93,7 +93,7 @@ function [rotation, rightAscension, declination, primeMeridian] = ...
             'and cspice_pxform was not found. Source "iau" is bundled and ', ...
             'needs nothing, but covers WGCCRE Table 1 only.']);
     end
-    ephemerisPool("require", ephemeris, functionName);
+    requireFurnished(ephemeris, functionName);
 
     if frameName == ""
         frameName = "IAU_" + upper(body);

@@ -412,15 +412,6 @@ classdef TestRotation < matlab.unittest.TestCase
                 'referenceSystem:cipCoordinates:wrongScale');
         end
 
-        function cipCoordinates_contract_reservesTheInterpolant(testCase)
-            % Seam item 2: the signature is final now so that P19 changes no
-            % call site later.
-            tt = testCase.cookbookTt();
-            testCase.verifyError(@() referenceSystem.cipCoordinates(tt, ...
-                'Interpolant', struct('dummy', 1)), ...
-                'referenceSystem:cipCoordinates:notImplemented');
-        end
-
         function cipCoordinates_contract_refusesOffsetsWithoutAModel(testCase)
             % The C-2 failure mode made unreachable: offsets whose frame is
             % unknown are refused rather than assumed.

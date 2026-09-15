@@ -707,6 +707,32 @@ def check_reference_page_bodies_match_the_help(files):
                          name, section))
 
 
+def check_raised_identifiers_are_documented(filename, text):
+    """Every identifier a file raises is in that file's own ERRORS or WARNINGS.
+
+    The check above collected raised and documented identifiers and compared
+    only their shape and owner, so an error raised and never listed passed:
+    rotationItrsToGcrs raised cipModelMismatch for months with no line in its
+    ERRORS block, and runTestSuite listed its error cannotWriteReport under a
+    WARNINGS paragraph dropped into the middle of ERRORS. A caller catching
+    errors by the documented list misses both. The sections are cut exactly as
+    buildDocumentation cuts them, so what is checked is what the reference page
+    shows. Identifiers built with sprintf are not literals and are not seen.
+    """
+    sections = _help_sections(text)
+    # Comment lines out, literals kept: the identifier IS a literal.
+    code = '\n'.join(line for line in text.split('\n')
+                     if not line.strip().startswith('%'))
+    for kind, section in (('error', 'ERRORS'), ('warning', 'WARNINGS')):
+        listed = sections.get(section, '')
+        pattern = r"\b%s\(\s*'(referenceSystem:[A-Za-z0-9_:]+)'" % kind
+        for identifier in sorted(set(re.findall(pattern, code))):
+            if not re.search(re.escape(identifier) + r'(?![A-Za-z0-9_])', listed):
+                fail('%sId/undocumented' % kind,
+                     '%s raises %s, which its %s block does not list' % (
+                         filename, identifier, section))
+
+
 def _help_sections(text):
     """Help sections exactly as buildDocumentation cuts them (rev. 1.228)."""
     # localHelpBlock: the contiguous comment block after the function line,
@@ -923,6 +949,7 @@ def main():
             owner = identifier.split(':')[1]
             if owner != name and owner != 'mex':
                 fail('errorId/function', '%s raises %s' % (filename, identifier))
+        check_raised_identifiers_are_documented(filename, text)
 
         body = code_only(text)
         signature = re.search(r'^\s*function\b[^\n]*?\(([^)]*)\)', body, re.M)
