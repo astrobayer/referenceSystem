@@ -129,6 +129,12 @@ static const char *fixturePath2 = "test/fixtures/arcFormat2.eopi";
  * to it, so a change on either side fails a test on that side. */
 static const char *rateFixturePath = "test/fixtures/arcFormat2Rate.csv";
 
+/* MATLAB'S ROTATION AND RATE ON THE SAME FILE AT A DAY AND A SECOND (rev.
+ * 1.236), the truth for rsApiRotationRateDaySecond.
+ * TestRotation/rotationItrsToGcrs_contract_cApiDaySecondFixtureIsCurrent holds
+ * MATLAB to it. */
+static const char *daySecondFixturePath = "test/fixtures/arcFormat2DaySecond.csv";
+
 int main(int argc, char *argv[])
 {
     if (argc > 1) {
@@ -139,6 +145,9 @@ int main(int argc, char *argv[])
     }
     if (argc > 3) {
         rateFixturePath = argv[3];
+    }
+    if (argc > 4) {
+        daySecondFixturePath = argv[4];
     }
     static double coefficient[PANELS * 6 * STRIDE];
     double taiMinusUtc[PANELS];
@@ -505,6 +514,168 @@ int main(int argc, char *argv[])
                 check(rsApiRotationRate(&two, 57753.0 + 86199.5 / 86400.0, 200.0,
                                         sentinelR, sentinelRdot) == RS_API_OK,
                       "one second earlier the shoulder is clear of it and is taken");
+            }
+
+            /* ---- the day-and-second form, against MATLAB (rev. 1.236) -- */
+            /* THE SAME TRUTH, AT SECONDS AN MJD DOUBLE CANNOT NAME. Bounds as
+             * above, 5e-12 on R and RATE_BUDGET on Rdot, step from the file.
+             * Measured when the fixture was written, MinGW gcc against the
+             * MATLAB MEX: 0 and 0, bit for bit. The same rows are put through
+             * the MJD form as well, and it must MISS them. It missed by
+             * 2.15e-11 on R and 1.57e-15 1/s on Rdot at the arc rows, and by
+             * 7.17e-5 rad 0.2 us before 23:59:60, where the nearest MJD double
+             * is the next day's 0h, a second later. A fixture both forms
+             * passed could not show what this form is for. */
+            {
+                FILE *fixture = fopen(daySecondFixturePath, "r");
+                char line[1024];
+                double fixtureStep = 0.0;
+                double worstDayR = 0.0;
+                double worstDayRdot = 0.0;
+                double worstMjdR = 0.0;
+                double worstMjdRdot = 0.0;
+                double worstArcR = 0.0;       /* the MJD form, rows 7-21 only */
+                double worstArcRdot = 0.0;
+                int rows = 0;
+                int dataLines = 0;
+                int rowsOk = 1;
+
+                check(fixture != NULL, "the day-and-second fixture opens");
+                while (fixture != NULL && fgets(line, (int)sizeof line, fixture) != NULL) {
+                    double field[20];
+                    double rApi[9];
+                    double rdotApi[9];
+                    char *cursor = line;
+                    char *end;
+                    int n = 0;
+
+                    if (line[0] == '#') continue;
+                    if (sscanf(line, "step %lf", &fixtureStep) == 1) continue;
+                    dataLines++;
+                    while (n < 20) {
+                        field[n] = strtod(cursor, &end);
+                        if (end == cursor) break;
+                        n++;
+                        cursor = (*end == ',') ? end + 1 : end;
+                    }
+                    if (n != 20 || !(fixtureStep > 0.0)) {
+                        rowsOk = 0;
+                        continue;
+                    }
+                    if (rsApiRotationRateDaySecond(&two, field[0], field[1],
+                            fixtureStep, rApi, rdotApi) != RS_API_OK) {
+                        rowsOk = 0;
+                        continue;
+                    }
+                    for (j = 0; j < 9; j++) {
+                        double d = fabs(rApi[j] - field[2 + j]);
+                        if (d > worstDayR) worstDayR = d;
+                        d = fabs(rdotApi[j] - field[11 + j]);
+                        if (d > worstDayRdot) worstDayRdot = d;
+                    }
+                    if (rsApiRotationRate(&two, field[0] + field[1] / 86400.0,
+                            fixtureStep, rApi, rdotApi) == RS_API_OK) {
+                        for (j = 0; j < 9; j++) {
+                            double d = fabs(rApi[j] - field[2 + j]);
+                            if (d > worstMjdR) worstMjdR = d;
+                            if (rows >= 6 && d > worstArcR) worstArcR = d;
+                            d = fabs(rdotApi[j] - field[11 + j]);
+                            if (d > worstMjdRdot) worstMjdRdot = d;
+                            if (rows >= 6 && d > worstArcRdot) worstArcRdot = d;
+                        }
+                    }
+                    rows++;
+                }
+                if (fixture != NULL) {
+                    fclose(fixture);
+                }
+                printf("  day-second form vs MATLAB : R %.3g, Rdot %.3g over %d epochs, step %g\n",
+                       worstDayR, worstDayRdot, rows, fixtureStep);
+                printf("  MJD form on the same rows : R %.3g, Rdot %.3g; arc rows R %.3g, Rdot %.3g\n",
+                       worstMjdR, worstMjdRdot, worstArcR, worstArcRdot);
+                check(rowsOk && rows > 0 && rows == dataLines,
+                      "every row of the day-and-second fixture is evaluated");
+                check(rows > 0 && worstDayR < 5.0e-12,
+                      "the day-and-second form gives MATLAB's R");
+                check(rows > 0 && worstDayRdot < RATE_BUDGET,
+                      "the day-and-second form gives MATLAB's Rdot");
+                /* The arc rows on their own, so that the second lost before
+                 * 23:59:60 cannot pass this check by itself. */
+                check(worstArcR > 5.0e-12 && worstArcRdot > RATE_BUDGET,
+                      "the MJD form misses the arc rows, so the fixture tells the forms apart");
+                check(worstMjdR > 1.0e-6,
+                      "the MJD form loses a whole second of rotation just before a leap second");
+            }
+
+            /* ---- what the day-and-second form refuses and carries -------- */
+            {
+                double sentinel[9];
+                double sentinelDot[9];
+                double carried[9];
+                double named[9];
+                int same = 1;
+                for (j = 0; j < 9; j++) {
+                    sentinel[j] = -1.0;
+                    sentinelDot[j] = -1.0;
+                }
+                check(rsApiRotationDaySecond(&two, 57753.0, 86400.5, sentinel)
+                      == RS_API_OUT_OF_RANGE,
+                      "23:59:60.5 is refused: the panels cannot represent it");
+                check(rsApiRotationDaySecond(&two, 57754.0, -0.5, sentinel)
+                      == RS_API_OUT_OF_RANGE,
+                      "a negative second carried back into the leap second is refused");
+                check(rsApiRotationRateDaySecond(&two, 57753.0, 86200.5, 200.0,
+                          sentinel, sentinelDot) == RS_API_OUT_OF_RANGE,
+                      "a shoulder carried into the leap second is refused");
+                check(rsApiRotationDaySecond(&two, 57752.0, -1.0, sentinel)
+                      == RS_API_OUT_OF_RANGE,
+                      "a second carried before the first panel is out of range");
+                check(rsApiRotationDaySecond(&two, 57753.5, 0.0, sentinel)
+                      == RS_API_BAD_EPOCH,
+                      "a day that is not a whole number is a bad epoch");
+                check(rsApiRotationDaySecond(&two, 57753.0, NAN, sentinel)
+                      == RS_API_BAD_EPOCH
+                      && rsApiRotationDaySecond(&two, HUGE_VAL, 0.0, sentinel)
+                      == RS_API_BAD_EPOCH,
+                      "a day or second that is not finite is a bad epoch");
+                check(sentinel[0] == -1.0 && sentinelDot[0] == -1.0,
+                      "a refused day and second leave the outputs untouched");
+                check(rsApiRotationDaySecond(NULL, 57753.0, 0.0, sentinel)
+                      == RS_API_NULL_ARGUMENT,
+                      "the day-and-second form checks its interpolant first");
+                /* 86400.5 s into an ordinary day is 0.5 s into the next. */
+                if (rsApiRotationDaySecond(&two, 57755.0, 86400.5, carried) == RS_API_OK
+                    && rsApiRotationDaySecond(&two, 57756.0, 0.5, named) == RS_API_OK) {
+                    for (j = 0; j < 9; j++) {
+                        if (carried[j] != named[j]) same = 0;
+                    }
+                } else {
+                    same = 0;
+                }
+                check(same, "a second past an ordinary day is carried into the next, bit for bit");
+                /* ACROSS THE LEAP SECOND THE CARRY IS WHAT KEEPS UT1 RIGHT.
+                 * Uncarried, -1.5 s on 57754 reads the right panel but forms
+                 * UT1 from the wrong day's label, a second off; the ordinary day
+                 * above cannot see that, and a fault that skipped the carry
+                 * passed it. 86401.5 s on 57753 is 0.5 s into 57754. */
+                same = 1;
+                if (rsApiRotationDaySecond(&two, 57754.0, -1.5, carried) == RS_API_OK
+                    && rsApiRotationDaySecond(&two, 57753.0, 86399.5, named) == RS_API_OK) {
+                    for (j = 0; j < 9; j++) {
+                        if (carried[j] != named[j]) same = 0;
+                    }
+                } else {
+                    same = 0;
+                }
+                if (rsApiRotationDaySecond(&two, 57753.0, 86401.5, carried) == RS_API_OK
+                    && rsApiRotationDaySecond(&two, 57754.0, 0.5, named) == RS_API_OK) {
+                    for (j = 0; j < 9; j++) {
+                        if (carried[j] != named[j]) same = 0;
+                    }
+                } else {
+                    same = 0;
+                }
+                check(same, "a second carried across the leap second lands on its own side, bit for bit");
             }
         }
     }

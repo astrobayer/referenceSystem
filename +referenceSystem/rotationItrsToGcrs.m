@@ -190,7 +190,11 @@ function [R, Rdot, Rddot, info] = rotationItrsToGcrs(epoch, options)
 %   by UTC MJD, which the second 23:59:60 of a leap-second day does not have,
 %   so on the interpolated path a sample inside a leap second - the epoch or
 %   either difference shoulder - is refused with insideLeapSecond; the direct
-%   path takes it as it takes any other epoch (rev. 1.226).
+%   path takes it as it takes any other epoch (rev. 1.226). Until rev. 1.235
+%   both paths turned the Earth one second ahead through that second, and in
+%   the last 0.3 us before it, where day + sec/86400 rounds up to the next
+%   day: 7.2e-5 rad. interpolateEop took UT1 - UTC in the next day's
+%   convention there, and the interpolated path read the next day's panel.
 %
 %   SINGLE-EPOCH PATH. With N = 1 the outputs are 3x3, because MATLAB drops a
 %   trailing singleton dimension, and no interpolation object, temporary array
@@ -741,7 +745,15 @@ function [cipX, cipY, cipS, sampled] = localSampleInterpolant(interpolant, ...
             sampleUtc.day(find(inside, 1)));
     end
 
-    mjd = sampleUtc.day + sampleUtc.sec / 86400;
+    % AND A SAMPLE IN THE LAST 0.3 us OF ITS DAY STAYS ON THAT DAY (rev. 1.235).
+    % There day + sec/86400 rounds up to the next whole MJD, and a panel is
+    % chosen by MJD. Before a leap second, the next panel's dut1 is a second
+    % higher while the UT1 conversion below keeps this day's label, so the
+    % Earth turned a second ahead: 7.2e-5 rad, measured at 2017-01-01 minus
+    % 2e-7 s. The largest double below the next day keeps the panel, and
+    % moves the argument by at most one unit in the last place.
+    nextDay = sampleUtc.day + 1;
+    mjd = min(sampleUtc.day + sampleUtc.sec / 86400, nextDay - eps(nextDay));
 
     % Epochs are grouped by panel so that each panel is evaluated in one
     % vectorised call. discretize returns NaN outside the covered span, which

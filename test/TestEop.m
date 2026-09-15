@@ -475,6 +475,39 @@ classdef TestEop < matlab.unittest.TestCase
                 'means the leap second was not applied at all.']);
         end
 
+        function interpolateEop_precision_ut1MinusUtcHoldsItsDayThroughTheLeapSecond(testCase)
+            % THE STEP IN UT1 - UTC BELONGS AT 0h, AND UNTIL REV. 1.235 IT CAME A
+            % SECOND EARLY. The leap-second count was read at day + sec/86400,
+            % which lands 23:59:60.x on the next day, and so do the last 0.3 us
+            % before it, where an MJD double rounds up. There dut1 came back a
+            % second high, UT1 = UTC + dut1 ran a second ahead, and the
+            % rotation was off by 7.2e-5 rad. The test above could not see it:
+            % its samples are 600 s apart and none lies in that second.
+            %
+            % THE TOLERANCE IS ONE MICROSECOND, and the error it separates from
+            % the defect is the change UT1 - UTC itself makes within one second
+            % of the leap: the day's excess length of day, about 1 ms per day,
+            % moves it by about 1e-8 s per second. The defect is a whole second.
+            % Both are logged.
+            eop = referenceSystem.readEop(testCase.fixture('eop20c04.txt'));
+            leapDay = TestEop.LeapDayMjd;
+            label = [leapDay, 86399.5; leapDay, 86400 - 2e-7; leapDay, 86400.5; ...
+                leapDay + 1, 0.5];
+            utc = referenceSystem.daySecondToEpoch(label, "UTC");
+
+            dut1 = referenceSystem.interpolateEop(eop, utc).dut1;
+
+            sameDay = dut1(2:3) - dut1(1);
+            testCase.log(1, sprintf(['dut1 minus its 23:59:59.5 value: %.3g s ', ...
+                '0.2 us before 23:59:60, %.3g s at 23:59:60.5; step at 0h %.9f s'], ...
+                sameDay(1), sameDay(2), dut1(4) - dut1(3)));
+            testCase.verifyEqual(sameDay, [0; 0], 'AbsTol', 1e-6, ...
+                ['UT1 - UTC changed convention before 0h: the leap-second count ', ...
+                'is being read at day + sec/86400 rather than on the day.']);
+            testCase.verifyEqual(dut1(4) - dut1(3), 1, 'AbsTol', 1e-6, ...
+                'UT1 - UTC must step by the whole leap second at 0h.');
+        end
+
         function interpolateEop_precision_theUtcTrimIsNeutral(testCase)
             % THE WHOLE CLAIM OF THE REPAIR, IN ONE ASSERTION: dropping the
             % pre-1972 rows inside the function gives exactly what the caller

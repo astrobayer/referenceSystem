@@ -61,6 +61,7 @@ extern "C" {
 #define RS_API_INTERNAL        4
 #define RS_API_BAD_FILE        5   /* unreadable, wrong version, malformed   */
 #define RS_API_BUFFER_TOO_SMALL 6  /* see rsApiInterpolantSize               */
+#define RS_API_BAD_EPOCH       7   /* day not whole, or not finite (rev. 1.236) */
 
 /*
  * A set of Chebyshev panels and the constants needed to turn UTC into the two
@@ -108,6 +109,15 @@ typedef struct {
  *
  * Returns RS_API_OK, or one of the codes above. On anything but OK, r is
  * untouched: a failed call cannot be mistaken for a computed matrix.
+ *
+ * AN MJD DOUBLE RESOLVES 0.63 us NEAR THE PRESENT. The rotation is exactly what
+ * the MJD names, but the instant the caller meant can be half of that away, and
+ * the Earth turns 2.3e-11 rad in that: 4.6 times P19c's 5e-12. Measured against
+ * MATLAB, 2.15e-11 on R and 1.57e-15 1/s on Rdot. In the last 0.3 us before a
+ * leap second the nearest MJD is the next day's 0h, a whole SI second later,
+ * and the rotation is 7.2e-5 rad out. An integrator that carries its time as a
+ * day and a second should call rsApiRotationDaySecond below, which has neither
+ * limit.
  */
 int rsApiRotation(const rsApiInterpolant *interpolant, double mjdUtc,
                   double *r);
@@ -141,6 +151,36 @@ int rsApiRotation(const rsApiInterpolant *interpolant, double mjdUtc,
  */
 int rsApiRotationRate(const rsApiInterpolant *interpolant, double mjdUtc,
                       double step, double *r, double *rdot);
+
+/*
+ * The same two, at a UTC epoch given as a day and a second (rev. 1.236), the
+ * form referenceSystem.rotationItrsToGcrs takes. For the same day and second
+ * the matrices are MATLAB's: the difference shoulders are built and carried as
+ * MATLAB builds them, and the panels are read at the same MJD.
+ *
+ *   dayUtc   UTC Modified Julian Date of the day, a whole number
+ *   secUtc   UTC seconds since 0h of that day. Values outside [0, 86400) are
+ *            carried into the neighbouring days as daySecondToEpoch carries
+ *            them, with a day 86401 s long before a leap second. That makes
+ *            [86400, 86401) on such a day the leap second itself.
+ *
+ * WHY A SECOND FORM. UT1 is formed from the second itself, so this form does
+ * not have the MJD form's 0.63 us limit. The panels are still read at
+ * day + sec/86400, as MATLAB reads them. In 0.63 us the fastest fitted angle,
+ * X under precession at 3.1e-12 rad/s, moves 1.9e-18 rad, against 4.6e-11 for
+ * the Earth rotation angle, so only the angle needed the second.
+ *
+ * An epoch or shoulder inside a leap second returns RS_API_OUT_OF_RANGE, as
+ * rsApiRotationRate describes. So does one outside the panels. A day that is
+ * not a whole number, or a day or second that is not finite, returns
+ * RS_API_BAD_EPOCH.
+ */
+int rsApiRotationDaySecond(const rsApiInterpolant *interpolant, double dayUtc,
+                           double secUtc, double *r);
+
+int rsApiRotationRateDaySecond(const rsApiInterpolant *interpolant,
+                               double dayUtc, double secUtc, double step,
+                               double *r, double *rdot);
 
 /*
  * The index of the panel containing an epoch, or -1 if none does.
