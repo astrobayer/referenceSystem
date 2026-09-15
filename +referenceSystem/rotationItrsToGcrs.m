@@ -186,7 +186,11 @@ function [R, Rdot, Rddot, info] = rotationItrsToGcrs(epoch, options)
 %   midnight slope discontinuity that piecewise linear EOP interpolation puts
 %   into a variable-step integrator's right-hand side. A format-2 interpolant
 %   also carries the excess length of day, so no series is read at all (P19c);
-%   info.sampleSource records which of the three cases ran.
+%   info.sampleSource records which of the three cases ran. Panels are indexed
+%   by UTC MJD, which the second 23:59:60 of a leap-second day does not have,
+%   so on the interpolated path a sample inside a leap second - the epoch or
+%   either difference shoulder - is refused with insideLeapSecond; the direct
+%   path takes it as it takes any other epoch (rev. 1.226).
 %
 %   SINGLE-EPOCH PATH. With N = 1 the outputs are 3x3, because MATLAB drops a
 %   trailing singleton dimension, and no interpolation object, temporary array
@@ -251,6 +255,7 @@ function [R, Rdot, Rddot, info] = rotationItrsToGcrs(epoch, options)
 %   referenceSystem:rotationItrsToGcrs:badInterpolant
 %   referenceSystem:rotationItrsToGcrs:tidalMismatch
 %   referenceSystem:rotationItrsToGcrs:outsideInterpolant
+%   referenceSystem:rotationItrsToGcrs:insideLeapSecond
 %   referenceSystem:rotationItrsToGcrs:badDifferenceStep
 %   referenceSystem:rotationItrsToGcrs:gatewayMissing
 %
@@ -717,6 +722,24 @@ function [cipX, cipY, cipS, sampled] = localSampleInterpolant(interpolant, ...
 %   sampled dX and dY in place would apply them a second time, and the error
 %   would be a few hundred microarcseconds: too small to look like a bug and
 %   far too large to ignore.
+
+    % A SAMPLE INSIDE A LEAP SECOND HAS NO MJD OF ITS OWN (rev. 1.226). UTC
+    % 23:59:60.x is second 86400.x of its day, and day + sec/86400 lands it in
+    % the NEXT panel, one second late in every fitted channel. Measured at
+    % 23:59:60.5 on 2017-01-01 against the direct path: 4.5e-12 on R, inside
+    % P19c's bound, but 3.3e-16 1/s on Rdot, over D28's 1 nm/s at 7000 km.
+    % Refused rather than returned: the direct path handles the second, and so
+    % does a DifferenceStep that keeps the shoulders out of it.
+    inside = sampleUtc.sec >= 86400;
+    if any(inside)
+        error('referenceSystem:rotationItrsToGcrs:insideLeapSecond', ...
+            ['%d of %d sample epochs fall inside the leap second at the end ', ...
+            'of MJD %d. Interpolant panels are indexed by MJD, which that ', ...
+            'second does not have. Use the direct path (omit ''Interpolant'') ', ...
+            'for these epochs, or a DifferenceStep that keeps the difference ', ...
+            'shoulders out of the leap second.'], sum(inside), numel(inside), ...
+            sampleUtc.day(find(inside, 1)));
+    end
 
     mjd = sampleUtc.day + sampleUtc.sec / 86400;
 

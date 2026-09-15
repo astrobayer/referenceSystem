@@ -111,10 +111,12 @@ static const char *fixturePath = "test/fixtures/arc.eopi";
 /* THE FORMAT-2 FIXTURE, THE FORMAT MATLAB HAS WRITTEN SINCE P19c. Until rev.
  * 1.221 the suite read only arc.eopi, which is format 1, and the reader refused
  * every format-2 file without anything here noticing. Written by
- * earthOrientationInterpolant over MJD 57754-57757 from eop20c04.txt with the
- * defaults, then writeInterpolant; its first six channels agree with arc.eopi's
- * coefficients to 2.2e-17. The second argument, for the same reason as the
- * first. */
+ * earthOrientationInterpolant from eop20c04.txt with the defaults, then
+ * writeInterpolant; the panels it shares with arc.eopi (MJD 57754-57757) agree
+ * with its coefficients to 2.2e-17. SINCE REV. 1.226 IT STARTS AT MJD 57752 AND
+ * SO CROSSES THE 2017-01-01 LEAP SECOND, which a builder that took each panel's
+ * last node after the jump could not fit; its four later panels are bit for bit
+ * the rev. 1.221 file's. The second argument, for the same reason as the first. */
 static const char *fixturePath2 = "test/fixtures/arcFormat2.eopi";
 
 /* MATLAB'S RATE ON THAT FILE, THE ONLY TRUTH HERE THAT DOES NOT SHARE rsApi's
@@ -428,6 +430,7 @@ int main(int argc, char *argv[])
             double worstMatlabR = 0.0;
             double worstMatlabRdot = 0.0;
             int rows = 0;
+            int dataLines = 0;
             int rowsOk = 1;
 
             check(rates != NULL, "the MATLAB rate fixture opens");
@@ -441,6 +444,7 @@ int main(int argc, char *argv[])
 
                 if (line[0] == '#') continue;
                 if (sscanf(line, "step %lf", &rateStep) == 1) continue;
+                dataLines++;
                 while (n < 19) {
                     field[n] = strtod(cursor, &end);
                     if (end == cursor) break;
@@ -469,10 +473,39 @@ int main(int argc, char *argv[])
             }
             printf("  rsApi vs MATLAB's rate : R %.3g, Rdot %.3g over %d epochs, step %g\n",
                    worstMatlabR, worstMatlabRdot, rows, rateStep);
-            check(rowsOk && rows == 24, "every row of the MATLAB rate fixture is evaluated");
+            check(rowsOk && rows > 0 && rows == dataLines,
+                  "every row of the MATLAB rate fixture is evaluated");
             check(rows > 0 && worstMatlabR < 5.0e-12, "R matches MATLAB's interpolated R");
             check(rows > 0 && worstMatlabRdot < RATE_BUDGET,
                   "Rdot matches MATLAB's default interpolated Rdot");
+
+            /* A SHOULDER INSIDE THE LEAP SECOND HAS NO LABEL AND IS REFUSED
+             * (rev. 1.226), and the refusal leaves the caller's arrays alone.
+             * 57753 + 86200.5 s puts the +200 s shoulder at 23:59:60.5; 57754 +
+             * 199.5 s puts the -200 s shoulder there. The fixture's rows 86.4 s
+             * either side of the leap second are the ones that straddle it and
+             * are NOT refused - a shoulder beyond a change in TAI-UTC is taken
+             * at its own label, and until rev. 1.226 it was taken one second
+             * off, missing MATLAB's rate by 1.1e-14 1/s there. */
+            {
+                double sentinelR[9];
+                double sentinelRdot[9];
+                for (j = 0; j < 9; j++) {
+                    sentinelR[j] = -1.0;
+                    sentinelRdot[j] = -1.0;
+                }
+                check(rsApiRotationRate(&two, 57753.0 + 86200.5 / 86400.0, 200.0,
+                                        sentinelR, sentinelRdot) == RS_API_OUT_OF_RANGE,
+                      "a +step shoulder inside the leap second is refused");
+                check(rsApiRotationRate(&two, 57754.0 + 199.5 / 86400.0, 200.0,
+                                        sentinelR, sentinelRdot) == RS_API_OUT_OF_RANGE,
+                      "a -step shoulder inside the leap second is refused");
+                check(sentinelR[0] == -1.0 && sentinelRdot[0] == -1.0,
+                      "a refused shoulder leaves the outputs untouched");
+                check(rsApiRotationRate(&two, 57753.0 + 86199.5 / 86400.0, 200.0,
+                                        sentinelR, sentinelRdot) == RS_API_OK,
+                      "one second earlier the shoulder is clear of it and is taken");
+            }
         }
     }
 
