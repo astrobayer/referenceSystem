@@ -92,6 +92,10 @@ function [rotation, info] = rotationIcrfToBodyFixed(body, epoch, options)
 %       All raised by bodyRotationElements, which resolves the body. The
 %       identifiers name that function because that is where the refusal is
 %       decided; section C.2 binds an identifier to the deciding function.
+%   referenceSystem:rotationIcrfToBodyFixed:staleEphemeris
+%       Source "pck": the SPICE pool does not hold exactly the kernels the
+%       Ephemeris struct names - a later readEphemeris replaced them, or other
+%       code loaded an SPK beside them. Call readEphemeris again.
 %
 % REFERENCES
 %   Archinal, B. A. et al., 2018, Celest. Mech. Dyn. Astron. 130, 22,

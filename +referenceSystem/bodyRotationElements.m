@@ -147,6 +147,10 @@ function [rightAscension, declination, primeMeridian, info] = ...
 %       non-defaulting lunar frame arriving from the authority rather than from
 %       a scoping choice.
 %   referenceSystem:bodyRotationElements:wrongScale
+%   referenceSystem:bodyRotationElements:staleEphemeris
+%       Source "pck": the SPICE pool does not hold exactly the kernels the
+%       Ephemeris struct names - a later readEphemeris replaced them, or other
+%       code loaded an SPK beside them. Call readEphemeris again.
 %
 % REFERENCES
 %   Archinal, B. A. et al., 2018, Celest. Mech. Dyn. Astron. 130, 22:

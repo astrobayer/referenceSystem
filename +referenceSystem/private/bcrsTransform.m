@@ -4,7 +4,7 @@ function ingredient = bcrsTransform(epoch, options, scale, functionName)
 %   ingredient = bcrsTransform(epoch, options, scale, name)
 %
 %   PACKAGE-PRIVATE, AND THE SINGLE PLACE THE CONVENTIONS' EQUATION IS ENCODED.
-%   gcrsToBcrs applies the operator and bcrsToGcrs applies its inverse; both
+%   bcrsToGcrs applies the resolution's map and gcrsToBcrs its inverse; both
 %   read the coefficients from here, so the two cannot drift apart and there is
 %   one thing to check against the Conventions rather than two.
 %
@@ -22,36 +22,20 @@ function ingredient = bcrsTransform(epoch, options, scale, functionName)
 %   the Moon - below the 1 mm IERS states for itself in the first case and
 %   above it in the second, i.e. they matter exactly where IERS stops.
 %
-%   THIS COSTS THE EXACT LINEARITY THE INVERSE USED TO RELY ON. The two
-%   acceleration terms are quadratic in r, so Sherman-Morrison no longer
-%   applies and bcrsToGcrs iterates instead. The correction is 1.5e-8 of r, so
-%   one iteration leaves 2e-16 relative and two leave roundoff; two are done.
+%   The acceleration terms are quadratic in r, so the inverse, gcrsToBcrs,
+%   iterates; the correction is 1.5e-8 of r, so two iterations leave roundoff.
 %
-%   THE VELOCITY, WHICH THE IERS CONVENTIONS DO NOT GIVE AT ALL, follows by
-%   differentiating the same expression with respect to t and dividing by
-%   dT/dt from the time part of the same resolution:
+%   THE VELOCITY follows by differentiating the same expression with respect
+%   to t and dividing by dT/dt from the time part of the same resolution:
 %
 %     dX/dt = rdot + (1/c^2)[ (1/2) a_E (v_E . r) + (1/2) v_E (a_E . r + v_E . rdot)
 %                             + w_ext rdot + rdot (a_E . r) + r (a_E . rdot)
 %                             - a_E (r . rdot) ]
-%     dT/dt = 1 - (1/c^2)[ v_E^2/2 + w_ext + a_E . r + v_E . v ]
+%     dT/dt = 1 - (1/c^2)[ v_E^2/2 + w_ext + a_E . r + v_E . rdot ]
 %
-%   TERMS IN dw_ext/dt AND da_E/dt ARE DROPPED AND THE DROP IS QUANTIFIED:
-%   5.7e-28 m/s and 6.1e-13 m/s at GRACE altitude, against the 1e-7 m/s tier a
-%   KBR or LRI reduction works at.
-%
-%   THE dT/dt FACTOR IS NOT A REFINEMENT. It is 1.5e-8, which on a 31 km/s
-%   barycentric speed is 4.7e-4 m/s - four thousand times the KBR tier. This
-%   is the term rev. 1.132 recorded as "the one I am not sure of dominates";
-%   it is now taken from the resolution rather than from recollection.
-%
-%   VALIDATED BY FINITE DIFFERENCE BEFORE ANY OF IT WAS WRITTEN IN MATLAB. On
-%   a self-consistent circular Earth and satellite, the analytic dX/dt was
-%   compared with a central difference of X(t) at h = 100, 50, 25, 12.5, 6.25
-%   and 3.125 s: the residual fell by exactly a factor of 4 at each halving,
-%   order 2.00 throughout. A wrong analytic velocity leaves a CONSTANT floor;
-%   there is none. That is decision D28's convergence rule used as the oracle
-%   section H.7.7 said it would be.
+%   w_ext here is the potential alone: a velocity carries no L_C, because the
+%   length and time scalings of TT and TDB cancel in it. Terms in dw_ext/dt and
+%   da_E/dt are dropped: 5.7e-28 m/s and 6.1e-13 m/s at GRACE altitude.
 %
 % INPUT ARGUMENTS
 %   Name           Size   Type      Units  Description

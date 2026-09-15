@@ -4,10 +4,10 @@ function ephemeris = readEphemeris(kernelFile, options)
 %   ephemeris = readEphemeris(kernelFile)
 %   ephemeris = readEphemeris(kernelFile, Name, Value)
 %
-%   The only cspice_furnsh wrapper the toolbox permits (decision D26). It loads
-%   the kernels, reads each one's comment area, records identity rather than
-%   content, and refuses combinations that would be wrong in ways nothing
-%   downstream could notice.
+%   The only cspice_furnsh wrapper the toolbox permits (decision D26). It reads
+%   each kernel's comment area, records identity rather than content, refuses
+%   combinations that would be wrong in ways nothing downstream could notice,
+%   and only then loads the set - in place of the set it loaded before.
 %
 % INPUT ARGUMENTS
 %   Name         Size   Type              Units  Description
@@ -82,6 +82,17 @@ function ephemeris = readEphemeris(kernelFile, options)
 %   leapSecondTable("load") override is installed and SPICE does not see it.
 %   Seam contract S1 item 2 exists to make that impossible by construction.
 %
+%   ONE FURNISHED SET IS LIVE AT A TIME. SPICE keeps one kernel pool per
+%   process and answers from whatever is loaded, whatever struct a caller
+%   passes. So every check runs before anything is loaded - a refused set
+%   leaves the pool as it was - and loading unloads the set this function
+%   loaded last. The MICE consumers (barycentricBodyState, geocentricBodyState,
+%   bodyRotationElements, rotationIcrfToBodyFixed) refuse a struct whose
+%   kernels are not exactly the loaded SPK and binary PCK files with
+%   staleEphemeris, so an older result cannot quietly read a newer set. To
+%   compare two generations, furnish them together in one call. Inside a
+%   parfor worker the pool is the worker's own: call this function there.
+%
 %   THE TOOLKIT VERSION IS A CHECKED PRECONDITION AND NOT AN ASSUMPTION, because
 %   pck00011.tpc's Mars system data used with Toolkit N0066 or earlier may cause
 %   fatal run-time memory corruption in the calling process rather than a wrong
@@ -101,7 +112,7 @@ function ephemeris = readEphemeris(kernelFile, options)
 %   referenceSystem:readEphemeris:mismatchedGeneration
 %   referenceSystem:readEphemeris:toolkitTooOld
 %
-%   WARNINGS
+% WARNINGS
 %   referenceSystem:readEphemeris:mixedGenerations
 %       The furnished kernels name more than one planetary ephemeris. A
 %       WARNING and not an error since decision D110: the choice of models and
@@ -166,7 +177,6 @@ function ephemeris = readEphemeris(kernelFile, options)
     for k = 1:numel(kernelFile)
         info = dir(kernelFile(k));
         absolutePath(k) = string(fullfile(info.folder, info.name));
-        cspice_furnsh(char(absolutePath(k)));
     end
 
     digest = strings(numel(kernelFile), 1);
@@ -178,6 +188,9 @@ function ephemeris = readEphemeris(kernelFile, options)
 
     [namedEphemeris, generationVerified, generations] = localCheckPairing( ...
         absolutePath, options.ExpectedEphemeris, options.AllowGenerations);
+
+    % Loaded last, after every refusal above, in place of the previous set.
+    ephemerisPool("furnish", absolutePath);
 
     ephemeris = struct('meta', struct( ...
         'file', absolutePath, ...

@@ -74,6 +74,10 @@ function [position, velocity, info] = geocentricBodyState(body, epoch, options)
 %   referenceSystem:geocentricBodyState:wrongScale
 %   referenceSystem:geocentricBodyState:gatewayMissing
 %   referenceSystem:geocentricBodyState:providerNotAvailable
+%   referenceSystem:geocentricBodyState:staleEphemeris
+%       Source "mice": the SPICE pool does not hold exactly the kernels the
+%       Ephemeris struct names - a later readEphemeris replaced them, or other
+%       code loaded an SPK beside them. Call readEphemeris again.
 %
 % WARNINGS
 %   referenceSystem:geocentricBodyState:outsideModelRange

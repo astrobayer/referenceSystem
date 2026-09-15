@@ -97,11 +97,13 @@ is answering the question you asked it to ask.</p>
 
 <h2 id="bcrs">L5e &mdash; the BCRS transformation</h2>
 
-<p><code>gcrsToBcrs</code> and <code>bcrsToGcrs</code> implement IERS
-Conventions&nbsp;(2010) Eqs.&nbsp;(11.18) and (11.19) &mdash; <i>not</i>
-Chapter&nbsp;10, which is time coordinates and contains no spatial
-transformation. The Conventions state their own uncertainty for the formula as
-<b>below 1&nbsp;mm</b>, and that is the accuracy of these functions.</p>
+<p><code>bcrsToGcrs</code> and <code>gcrsToBcrs</code> implement the spatial
+part of IAU 2000 Resolution&nbsp;B1.3, of which IERS Conventions&nbsp;(2010)
+Eqs.&nbsp;(11.18) and (11.19) are the form without the two acceleration terms.
+Both take the velocity as a positional argument, <code>[]</code> for position
+only: <code>bcrsToGcrs(rBcrs, [], epoch, Scale = "tdbCompatible")</code>. The
+Conventions state their own uncertainty for the position as <b>below
+1&nbsp;mm</b>, and that is the accuracy of these functions.</p>
 
 <table>
 <tr><th>Term, at a mid-latitude station (|r| = 6391 km)</th><th>Size</th></tr>
@@ -123,10 +125,13 @@ reach the answer only through 1/c&sup2; terms, so their errors are suppressed by
 result by 4.8e-9&nbsp;m. <i>Do not reach for MICE on account of this
 function.</i></p>
 
-<p>Velocity <b>is</b> transformed, from IAU 2000 Resolution&nbsp;B1.3, and its
-dT/dt factor is 1.5e-8 &mdash; 4.7e-4&nbsp;m/s on 31&nbsp;km/s. Validated by
-central difference at six step sizes at order 2.00 throughout, so the residual
-is the difference's own truncation and not a formula error.</p>
+<p>Velocity <b>is</b> transformed: the derivative of the spatial map divided by
+dT/dt from the resolution's time part, with no L<sub>C</sub>, because a velocity
+carries none. It is held to the resolution itself &mdash; the change of the GCRS
+vector between two events over the GCRS time elapsed between them &mdash; at
+1.9e-10&nbsp;m/s on a 7.6&nbsp;km/s trajectory. Without the dT/dt factor it
+missed that oracle by 1.3e-4&nbsp;m/s under <code>"none"</code> and
+2.0e-5&nbsp;m/s under <code>"tdbCompatible"</code>.</p>
 
 <p><code>geocentricBodyState</code> returns a <b>coordinate difference in the
 BCRS</b>, not a GCRS state, and the two differ by about 6&nbsp;m at the Moon.
