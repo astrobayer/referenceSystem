@@ -121,8 +121,7 @@ function value = epochTo(epoch, format)
                     find(epoch.sec >= secondsPerDay, 1), ...
                     epoch.sec(find(epoch.sec >= secondsPerDay, 1)));
             end
-            % MJD 0 = 1858-11-17 00:00, by definition; see datetimeToEpoch.
-            modifiedJulianDateOrigin = datetime(1858, 11, 17, 0, 0, 0);
-            value = modifiedJulianDateOrigin + days(epoch.day) + seconds(epoch.sec);
+            % MJD 0 = 1858-11-17 00:00, by definition, formed in one place.
+            value = modifiedJulianDateOrigin() + days(epoch.day) + seconds(epoch.sec);
     end
 end

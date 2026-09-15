@@ -88,10 +88,10 @@ function epoch = datetimeToEpoch(t, scale)
         t.TimeZone = '';
     end
 
-    % MJD 0 = 1858-11-17 00:00, by definition. epochTo carries the same origin
-    % for the inverse direction and a precision test binds the two together.
-    modifiedJulianDateOrigin = datetime(1858, 11, 17, 0, 0, 0);
-    elapsed = t - modifiedJulianDateOrigin;
+    % MJD 0 = 1858-11-17 00:00, by definition, formed in ONE place since rev.
+    % 1.230; epochTo takes the same origin for the inverse direction and a
+    % precision test binds the two together.
+    elapsed = t - modifiedJulianDateOrigin();
     day = floor(days(elapsed));
 
     epoch = referenceSystem.normalizeEpoch(struct( ...

@@ -447,10 +447,11 @@ end
 
 function day = localMjdOfDatetime(t)
 %LOCALMJDOFDATETIME Integer day number of a calendar date. MJD 0 = 1858-11-17.
-    day = floor(days(t - datetime(1858, 11, 17, 0, 0, 0)));
+%   The origin is formed in one place since rev. 1.230: modifiedJulianDateOrigin.
+    day = floor(days(t - modifiedJulianDateOrigin()));
 end
 
 function t = localDatetimeOfMjd(day)
 %LOCALDATETIMEOFMJD Calendar date of an integer day number.
-    t = datetime(1858, 11, 17, 0, 0, 0) + days(day);
+    t = modifiedJulianDateOrigin() + days(day);
 end
