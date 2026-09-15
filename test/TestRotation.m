@@ -24,6 +24,13 @@ classdef TestRotation < matlab.unittest.TestCase
 % -------------------------------------------------------------------------
 
     properties (Constant)
+        % D28's velocity budget, as rotationItrsToGcrs's help states it, and the
+        % orbit radius the handover evaluates it at. A rotation-rate error e
+        % moves a velocity by about e*r, so the rate these tests may miss by is
+        % VelocityBudget / OrbitRadius = 1.43e-16 1/s (rev. 1.223, H.11 item 5).
+        VelocityBudget = 1e-9       % m/s
+        OrbitRadius = 7e6           % m
+
         % SOFA cookbook example, 2007-04-05 12:00:00 UTC.
         % TT  = UTC + 32.184 s + 33 s of TAI - UTC.
         % UT1 = UTC - 0.072073685 s.
@@ -152,8 +159,9 @@ classdef TestRotation < matlab.unittest.TestCase
             % side is right and regenerate the CSV as its header says, rather
             % than widening these bounds (obligation O8).
             %
-            % Bounds as in the C test: P19c's 5e-12 on R and 5e-12/h on Rdot
-            % (D123), with h read from the fixture (O33).
+            % Bounds as in the C test: P19c's 5e-12 on R, and on Rdot D28's
+            % 1 nm/s at 7000 km, 1.43e-16 1/s (rev. 1.223, H.11 item 5), with h
+            % read from the fixture (O33).
             testCase.assumeTrue(referenceSystem.mexInfo().built, ...
                 'The MEX gateway is not built.');
             folder = fullfile(testCase.toolboxRoot(), 'test', 'fixtures');
@@ -182,7 +190,8 @@ classdef TestRotation < matlab.unittest.TestCase
                 'max|dRdot| %.3g 1/s at h = %g s'], max(abs(R - expectedR), [], 'all'), ...
                 max(abs(Rdot - expectedRdot), [], 'all'), info.differenceStep));
             testCase.verifyEqual(R, expectedR, 'AbsTol', 5e-12);
-            testCase.verifyEqual(Rdot, expectedRdot, 'AbsTol', 5e-12 / info.differenceStep);
+            testCase.verifyEqual(Rdot, expectedRdot, 'AbsTol', ...
+                TestRotation.VelocityBudget / TestRotation.OrbitRadius);
         end
 
         function rotationItrsToGcrsPartials_contract_eopIsRequired(testCase)
@@ -1326,18 +1335,20 @@ classdef TestRotation < matlab.unittest.TestCase
             % bounds the error the panels add to the chain; the measured floor
             % and the wrong-panel control are in interpolatedMatchesDirect.
             %
-            % Rdot: 5e-12/h, THE SAME CLAIM IN RATE UNITS (D123), and on THIS
-            % test it is the bound that matters. The LOD channel enters only
-            % the rate, through omega, so R cannot see it. The whole
-            % length-of-day term is 1.2e-12 1/s on this arc (8.5 um/s at
-            % 7000 km), and an interpolant with its LOD channel zeroed PASSED
-            % the old 5e-12 on Rdot - this test passed whether or not the
-            % channel was read. It fails 5e-12/h 49 times over. If it fails,
-            % the length-of-day fit is the suspect and its degree is the knob
-            % - not this tolerance (obligation O8).
+            % Rdot: D28's 1 nm/s at 7000 km, 1.43e-16 1/s, SINCE REV. 1.223 (H.11
+            % item 5), and on THIS test it is the bound that matters. The LOD
+            % channel enters only the rate, through omega, so R cannot see it.
+            % The whole length-of-day term is 1.2e-12 1/s on this arc (8.5 um/s
+            % at 7000 km); an interpolant with its LOD channel zeroed passed the
+            % 5e-12 1/s this line held until rev. 1.217, and failed D123's
+            % 5e-12/h 49 times over. That bound was still 175 times the
+            % budget, so a length of day wrong by 1% (1.2e-14 1/s) passed it;
+            % it fails this one. Measured floor 5.5e-19 1/s, 260 times below.
+            % If it fails, the length-of-day fit is the suspect and its degree
+            % is the knob - not this tolerance (obligation O8).
             testCase.verifyEqual(fitted, direct, 'AbsTol', 5e-12);
             testCase.verifyEqual(fittedDot, directDot, 'AbsTol', ...
-                5e-12 / fittedInfo.differenceStep);
+                TestRotation.VelocityBudget / TestRotation.OrbitRadius);
         end
 
         function rotationItrsToGcrs_reference_interpolatedMatchesDirect(testCase)
@@ -1377,17 +1388,18 @@ classdef TestRotation < matlab.unittest.TestCase
             % is 2e-16 rad). Loose enough to survive a compiler; a panel chosen
             % one index wrong measured 3.9e-7, 7.7e4 times over.
             %
-            % Rdot: NOT THE SAME NUMBER, BECAUSE A RATE IS NOT AN ANGLE (D123).
-            % Both paths difference the samples at t-h and t+h, so a sample
-            % disagreement e reaches Rdot as e/h: measured 5.5e-19 1/s against
-            % |dR(t+h) - dR(t-h)|/2h = 5.6e-19, while omega*dR is 1.6e-20. The
-            % R claim in rate units is therefore 5e-12/h - 2.5e-14 1/s at the
-            % default h = 200 s, 0.18 um/s at 7000 km. The 5e-12 it replaces
-            % is 35 um/s and admitted the whole length-of-day term (1.2e-12
-            % 1/s); see panelsAloneMatchTheDirectChain.
+            % Rdot: NOT THE SAME NUMBER, BECAUSE A RATE IS NOT AN ANGLE, AND
+            % SINCE REV. 1.223 NOT DERIVED FROM R AT ALL. Both paths difference
+            % the samples at t-h and t+h, so a sample disagreement e reaches
+            % Rdot as e/h: measured 5.5e-19 1/s against |dR(t+h) - dR(t-h)|/2h
+            % = 5.6e-19, while omega*dR is 1.6e-20. D123 stated the R claim in
+            % rate units, 5e-12/h (0.18 um/s at 7000 km at h = 200 s), and
+            % that was 175 times D28's 1 nm/s budget and moved with h. The
+            % bound is now the budget itself, 1.43e-16 1/s, whatever the step:
+            % 260 times the measured floor (H.11 item 5).
             testCase.verifyEqual(fitted, direct, 'AbsTol', 5e-12);
             testCase.verifyEqual(fittedDot, directDot, 'AbsTol', ...
-                5e-12 / fittedInfo.differenceStep);
+                TestRotation.VelocityBudget / TestRotation.OrbitRadius);
         end
 
         function earthOrientationInterpolant_reference_matchesTheDirectChain(testCase)

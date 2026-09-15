@@ -32,6 +32,14 @@
 #define PANELS 3
 #define STRIDE (DEGREE + 1)
 
+/* D28's velocity budget, as referenceSystem.rotationItrsToGcrs's help states it,
+ * over the orbit radius the handover evaluates it at: a rotation-rate error e
+ * moves a velocity by about e*r, so every Rdot check here is held to
+ * 1 nm/s / 7000 km = 1.43e-16 1/s (rev. 1.223, H.11 item 5). The same two
+ * numbers are TestRotation.VelocityBudget and TestRotation.OrbitRadius; the
+ * languages cannot share one definition, so each file carries its own. */
+#define RATE_BUDGET (1.0e-9 / 7.0e6)
+
 static int testCount = 0;
 static int failCount = 0;
 
@@ -252,22 +260,23 @@ int main(int argc, char *argv[])
      * from MinGW gcc 14.2 on Windows alike - the roundoff of the assembly sets
      * the floor, 4.3e4 below the bound.
      *
-     * Rdot: 5e-12/step, THE SAME CLAIM IN RATE UNITS (D123). The MATLAB tests
-     * have asserted it since rev. 1.217, and this line kept 5e-12 1/s until
-     * rev. 1.218, so "the same claim in two languages" was false for a round.
-     * Both paths difference samples at t-step and t+step, so a sample error e
-     * reaches the rate as e/step: measured 9.28e-19 1/s, against
-     * 1.16e-16/60 = 1.9e-18. No LOD term can hide here - the interpolant built
+     * Rdot: D28's budget, RATE_BUDGET = 1.43e-16 1/s, SINCE REV. 1.223 (H.11
+     * item 5). From rev. 1.218 to 1.222 it was 5e-12/step, D123's statement of
+     * the R claim in rate units, which at step 60 s is 8.3e-14 - 580 times the
+     * budget, and a bound that moved with the step. Both paths difference
+     * samples at t-step and t+step, so a sample error e reaches the rate as
+     * e/step: measured 9.28e-19 1/s, against 1.16e-16/60 = 1.9e-18, and 154
+     * times below the budget. No LOD term can hide here - the interpolant built
      * above has six channels, so rsApi has no lod to apply, and both paths are
      * handed the same ERA slope (the nominal omega until rev. 1.222) - so what
      * this bound sees is a rate the two paths construct differently, which R
      * cannot see at all. Because both paths share that omega, this block cannot
      * tell a wrong omega from a right one; the MATLAB rate fixture below can.
      * Fault-injected: rsApi's omega set 1.5 ms of excess LOD off gives
-     * Rdot 1.27e-12 with R unchanged at 1.16e-16; it passed 5e-12 and fails
+     * Rdot 1.27e-12 with R unchanged at 1.16e-16; it passed 5e-12 and failed
      * 5e-12/step 15 times over. */
     check(worst < 5.0e-12, "R matches the direct chain across panel boundaries");
-    check(worstRate < 5.0e-12 / step, "Rdot matches the direct chain");
+    check(worstRate < RATE_BUDGET, "Rdot matches the direct chain");
 
     /* Refusals. A failed call must leave the caller's array alone, or a
      * plausible stale matrix survives into an orbit. */
@@ -405,13 +414,13 @@ int main(int argc, char *argv[])
         /* ---- and it must give MATLAB's RATE (rev. 1.222) ---------------- */
         if (statusTwo == RS_API_OK) {
             /* Bounds as everywhere else in this file: 5e-12 on R, P19c's
-             * requirement, and 5e-12/step on Rdot, the same claim in rate
-             * units (D123), with the step read from the fixture rather than
-             * written here a second time (O33). Measured when the fixture was
-             * written, MinGW gcc against the MATLAB MEX on one host: 0 and 0,
-             * bit for bit. Before rev. 1.222 the rate missed by 5.8e-13, 23
-             * times this bound at step 200 s: 1.467e-12 from the nominal omega
-             * and up to 1.25e-12 from the unread length of day, partly
+             * requirement, and RATE_BUDGET on Rdot (rev. 1.223), with the step
+             * read from the fixture rather than written here a second time
+             * (O33). Measured when the fixture was written, MinGW gcc against
+             * the MATLAB MEX on one host, and again by gcc on ubuntu-24.04 in
+             * CI #52: 0 and 0, bit for bit. Before rev. 1.222 the rate missed
+             * by 5.8e-13, 4000 times the budget: 1.467e-12 from the nominal
+             * omega and up to 1.25e-12 from the unread length of day, partly
              * cancelling. */
             FILE *rates = fopen(rateFixturePath, "r");
             char line[1024];
@@ -462,7 +471,7 @@ int main(int argc, char *argv[])
                    worstMatlabR, worstMatlabRdot, rows, rateStep);
             check(rowsOk && rows == 24, "every row of the MATLAB rate fixture is evaluated");
             check(rows > 0 && worstMatlabR < 5.0e-12, "R matches MATLAB's interpolated R");
-            check(rows > 0 && worstMatlabRdot < 5.0e-12 / rateStep,
+            check(rows > 0 && worstMatlabRdot < RATE_BUDGET,
                   "Rdot matches MATLAB's default interpolated Rdot");
         }
     }
