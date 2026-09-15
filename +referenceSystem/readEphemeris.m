@@ -67,8 +67,8 @@ function ephemeris = readEphemeris(kernelFile, options)
 %   the same rule mexSourceDigest applies to the C sources.
 %
 %   THE KERNEL PAIRING IS MEASURED, NOT DECLARED (decision D15, and D110 for
-%   what happens when it disagrees: a warning, never a refusal), mechanism added
-%   rev. 1.127). SB441-N16 pairs with DE440/441 and SB431-N16 with DE430; mixing
+%   what happens when it disagrees: a warning, never a refusal). SB441-N16
+%   pairs with DE440/441 and SB431-N16 with DE430; mixing
 %   generations shifts the barycentre by of order 100 km, and nothing downstream
 %   would report it. Each SPK names the planetary ephemeris it expects in its
 %   own comment area, which cspice_dafec reads, so the pairing is checked

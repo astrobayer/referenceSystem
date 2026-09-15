@@ -733,6 +733,34 @@ def check_raised_identifiers_are_documented(filename, text):
                          filename, identifier, section))
 
 
+REVISION_REFERENCE = re.compile(
+    r'\b[Rr][Ee][Vv](?:ISION|ision)?[Ss]?\.?\s+\d+\.\d+')
+
+
+def check_help_carries_no_revision_history(filename, text):
+    """A help block states what the function does now, not how it got there.
+
+    Decision D131. Help blocks had accumulated revision narratives - "until
+    rev. 1.235 ...", "revision 1.52 recorded ..." - thirty-two of them in
+    twenty-one files, which made the primary document a changelog, drifted
+    from the code (carryEpoch said the registry's flag was false for GLONASS
+    while timeScale set it true) and duplicated the handover's revision log,
+    which is where history belongs. Code comments may keep it; the help block,
+    which the reference page and the manual are generated from, may not.
+    """
+    started = False
+    for k, raw in enumerate(text.replace('\r\n', '\n').split('\n')):
+        line = raw.strip()
+        if not started:
+            started = line.startswith('%') and k > 0
+            if not started:
+                continue
+        if not line.startswith('%'):
+            break
+        if REVISION_REFERENCE.search(line):
+            fail('help/revisionHistory', '%s:%d %s' % (filename, k + 1, line[:80]))
+
+
 def _help_sections(text):
     """Help sections exactly as buildDocumentation cuts them (rev. 1.228)."""
     # localHelpBlock: the contiguous comment block after the function line,
@@ -906,6 +934,14 @@ def main():
 
     check_reference_page_bodies_match_the_help(files)
 
+    # The private helpers are held to the same two help rules as the public
+    # functions: their identifiers reach callers, and their help is read.
+    private = os.path.join(PACKAGE, 'private')
+    for leaf in sorted(f for f in os.listdir(private) if f.endswith('.m')):
+        text = open(os.path.join(private, leaf), encoding='utf-8').read()
+        check_raised_identifiers_are_documented('private/' + leaf, text)
+        check_help_carries_no_revision_history('private/' + leaf, text)
+
     for filename in files:
         path = os.path.join(PACKAGE, filename)
         text = open(path, encoding='utf-8').read()
@@ -950,6 +986,7 @@ def main():
             if owner != name and owner != 'mex':
                 fail('errorId/function', '%s raises %s' % (filename, identifier))
         check_raised_identifiers_are_documented(filename, text)
+        check_help_carries_no_revision_history(filename, text)
 
         body = code_only(text)
         signature = re.search(r'^\s*function\b[^\n]*?\(([^)]*)\)', body, re.M)

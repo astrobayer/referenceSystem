@@ -79,11 +79,9 @@ function manifest = downloadKernels(options)
 %                    sixteen D15 perturbing asteroids matter. "smallBodies"
 %                    is accepted as a synonym.
 %
-%   "all" MEANS ALL (decision D99). Rev. 1.134 gave it the meaning "everything
-%   except the biggest file", wrote that into the help and added a test
-%   asserting it - documenting and enforcing a name that lied. The size was a
-%   real concern and that was a bad answer to it; the protection is that Mode
-%   defaults to "list", which shows the bill before anything moves.
+%   "all" MEANS ALL (decision D99). The size is a real concern, and the
+%   protection is that Mode defaults to "list", which shows the bill before
+%   anything moves.
 %
 %   Span says WHICH ISSUE of the planetary ephemeris:
 %
@@ -95,9 +93,9 @@ function manifest = downloadKernels(options)
 %
 %   THE TWO FILES ARE THE SAME INTEGRATION - de440s.bsp is a time-restricted
 %   issue of de440.bsp - so in the overlap they answer identically and SPICE
-%   resolves an overlapping body from whichever was furnished last. Until
-%   rev. 1.191 that was taken as a reason to REFUSE both, and it is not one.
-%   D110 already settled the principle one level up, for whole generations:
+%   resolves an overlapping body from whichever was furnished last. That is
+%   not a reason to refuse both. D110 settles the principle one level up, for
+%   whole generations:
 %   this toolbox prevents an UNKNOWING mixture, not a deliberate choice.
 %   Holding the small file for routine work and the long one for the
 %   occasional deep-time epoch is ordinary, and readEphemeris reports the
@@ -125,9 +123,8 @@ function manifest = downloadKernels(options)
 %
 %   EVERY ENTRY IS ATTEMPTED AND EVERY FAILURE IS RECORDED BEFORE ANYTHING IS
 %   RAISED. A failure on the third of five files must not discard the two that
-%   succeeded - that is precisely what run 44 got wrong with the HORIZONS
-%   fetcher (rev. 1.130), and the manifest carries "FAILED | reason" rows for
-%   the same reason runTestSuite writes its report before reporting failure.
+%   succeeded, so the manifest carries "FAILED | reason" rows, for the same
+%   reason runTestSuite writes its report before reporting failure.
 %
 %   NO LEAPSECONDS KERNEL APPEARS IN THIS CATALOGUE AND NONE MAY BE ADDED.
 %   Decision D89: a .tls would install a second leap-second authority beside
@@ -139,7 +136,7 @@ function manifest = downloadKernels(options)
 %   Identity is recorded and bulk is not: each fetched file gets a SHA-256 in
 %   the manifest, which is what a result should carry (data/README.md).
 %
-%   A CALLER'S CATALOGUE (rev. 1.233). Catalogue replaces the built-in table,
+%   A CALLER'S CATALOGUE. Catalogue replaces the built-in table,
 %   so a user with a private kernel mirror can point every Url at it, and a
 %   test can point one at a host that cannot resolve and observe a failed
 %   transfer on any machine - which is what made the D98 test deterministic.

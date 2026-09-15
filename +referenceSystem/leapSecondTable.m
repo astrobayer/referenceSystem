@@ -63,14 +63,9 @@ function result = leapSecondTable(command, argument)
 %   EACH COVERAGE BOUND IS PUBLISHED TWICE, AS A DATE AND AS A DAY NUMBER, and
 %   the second form is not a convenience. Consumers compare a bound against
 %   epoch.day, which is an MJD, so a date-only bound forces every one of them to
-%   write days(bound - datetime(1858, 11, 17)) - and that is the MJD epoch,
-%   copied out of this file into theirs. Four such copies had accumulated by
-%   rev. 1.215, one of them in package code, which is the same shape as finding
-%   M-2 one layer down: a constant with no single owner, free to diverge, and
-%   invisible to the contract test that greps for leap-second dates because
-%   1858-11-17 is not one. The day numbers cost nothing to hand back - both are
-%   already cached, one by localScanSofaTable and one by localColumnsOf - and
-%   they are what removes the copies.
+%   write days(bound - datetime(1858, 11, 17)) - a copy of the MJD epoch in
+%   each of them, free to diverge. The day numbers cost nothing to hand back:
+%   both are cached with the active table.
 %
 %   AN OVERRIDE MOVES BOTH BOUNDS WHERE IT STATES THEM. validFrom follows the
 %   active table's first row. validThrough is the day before the expiry a
@@ -97,15 +92,11 @@ function result = leapSecondTable(command, argument)
 %   SOFA table. Install the override inside the parfor body, or pass the table
 %   in as sliced data. leapSecondTable("state") reports which table answered.
 %
-%   THE COLUMNS "deltaAT" READS ARE DERIVED ONCE, NOT PER CALL (prompt P28b,
-%   rev. 1.122). The step days, the offsets, the discretize edges, the date of
-%   the first row and the coverage end AS A DAY NUMBER are all fixed for the
-%   life of the active table, and are computed when that table is installed:
-%   after the SOFA scan, after "load" and after "reset". A profiled single-epoch
-%   rotation reached this function six times, four of them on "deltaAT", and
-%   each of those four built a datetime for 1858-11-17, subtracted it, called
-%   days and floored the result to recover a number the scan already knew, then
-%   indexed the timetable three times for columns that had not changed.
+%   THE COLUMNS "deltaAT" READS ARE DERIVED ONCE, NOT PER CALL (prompt P28b).
+%   The step days, the offsets, the discretize edges, the date of the first
+%   row and the coverage end are all fixed for the life of the active table,
+%   and are computed when that table is installed: after the SOFA scan, after
+%   "load" and after "reset".
 %
 %   The cache is not an optimisation of the lookup: the lookup was already one
 %   discretize on integer day numbers. It removes work that was never a function

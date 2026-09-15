@@ -37,8 +37,7 @@ function W = rotationTirsToItrs(xp, yp, sp)
 %   4.7e-06 at the pole rates of 2007, which is 30 metres at the surface: large
 %   enough to be obvious in a residual and small enough to survive every
 %   orthogonality and round-trip check, since a transpose is still a rotation.
-%   Revisions 1.0 to 1.72 of the handover printed equation 5.3 here unchanged
-%   and the code has always returned iauPom00; the code was right.
+%   The code returns iauPom00.
 %
 %   RADIANS, NOT ARCSECONDS. The IERS publishes xp and yp in arcseconds and
 %   every EOP file carries them that way; readEop converts on the way in and

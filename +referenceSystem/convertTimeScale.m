@@ -137,14 +137,10 @@ function epochOut = convertTimeScale(epochIn, scaleOut, options)
 %   referenceSystem:convertTimeScale:unrepresentableLeapSecond
 %   referenceSystem:convertTimeScale:gatewayMissing
 %   referenceSystem:convertTimeScale:beforeUtcEpoch
-%       Raised HERE, by this function, when a TAI epoch maps to a UTC day
-%       before the leap-second table begins. It was named
-%       referenceSystem:leapSecondTable:beforeUtcEpoch until revision 1.52,
-%       which contradicted the binding section C.2 rule that an identifier
-%       names the function that raised it - the same correction revision 1.36
-%       made to the epoch scale check. leapSecondTable raises an identifier of
-%       its own name for its own range check; the two are distinct conditions
-%       in distinct functions and must be catchable separately.
+%       Raised by this function when a TAI epoch maps to a UTC day before the
+%       leap-second table begins. leapSecondTable raises an identifier of its
+%       own name for its own range check; the two are distinct conditions in
+%       distinct functions and are catchable separately.
 %   referenceSystem:timeScale:unknownScale
 %
 % WARNINGS
@@ -153,7 +149,7 @@ function epochOut = convertTimeScale(epochIn, scaleOut, options)
 %       The conversion proceeds with zero, and the caller is told what that
 %       costs. An EXPLICIT 'DeltaUt1', 0 is a decision and does not warn -
 %       decision D67's rule that a consequential physical choice is never
-%       silently defaulted, applied here (decision D113, rev. 1.184).
+%       silently defaulted, applied here (decision D113).
 %   referenceSystem:leapSecondTable:dubiousYear   Raised once per call by
 %       leapSecondTable when an epoch lies beyond the table's coverage.
 %
