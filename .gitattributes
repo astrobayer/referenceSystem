@@ -1,0 +1,15 @@
+# referenceSystem - how git treats line endings (rev. 1.231).
+#
+# THE MANUAL PDF IS BINARY, AND GIT COULD NOT TELL. reportlab writes its
+# streams ASCII85-encoded, so the file has no NUL byte and git's text heuristic
+# took it for text. With core.autocrlf=true, a Windows checkout then rewrote its
+# 334 LF bytes as CRLF, which moves every object the cross-reference table
+# points at. Measured at rev. 1.231 on the committed rev. 1.222 manual: the blob
+# reads cleanly, and the CRLF checkout of it makes pypdf report "incorrect
+# startxref pointer" and fall back to reparsing. The blob in history was never
+# damaged - it has no CRLF - only every Windows working copy of it.
+*.pdf   binary
+
+# POSIX sh refuses a CRLF script, and test/c/runStandaloneTests.sh is edited on
+# Windows and run by CI on Linux.
+*.sh    text eol=lf
