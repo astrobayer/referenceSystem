@@ -141,6 +141,20 @@ classdef TestEphemeris < matlab.unittest.TestCase
             'earthMoonBarycentre', [0.975, 1.025]);
     end
 
+    methods (Static, Access = private)
+
+        function catalogue = unresolvableCatalogue()
+            %UNRESOLVABLECATALOGUE One kernel row whose host can never resolve.
+            %   .invalid is reserved by RFC 6761 for exactly this, so a transfer
+            %   from it fails on every machine, with or without a network.
+            catalogue = table("de440s.bsp", "https://kernels.invalid/de440s.bsp", ...
+                "minimal", "short", 1, "A test row.", "Never resolves.", ...
+                'VariableNames', ["File", "Url", "Set", "Span", ...
+                "ApproximateBytes", "Purpose", "Note"]);
+        end
+
+    end
+
     methods (Access = private)
 
         function root = toolboxRoot(~)
@@ -200,11 +214,35 @@ classdef TestEphemeris < matlab.unittest.TestCase
             family = TestEphemeris.CompatibleGenerations;
 
             keep = false(size(kernel));
+            planetary = false(size(kernel));
+            isDe441 = false(size(kernel));
             for k = 1:numel(kernel)
                 single = referenceSystem.readEphemeris(kernel(k), ...
                     'Digest', false);
                 keep(k) = ~single.meta.generationVerified || ...
                     any(single.meta.generations == family);
+                % Planetary means it carries the Earth (NAIF 399), read from
+                % the bodies the file covers rather than from its name:
+                % sb441-n16.bsp also names DE441 and holds no planet.
+                planetary(k) = any(single.meta.bodies.NaifId == 399);
+                isDe441(k) = single.meta.generationVerified && ...
+                    isequal(single.meta.generations, "DE441");
+            end
+
+            % DE441 IS PREFERRED OVER DE440 WHEN BOTH ARE PRESENT (rev. 1.232).
+            % sb441 is referenced to DE441 (see CompatibleGenerations), so
+            % DE441 + sb441 is the strictly consistent set and DE440 + sb441 a
+            % mixture bounded below 1 m. With a DE441 planetary kernel in the
+            % folder the DE440 planetary kernels are left out, and the log says
+            % so. NOT EXERCISED WHEN WRITTEN: the development machine's data
+            % folder held de440s.bsp and sb441-n16.bsp only, so this branch has
+            % not yet run against a real DE441 file.
+            preferred = keep & planetary & isDe441;
+            passedOver = strings(0, 1);
+            if any(preferred)
+                superseded = keep & planetary & ~isDe441;
+                passedOver = string({found(superseded).name});
+                keep(superseded) = false;
             end
 
             warningState = warning('off', ...
@@ -216,13 +254,20 @@ classdef TestEphemeris < matlab.unittest.TestCase
                 'Digest', false, 'AllowGenerations', family);
 
             if any(~keep)
+                excluded = setdiff(string({found(~keep).name}), passedOver);
+                note = strings(0, 1);
+                if ~isempty(excluded)
+                    note(end + 1) = "excluded, outside the declared family " + ...
+                        join(family, "+") + ": " + join(excluded, " ");
+                end
+                if ~isempty(passedOver)
+                    note(end + 1) = "passed over for DE441: " + join(passedOver, " ");
+                end
                 testCase.log(1, TestPerformance.noteRecord( ...
                     "furnished SPK set", ...
                     sum(keep) + " of " + numel(kernel) + " SPKs, " + ...
                     height(ephemeris.meta.bodies) + " bodies covered", ...
-                    "excluded, outside the declared family " + ...
-                    join(family, "+") + ": " + ...
-                    join(string({found(~keep).name}), " ")));
+                    join(note, "; ")));
             end
         end
 
@@ -779,6 +824,29 @@ classdef TestEphemeris < matlab.unittest.TestCase
                     'The DE405-era perturber set must never be offered.');
             end
 
+            function downloadKernels_contract_aCallerCatalogueIsUsedAndHeldToTheRules(testCase)
+                % THE CATALOGUE OPTION (rev. 1.233). A caller's table replaces the
+                % built-in one - the list comes back with its rows and the three
+                % transfer columns added - and it is held to the rules the
+                % built-in one is: all seven descriptive variables
+                % (badCatalogue), and no leapseconds kernel (D89).
+                given = TestEphemeris.unresolvableCatalogue();
+                listed = referenceSystem.downloadKernels(Catalogue = given);
+                testCase.verifyEqual(listed.File, given.File);
+                testCase.verifyEqual(listed.Status, "listed");
+                testCase.verifySize(listed, [1 10]);
+
+                testCase.verifyError(@() referenceSystem.downloadKernels( ...
+                    Catalogue = removevars(given, "Url")), ...
+                    'referenceSystem:downloadKernels:badCatalogue');
+
+                leap = given;
+                leap.File = "naif0012.tls";
+                testCase.verifyError(@() referenceSystem.downloadKernels( ...
+                    Catalogue = leap), ...
+                    'referenceSystem:downloadKernels:leapSecondKernelInCatalogue');
+            end
+
             function downloadKernels_contract_partialFetchWarnsAndReturnsTheManifest(testCase)
                 % D98, AND THE ONLY TEST IN THIS CLASS WRITTEN BECAUSE A REAL RUN
                 % FAILED. Rev. 1.134 raised on a partial fetch "so the rows that
@@ -803,10 +871,17 @@ classdef TestEphemeris < matlab.unittest.TestCase
                 % So: display is suppressed and the identifier is then read from
                 % lastwarn, which works precisely because SUPPRESSION DOES NOT
                 % HIDE A WARNING FROM lastwarn - the fact WarningRecordingPlugin
-                % has documented since S4 and rev. 1.174 re-measured. If the host
-                % does answer in time the premise is gone, and the test is
-                % FILTERED rather than passed, because a test that cannot do its
-                % job should say so in the report.
+                % has documented since S4 and rev. 1.174 re-measured.
+                %
+                % DETERMINISTIC SINCE REV. 1.233, AND NO LONGER ON THE NETWORK.
+                % Until then this called the real NAIF url with a one-second
+                % timeout, and on any connection that answered in time it was
+                % FILTERED - an intended skip, listed in runTestSuite's catalogue.
+                % downloadKernels now takes a caller's Catalogue, and the one
+                % here names a host under .invalid, which RFC 6761 reserves so
+                % that it can never resolve. The failed transfer the test needs
+                % therefore happens on every machine, and the premise is
+                % verified rather than assumed.
                 warningId = 'referenceSystem:downloadKernels:incompleteFetch';
                 previousState = warning('off', warningId);
                 restoreWarning = onCleanup(@() warning(previousState));
@@ -817,7 +892,8 @@ classdef TestEphemeris < matlab.unittest.TestCase
                 manifest = [];
                 try
                     manifest = referenceSystem.downloadKernels( ...
-                        Set = "minimal", Mode = "verify", Timeout = 1);
+                        Set = "minimal", Mode = "verify", Timeout = 1, ...
+                        Catalogue = TestEphemeris.unresolvableCatalogue());
                 catch failure
                     testCase.verifyFail(['downloadKernels must not throw on a ', ...
                         'failed transfer; it threw ' failure.identifier]);
@@ -825,14 +901,9 @@ classdef TestEphemeris < matlab.unittest.TestCase
 
                 testCase.verifyClass(manifest, 'table', ...
                     'The manifest must survive a failure, because it IS the artifact.');
-                testCase.verifyEqual(height(manifest), 1);
-
-                testCase.assumeTrue(startsWith(manifest.Status(1), "FAILED"), ...
-                    ['The NAIF host answered inside the one-second timeout, so ', ...
-                    'there is no failed transfer to observe on this machine. ', ...
-                    'Filtered rather than passed: the assertions below would ', ...
-                    'all hold and would have tested nothing. See H.11 for the ', ...
-                    'catalogue seam that would make this deterministic.']);
+                testCase.assertEqual(height(manifest), 1);
+                testCase.verifyTrue(startsWith(manifest.Status(1), "FAILED"), ...
+                    'A host under .invalid cannot resolve, so the transfer must fail.');
 
                 [~, raisedId] = lastwarn;
                 testCase.verifyEqual(string(raisedId), string(warningId), ...

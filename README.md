@@ -189,14 +189,13 @@ Never edit the function reference by hand. Edit the help block and build again
   the expected format and errors outside its grid rather than returning NaN.
 - **The leap-second table is frozen at 2017-01-01.** Check IERS Bulletin C and
   supply an override before operational use.
-- **One test uses the network and the rest do not**, nor a downloaded
-  multi-decade EOP file. The exception is
-  `downloadKernels_contract_partialFetchWarnsAndReturnsTheManifest`, which
-  provokes a failed transfer with a one-second timeout against the real NAIF
-  host. On a machine with no route it fails fast and the test does its job; on
-  one that answers inside a second the test is FILTERED rather than passed.
-  Making it deterministic needs a catalogue seam and is recorded in the
-  handover, §H.11.
+- **No test needs the network**, nor a downloaded multi-decade EOP file. The last
+  one that did, `downloadKernels_contract_partialFetchWarnsAndReturnsTheManifest`,
+  provoked a failed transfer against the real NAIF host and was filtered on any
+  connection fast enough to answer. Since v2.1.233 `downloadKernels` takes a
+  caller's `Catalogue`, and the test points one at a host under `.invalid`,
+  which can never resolve. The kernel-backed tier still needs the kernels, which
+  setup fetches once.
 
 ## Licence
 
