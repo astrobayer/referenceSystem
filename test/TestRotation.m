@@ -1460,29 +1460,35 @@ classdef TestRotation < matlab.unittest.TestCase
                     interpolant, queryMjd(k), panel);
             end
 
-            % 5e-12 rad IS 1.03 uas (5e-12 x 2.063e11 uas/rad), not the "about
-            % 1e-3 uas" this comment said until rev. 1.218 (D124) - rad to mas,
-            % labelled uas. So it is TWICE the 0.5 uas gate the builder applies
-            % at its midpoints, not below it, and 4e6 above section B.9.2's
-            % 2.6e-7 uas, not three orders.
+            % 1e-3 uas ON ALL FIVE ANGLES, 4.85e-15 rad, SINCE REV. 1.224 (H.11
+            % item 6). It bounds the error the panels add to each angle at an
+            % epoch the fit never saw, and the number is the builder's own
+            % ACCURACY claim for the pole, applied to the CIP as well.
             %
-            % It bounds the error the panels add to each angle before the
-            % rotation, which carries an angle error about one for one into
-            % R: it is P19c's 5e-12 on R (section H.4), asserted per input.
-            % Measured on these five epochs: worst column Y, 8.4e-17 rad
-            % (1.7e-5 uas). That is the CIP series' own evaluation noise, not
-            % the fit - Y reads 8.4e-17 to 1.4e-16 at every degree from 8 to
-            % 20 - while the truncation shows in xp and yp at 8.8e-19 rad
-            % (1.8e-7 uas, B.9.2's order). 5.9e4 above that floor, it fails on
-            % a broken fit and not on a compiler changing its mind about a
-            % cosine.
+            % WHY NOT THE 5e-12 IT REPLACES. That was P19c's bound on R, asserted
+            % per input: 1.03 uas, TWICE the 0.5 uas gate the builder applies
+            % at its midpoints. It passed a degree-12 fit (xp 9.1e-13 rad, 0.19
+            % uas) and a panel mapping about a second late (X moves 4.1e-12 rad
+            % per second). It was not a claim about which error dominates.
             %
-            % WHAT IT CANNOT SEE, MEASURED: degree 12 reaches xp at 9.1e-13
-            % (0.19 uas) and PASSES, as it passes the builder's own gate;
-            % degree 10 (1.4e-11) and a fit without the sub-daily tides
-            % (2.5e-9) fail. residualIsRecordedAndSmall is what tells degree 12
-            % from degree 20, not this test (obligation O8).
-            testCase.verifyEqual(fitted(:, 1:5), direct(:, 1:5), 'AbsTol', 5e-12);
+            % WHAT DOMINATES, MEASURED ON THESE FIVE EPOCHS: worst column Y,
+            % 8.4e-17 rad (1.7e-5 uas), the CIP series' own evaluation noise
+            % rather than the fit - Y reads 8.4e-17 to 1.4e-16 at every degree
+            % from 8 to 20. The truncation the degree controls shows in xp and
+            % yp at 8.8e-19 rad (1.8e-7 uas, B.9.2's order). The bound is 58
+            % times the noise floor, 5500 times the truncation.
+            %
+            % WHAT IT NOW SEES, MEASURED: degree 12 fails (xp 9.1e-13, 190 times
+            % over), as do degree 10 and a fit without the sub-daily tides; a
+            % mapping error of more than about 1.2 ms fails. Degree 16 (xp
+            % 1.05e-15 rad, 2.2e-4 uas) still passes, which is right: it meets
+            % the accuracy the builder documents. WHY NOT THE CIP's 1e-4 uas:
+            % Y's noise would leave a margin of six on one host, and noise
+            % that close to a bound fails on a compiler rather than on a fit
+            % (obligation O8).
+            microarcsecond = referenceSystem.iersConstants().arcsecondsToRadians * 1e-6;
+            testCase.verifyEqual(fitted(:, 1:5), direct(:, 1:5), 'AbsTol', ...
+                1e-3 * microarcsecond);
             testCase.verifyEqual(fitted(:, 6), direct(:, 6), 'AbsTol', 1e-10);
             % Excess LOD is seconds per day of order 1e-3 and is fitted from
             % the same daily table as dut1, so it carries dut1's bound.
