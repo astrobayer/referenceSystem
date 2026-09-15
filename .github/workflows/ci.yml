@@ -57,7 +57,7 @@ jobs:
     runs-on: [self-hosted, Windows]
     timeout-minutes: 60        # backstop: no wedge sits for hours
     env:
-      REFERENCESYSTEM_CI: 1    # read by ciGate; the ONE CI policy switch
+      REFERENCESYSTEM_CI: 1    # read by referenceSystemCiGate; the ONE CI policy switch
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
@@ -154,7 +154,7 @@ jobs:
                 end
             end
             % de440.bsp is catalogued but only fetched for KernelSet="all"
-            % with a long span; ciGate asks for "short". Reported, not
+            % with a long span; referenceSystemCiGate asks for "short". Reported, not
             % required, so its absence is not read as a broken pool.
             fprintf('  optional de440.bsp present: %d\n', ...
                 isfile(fullfile(pool, "de440.bsp")));
@@ -177,7 +177,9 @@ jobs:
 
       - uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
         with:
-          command: ciGate
+          # Renamed from ciGate at rev. 1.229: a sibling project's ciGate.m
+          # won on the development machine's path and kept the local gate red.
+          command: referenceSystemCiGate
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()           # the report is wanted MOST when the run is red

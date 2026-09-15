@@ -45,9 +45,11 @@ function interpolant = earthOrientationInterpolant(epoch, options)
 %                                        that misses it raises toleranceNotMet
 %                                        rather than returning quietly. The
 %                                        same number gates every channel but
-%                                        lod: the five angles in uas and dut1
-%                                        in us. lod is reported, not gated,
-%                                        because it is not an angle.
+%                                        lod, as microarcseconds of rotation:
+%                                        dut1's residual is converted at the
+%                                        ERA rate, 15.04 uas per us. lod is
+%                                        reported, not gated, because it is
+%                                        not an angle.
 %
 % OUTPUT ARGUMENTS
 %   Name              Size          Type     Units  Description
@@ -65,9 +67,11 @@ function interpolant = earthOrientationInterpolant(epoch, options)
 %                                                   second table of its own, and
 %                                                   a per-panel scalar is EXACT
 %                                                   rather than approximate
-%                                                   because panels are aligned
-%                                                   to whole UTC days, so a leap
-%                                                   second falls on a boundary.
+%                                                   because a leap second may
+%                                                   only fall on a panel
+%                                                   boundary; one inside a
+%                                                   panel is refused (see
+%                                                   LEAP SECONDS).
 %   .quantity         1xQ           string   -      Channel names, in column
 %                                                   order. THE SINGLE AUTHORITY
 %                                                   for the count Q and the
@@ -130,6 +134,20 @@ function interpolant = earthOrientationInterpolant(epoch, options)
 %   is at its weakest, and compares against the same direct chain
 %   rotationItrsToGcrs would have evaluated.
 %
+%   LEAP SECONDS. A panel carries one TAI-UTC, so a leap second may fall on a
+%   panel boundary and nowhere else. One-day panels always meet that; a
+%   longer PanelSpan with a leap second strictly inside a panel is refused
+%   with leapSecondInsidePanel. The panel that ENDS in a leap second takes its
+%   last node at 23:59:60, the instant its own linear time reaches, with
+%   UT1-UTC continued in that day's convention - which is what lets a span
+%   cross 2017-01-01 at all. Evaluation follows the MJD a caller hands in,
+%   and the one second 23:59:60 has no MJD of its own, so rotationItrsToGcrs
+%   refuses a sample inside it (insideLeapSecond) and the C API returns
+%   RS_API_OUT_OF_RANGE for a difference shoulder that lands in it. Across the
+%   boundary itself, measured on 2017-01-01 at twelve epochs from 0.9 d before
+%   to 0.9 d after, including two 86.4 s from it: R within 2.3e-16 and Rdot
+%   within 5.6e-19 1/s of the direct path.
+%
 % ACCURACY
 %   With the default degree and panel span, against the direct chain:
 %     CIP X, Y, s              better than 1e-4 uas
@@ -152,9 +170,11 @@ function interpolant = earthOrientationInterpolant(epoch, options)
 %   hand side.
 %
 % ERRORS
+%   referenceSystem:earthOrientationInterpolant:missingEop
 %   referenceSystem:earthOrientationInterpolant:wrongScale
 %   referenceSystem:earthOrientationInterpolant:singleEpoch
 %   referenceSystem:earthOrientationInterpolant:spanNotCovered
+%   referenceSystem:earthOrientationInterpolant:leapSecondInsidePanel
 %   referenceSystem:earthOrientationInterpolant:toleranceNotMet
 %
 % REFERENCES
@@ -220,6 +240,31 @@ function interpolant = earthOrientationInterpolant(epoch, options)
     panelStartMjd = (firstStart:options.PanelSpan:lastStart)';
     panelCount = numel(panelStartMjd);
 
+    % A PANEL CARRIES ONE TAI-UTC, SO A LEAP SECOND MAY FALL ON A PANEL BOUNDARY
+    % AND NOWHERE ELSE (rev. 1.226, H.11 item 9). One-day panels always meet
+    % that, because leap seconds start a UTC day. A longer PanelSpan can put
+    % one strictly inside a panel, and that is refused here by name - until
+    % this revision it surfaced as toleranceNotMet, with advice to raise Degree
+    % that could not help.
+    taiAtStart = localLeapSeconds(panelStartMjd);
+    for k = 1:panelCount
+        panelEnd = panelStartMjd(k) + options.PanelSpan;
+        interiorDay = (floor(panelStartMjd(k)) + 1:ceil(panelEnd) - 1)';
+        interiorDay = interiorDay(interiorDay > panelStartMjd(k) & interiorDay < panelEnd);
+        if isempty(interiorDay)
+            continue
+        end
+        changed = localLeapSeconds(interiorDay) ~= taiAtStart(k);
+        if any(changed)
+            error('referenceSystem:earthOrientationInterpolant:leapSecondInsidePanel', ...
+                ['A leap second starts MJD %d, which lies inside panel %d ', ...
+                '(MJD %g to %g). A panel carries one TAI-UTC and cannot straddle ', ...
+                'a leap second. Choose a PanelSpan that puts a panel boundary on ', ...
+                'that day; PanelSpan 1 always does.'], ...
+                interiorDay(find(changed, 1)), k, panelStartMjd(k), panelEnd);
+        end
+    end
+
     % All nodes of all panels in one column, so the chain below is evaluated
     % once for the whole interpolant rather than once per panel. At a ten-day
     % span that is one call of 210 epochs instead of ten calls of 21.
@@ -231,6 +276,32 @@ function interpolant = earthOrientationInterpolant(epoch, options)
     end
     [value, cipModel] = localEvaluateChain(nodeMjd(:), options.Eop, ...
         options.ApplyTidalCorrections);
+
+    % THE LAST NODE OF A PANEL THAT ENDS IN A LEAP SECOND IS TAKEN AT 23:59:60,
+    % AS THE LEFT LIMIT OF ITS OWN PANEL (rev. 1.226). Until this revision it
+    % was taken at 0h of the next day, where the series has already stepped:
+    % with the sub-daily terms, UT1-UTC read +0.591313 s at 2017-01-01 0h
+    % against -0.408687 s one second before 23:59:60, so the panel fitted a
+    % one-second step and the build failed at 3.58e5. At 23:59:60 the TT, the
+    % CIP and the pole continue the panel smoothly, but interpolateEop reports
+    % UT1-UTC in the NEW day's convention, so the step in TAI-UTC is taken back
+    % out to continue the old one. The node is row 1 of its panel: rsChebNodes
+    % puts u = cos(0) = 1, the panel's end, first.
+    taiAtEnd = localLeapSeconds(panelStartMjd + options.PanelSpan);
+    endsInLeap = find(taiAtEnd ~= taiAtStart);
+    if ~isempty(endsInLeap)
+        endRow = (endsInLeap - 1) * nodeCount + 1;
+        leapDay = panelStartMjd(endsInLeap) + options.PanelSpan - 1;
+        assert(all(nodeMjd(endRow) == leapDay + 1), ...
+            'The end node of a panel is not the first node of its block.');
+        leapValue = localEvaluateEpochs(referenceSystem.daySecondToEpoch( ...
+            [leapDay, repmat(86400, numel(leapDay), 1)], "UTC"), ...
+            options.Eop, options.ApplyTidalCorrections);
+        isUt1 = localQuantityNames() == "dut1";
+        leapValue(:, isUt1) = leapValue(:, isUt1) - ...
+            (taiAtEnd(endsInLeap) - taiAtStart(endsInLeap));
+        value(endRow, :) = leapValue;
+    end
 
     % THE CHANNEL COUNT IS TAKEN FROM THE DATA, NOT WRITTEN DOWN A SECOND
     % TIME. P19c added a seventh channel by editing a literal 7 here and
@@ -261,14 +332,31 @@ function interpolant = earthOrientationInterpolant(epoch, options)
     % does not enter the angle at all - it enters the ERA RATE - so bounding
     % it in microarcseconds is a category error, not a strict or a lax choice.
     % Its residual is reported in meta.residual alongside the others so it is
-    % visible, and the gate is applied to every other channel - the five
-    % angles in uas and dut1 in us, compared against the same number.
-    angular = ~ismember(string(interpolant.quantity), "lod");
-    if any(residual(angular) > options.Tolerance)
+    % visible, and the gate is applied to every other channel.
+    %
+    % DUT1 IS GATED AS THE ANGLE IT BECOMES (rev. 1.225, H.11 item 8). Its
+    % residual is in microseconds, and until this revision it was compared
+    % with the tolerance as if that number were microseconds too: at the
+    % default 0.5, dut1 was held to 7.5 uas of rotation while the angles were
+    % held to 0.5 - the category error the lod exclusion above avoids, made
+    % in the other direction. A UT1 error of dt turns the Earth by
+    % omega*dt, so the residual is scaled by the ERA rate (D63) into
+    % microarcseconds, 15.04 uas per us, before the comparison. meta.residual
+    % still reports microseconds.
+    name = string(interpolant.quantity);
+    constants = referenceSystem.iersConstants();
+    asAngle = residual;
+    isUt1 = name == "dut1";
+    asAngle(isUt1) = residual(isUt1) * ...
+        referenceSystem.earthRotationAngleRate() / constants.arcsecondsToRadians;
+    gated = name ~= "lod";
+    if any(asAngle(gated) > options.Tolerance)
+        [worst, worstIndex] = max(asAngle .* gated);
         error('referenceSystem:earthOrientationInterpolant:toleranceNotMet', ...
-            ['The fit reached %.4g against a tolerance of %.4g. Raise ', ...
-            'Degree or shorten PanelSpan; handover section B.9.2 tabulates ', ...
-            'what each buys.'], max(residual(angular)), options.Tolerance);
+            ['The fit reached %.4g uas of rotation in %s against a tolerance ', ...
+            'of %.4g uas (dut1 counted at 15.04 uas per us). Raise Degree or ', ...
+            'shorten PanelSpan; handover section B.9.2 tabulates what each ', ...
+            'buys.'], worst, name(worstIndex), options.Tolerance);
     end
 
     versionInfo = referenceSystem.toolboxVersion();
@@ -303,6 +391,15 @@ function [value, cipModel] = localEvaluateChain(mjd, eop, applyTidal)
 
     utc = referenceSystem.daySecondToEpoch( ...
         [floor(mjd), (mjd - floor(mjd)) * 86400], "UTC");
+    [value, cipModel] = localEvaluateEpochs(utc, eop, applyTidal);
+end
+
+function [value, cipModel] = localEvaluateEpochs(utc, eop, applyTidal)
+%LOCALEVALUATEEPOCHS The seven quantities at a UTC epoch struct.
+%   The body of localEvaluateChain, taking the epoch itself so that the one
+%   instant an MJD cannot name - 23:59:60 of a leap-second day - can still be
+%   evaluated by the same chain (rev. 1.226).
+
     if applyTidal
         correction = referenceSystem.subdailyEopCorrection(utc);
         eopAt = referenceSystem.interpolateEop(eop, utc, ...

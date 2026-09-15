@@ -37,11 +37,20 @@ function manifest = downloadKernels(options)
 %   Announce     1x1    function_handle   no-op      Called as
 %                                                    Announce(name, bytes, index,
 %                                                    total) before each transfer.
+%   Catalogue    Mx7    table             empty      Entries to use INSTEAD of
+%                                                    the built-in catalogue, with
+%                                                    variables File, Url, Set,
+%                                                    Span, ApproximateBytes,
+%                                                    Purpose and Note as below.
+%                                                    Empty means the built-in
+%                                                    one. Set and Span select
+%                                                    from it as from the
+%                                                    built-in one. See METHOD.
 %
 % OUTPUT ARGUMENTS
 %   Name                 Size   Type      Units  Description
 %   ----                 ----   ----      -----  -----------
-%   manifest             Nx9    table     -      One row per catalogue entry.
+%   manifest             Nx10   table     -      One row per catalogue entry.
 %   .File                Nx1    string    -      Kernel file name.
 %   .Url                 Nx1    string    -      Where it comes from.
 %   .Set                 Nx1    string    -      Content group it belongs to.
@@ -130,6 +139,15 @@ function manifest = downloadKernels(options)
 %   Identity is recorded and bulk is not: each fetched file gets a SHA-256 in
 %   the manifest, which is what a result should carry (data/README.md).
 %
+%   A CALLER'S CATALOGUE (rev. 1.233). Catalogue replaces the built-in table,
+%   so a user with a private kernel mirror can point every Url at it, and a
+%   test can point one at a host that cannot resolve and observe a failed
+%   transfer on any machine - which is what made the D98 test deterministic.
+%   It is held to the same rules as the built-in one: the seven descriptive
+%   variables must be present (badCatalogue), and a leapseconds kernel is
+%   refused (D89, leapSecondKernelInCatalogue). Status, Bytes and Digest are
+%   added as for the built-in rows.
+%
 % ACCURACY
 %   Not applicable; this function transfers files and computes no quantity.
 %   ApproximateBytes is the published size and is for planning only; Bytes is
@@ -140,6 +158,8 @@ function manifest = downloadKernels(options)
 %   referenceSystem:downloadKernels:unknownSpan
 %   referenceSystem:downloadKernels:unknownMode
 %   referenceSystem:downloadKernels:cacheNotWritable
+%   referenceSystem:downloadKernels:badCatalogue
+%   referenceSystem:downloadKernels:leapSecondKernelInCatalogue
 %
 % WARNINGS
 %   referenceSystem:downloadKernels:incompleteFetch
@@ -181,6 +201,7 @@ function manifest = downloadKernels(options)
         options.Timeout (1,1) double {mustBePositive} = 900
         options.Overwrite (1,1) logical = false
         options.Announce (1,1) function_handle = @(varargin) []
+        options.Catalogue table = table()
     end
 
     if ~ismember(options.Mode, ["list", "verify", "download"])
@@ -189,7 +210,12 @@ function manifest = downloadKernels(options)
             options.Mode);
     end
 
-    manifest = localCatalogue();
+    if isempty(options.Catalogue)
+        manifest = localCatalogue();
+    else
+        manifest = localCallerCatalogue(options.Catalogue);
+    end
+    localRefuseLeapSecondKernel(manifest);
     manifest = manifest(localSelect(manifest, options.Set, options.Span), :);
 
     if options.Mode == "list"
@@ -357,10 +383,39 @@ function catalogue = localCatalogue()
         repmat("listed", count, 1), nan(count, 1), strings(count, 1), ...
         'VariableNames', ["File", "Url", "Set", "Span", "ApproximateBytes", ...
         "Purpose", "Note", "Status", "Bytes", "Digest"]);
+end
 
-    % D89, ASSERTED HERE AND NOT ONLY IN THE HELP. A leapseconds kernel added
-    % to this table would be furnished by a caller who trusted the catalogue,
-    % so the catalogue refuses to describe one.
+function catalogue = localCallerCatalogue(given)
+%LOCALCALLERCATALOGUE A caller's catalogue, in the built-in layout (rev. 1.233).
+%
+%   The seven descriptive variables are required and taken by name, so their
+%   order in the caller's table does not matter; the three the transfer fills
+%   are added exactly as localCatalogue adds them.
+
+    required = ["File", "Url", "Set", "Span", "ApproximateBytes", "Purpose", "Note"];
+    missing = required(~ismember(required, string(given.Properties.VariableNames)));
+    if ~isempty(missing)
+        error('referenceSystem:downloadKernels:badCatalogue', ...
+            ['A Catalogue must carry the variables %s; it is missing %s. The ', ...
+            'names are those of the manifest this function returns.'], ...
+            strjoin(required, ", "), strjoin(missing, ", "));
+    end
+    count = height(given);
+    catalogue = table(string(given.File), string(given.Url), string(given.Set), ...
+        string(given.Span), double(given.ApproximateBytes), string(given.Purpose), ...
+        string(given.Note), repmat("listed", count, 1), nan(count, 1), ...
+        strings(count, 1), 'VariableNames', ["File", "Url", "Set", "Span", ...
+        "ApproximateBytes", "Purpose", "Note", "Status", "Bytes", "Digest"]);
+end
+
+function localRefuseLeapSecondKernel(catalogue)
+%LOCALREFUSELEAPSECONDKERNEL D89, for the built-in catalogue and a caller's.
+%
+%   ASSERTED IN CODE AND NOT ONLY IN THE HELP. A leapseconds kernel in the
+%   catalogue would be furnished by a caller who trusted it, so no catalogue
+%   this function acts on may describe one - since rev. 1.233 that includes one
+%   the caller supplied.
+
     if any(endsWith(lower(catalogue.File), ".tls"))
         error('referenceSystem:downloadKernels:leapSecondKernelInCatalogue', ...
             ['A leapseconds kernel is present in the catalogue. Decision ', ...

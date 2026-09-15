@@ -650,9 +650,19 @@ def check_reference_page_bodies_match_the_help(files):
     therefore out of scope here and stays the business of the index checks;
     what is asserted is that nothing RENDERED has gone stale.
 
-    Whitespace is collapsed on both sides before comparing, because the two
-    differ in indentation by construction and the claim is about words, not
-    columns.
+    THE COMPARISON IS EXACT, AND THE SECTIONS ARE CUT BY THE GENERATOR'S OWN
+    RULES (rev. 1.228).  Until then the check had three blind spots, each found
+    by walking into it rather than by the check.  It collapsed whitespace,
+    so a page that was word-accurate and byte-wrong passed (rev. 1.216).  It
+    never compared SYNTAX, because its own parser named no section before the
+    first heading, while the generator renders that paragraph as SYNTAX (rev.
+    1.219).  And its rendered-side heading pattern had no hyphen, so OPTIONAL
+    NAME-VALUE ARGUMENTS was compared for no function at all (rev. 1.219) -
+    the lesson below had been applied to one of its two patterns.  What is
+    mirrored is the TEXT EXTRACTION only, three rules read from
+    buildDocumentation's localHelpBlock, localSplitSections and
+    localSectionBody, not the HTML it builds.  Each rule is named where it is
+    used, so a change there has one place to be matched here.
 
     THE HEADING PATTERN ADMITS A HYPHEN, AND THAT WAS NOT THE FIRST GUESS.
     Written as [A-Z ]+ it silently failed to recognise OPTIONAL NAME-VALUE
@@ -667,19 +677,17 @@ def check_reference_page_bodies_match_the_help(files):
         return
     html = open(page, encoding='utf-8').read()
 
-    def plain(text):
-        for entity, literal in (('&quot;', '"'), ('&#39;', "'"), ('&lt;', '<'),
-                                ('&gt;', '>'), ('&amp;', '&')):
-            text = text.replace(entity, literal)
-        return ' '.join(text.split())
+    def unescape(text):
+        # buildDocumentation/localEscape escapes exactly & < >, ampersand first.
+        return text.replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&')
 
     rendered = {}
     for block in re.finditer(r'<div class="fcn" id="([^"]+)">(.*?)(?=<div class="fcn"|\Z)',
                              html, re.S):
         sections = {}
-        for section in re.finditer(r'<h4>([A-Z][A-Z ]*)</h4>\s*<pre>(.*?)</pre>',
+        for section in re.finditer(r'<h4>([A-Z][A-Z \-]*)</h4>\n<pre>(.*?)</pre>',
                                    block.group(2), re.S):
-            sections[section.group(1).strip()] = plain(section.group(2))
+            sections[section.group(1)] = unescape(section.group(2))
         rendered[block.group(1)] = sections
 
     for filename in files:
@@ -690,27 +698,48 @@ def check_reference_page_bodies_match_the_help(files):
         if not sections:
             continue
         text = open(os.path.join(PACKAGE, filename), encoding='utf-8').read()
-        source = {}
-        current = None
-        for line in text.split('\n')[1:]:
-            if not line.startswith('%'):
-                break
-            body = line[1:]
-            heading = re.match(r' ([A-Z][A-Z -]*[A-Z])\s*$', body)
-            if heading:
-                current = heading.group(1).strip()
-                source[current] = []
-            elif current is not None:
-                source[current].append(body)
+        source = _help_sections(text)
         for section, shown in sections.items():
-            if section not in source:
-                continue
-            expected = plain('\n'.join(source[section]))
-            if expected != shown:
+            if source.get(section) != shown:
                 fail('doc/referencePageBodyIsStale',
                      '%s section %s in the function reference no longer matches '
                      'the help block; rebuild with buildDocumentation' % (
                          name, section))
+
+
+def _help_sections(text):
+    """Help sections exactly as buildDocumentation cuts them (rev. 1.228)."""
+    # localHelpBlock: the contiguous comment block after the function line,
+    # each line stripped on the right and its leading "%" and ONE space removed.
+    block = []
+    started = False
+    for k, raw in enumerate(text.replace('\r\n', '\n').split('\n')):
+        line = raw.rstrip()
+        if not started:
+            started = line.strip().startswith('%') and k > 0
+            if not started:
+                continue
+        if not line.strip().startswith('%'):
+            break
+        block.append(re.sub(r'^\s*%\s?', '', line))
+    # localSplitSections: after the H1 line, text before the first heading is
+    # SYNTAX; a heading is a whole line of capitals, spaces and hyphens; a
+    # "See also" line while still in SYNTAX ends the parse.
+    sections = {}
+    current = 'SYNTAX'
+    body = []
+    for line in block[1:]:
+        if re.fullmatch(r'[A-Z][A-Z \-]+', line):
+            sections.setdefault(current, '\n'.join(body))
+            current = line
+            body = []
+            continue
+        if current == 'SYNTAX' and line.strip().startswith('See also'):
+            break
+        body.append(line)
+    sections.setdefault(current, '\n'.join(body))
+    # localSectionBody: the body is stripped at both ends.
+    return {name: value.strip() for name, value in sections.items()}
 
 
 def check_no_unexpected_file_at_the_root():
@@ -733,7 +762,7 @@ def check_no_unexpected_file_at_the_root():
         'BEST_PRACTICE.md', 'THIRD_PARTY_NOTICES.md',
         'HANDOVER_referenceSystem.md', 'WORKFLOW_GUIDE.md', 'CODING_GUIDE.md',
         'VALIDATION_GUIDE.md', 'DOCUMENTATION_GUIDE.md',
-        'auditPackage.py', 'ciGate.m', 'setupReferenceSystem.m',
+        'auditPackage.py', 'referenceSystemCiGate.m', 'setupReferenceSystem.m',
         'info.xml', 'codeAnalyzerConfiguration.json',
     }
     for leaf in sorted(os.listdir(ROOT)):

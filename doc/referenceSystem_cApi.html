@@ -171,6 +171,29 @@ MATLAB-computed fixture, because a C-only truth would share whatever omega the C
 side used.</p>
 </div>
 
+<h2 id="leap">Leap seconds, and what an MJD can resolve</h2>
+
+<p><b>An interpolant may span a leap second since v2.1.226.</b> A panel carries
+one TAI&minus;UTC, so a leap second falls on a panel boundary, and the file's
+<code>taiMinusUtc</code> changes there. <code>rsApiRotationRate</code> takes its
+difference shoulders <code>step</code> SI seconds either side, so a shoulder
+beyond the boundary is taken at the UTC label that instant has, not at the label
+plus <code>step</code>. Until v2.1.226 it was taken one second off, and within one
+step of 2017-01-01 the rate missed MATLAB's by 1.1e-14&nbsp;1/s. <b>A shoulder that
+lands inside the leap second itself returns <code>RS_API_OUT_OF_RANGE</code></b>:
+23:59:60 has no MJD. The window is one second wide at +step and at &minus;step.
+MATLAB's interpolated path refuses the same instants.</p>
+
+<div class="warn">
+<p><b>An MJD passed as one double resolves about 0.63&nbsp;&micro;s at current
+dates</b> (one unit in the last place of 5.8e4 days). The Earth turns
+7.3e-5&nbsp;rad/s, so that step alone is up to 4.6e-11 of rotation &mdash; nine
+times P19c's 5e-12 on a direction cosine. The MATLAB functions carry a day and a
+second separately and do not have this limit. A C caller comparing against MATLAB
+must hand both sides the same double; a caller who needs better than a microsecond
+must not pass time as a single MJD.</p>
+</div>
+
 <h2 id="example">Worked example</h2>
 
 <p><code>doc/examples/exampleRk4Propagator.c</code> is a complete fourth-order

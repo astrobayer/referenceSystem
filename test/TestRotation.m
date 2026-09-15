@@ -24,6 +24,13 @@ classdef TestRotation < matlab.unittest.TestCase
 % -------------------------------------------------------------------------
 
     properties (Constant)
+        % D28's velocity budget, as rotationItrsToGcrs's help states it, and the
+        % orbit radius the handover evaluates it at. A rotation-rate error e
+        % moves a velocity by about e*r, so the rate these tests may miss by is
+        % VelocityBudget / OrbitRadius = 1.43e-16 1/s (rev. 1.223, H.11 item 5).
+        VelocityBudget = 1e-9       % m/s
+        OrbitRadius = 7e6           % m
+
         % SOFA cookbook example, 2007-04-05 12:00:00 UTC.
         % TT  = UTC + 32.184 s + 33 s of TAI - UTC.
         % UT1 = UTC - 0.072073685 s.
@@ -139,6 +146,37 @@ classdef TestRotation < matlab.unittest.TestCase
             testCase.verifyEqual(info.sampleSource, "panels+series");
         end
 
+        function rotationItrsToGcrs_contract_refusesASampleInsideALeapSecond(testCase)
+            % 23:59:60 HAS NO MJD, AND THE PANELS ARE INDEXED BY MJD (rev.
+            % 1.226). Read from the next panel, a sample inside the leap second
+            % is one second late: measured at 23:59:60.5 on 2017-01-01 that is
+            % 4.5e-12 on R but 3.3e-16 1/s on Rdot, over the 1 nm/s budget. So
+            % the interpolated path refuses it - as the epoch itself, and as a
+            % difference shoulder - while the direct path, which takes the epoch
+            % struct rather than an MJD, is asserted to accept the same instant.
+            testCase.assumeTrue(referenceSystem.mexInfo().built, ...
+                'The MEX gateway is not built.');
+            eop = testCase.cookbookEop();
+            interpolant = referenceSystem.earthOrientationInterpolant( ...
+                referenceSystem.daySecondToEpoch([57752 0; 57756 0], "UTC"), 'Eop', eop);
+            inside = referenceSystem.daySecondToEpoch([57753 86400.5], "UTC");
+            shoulderInside = referenceSystem.daySecondToEpoch([57753 86200.5], "UTC");
+            clearOfIt = referenceSystem.daySecondToEpoch([57753 86199.5], "UTC");
+
+            testCase.verifyError(@() referenceSystem.rotationItrsToGcrs(inside, ...
+                'Interpolant', interpolant), ...
+                'referenceSystem:rotationItrsToGcrs:insideLeapSecond');
+            % The shoulders exist only when Rdot is requested; hence the helper.
+            testCase.verifyError(@() localInterpolatedRate(shoulderInside, ...
+                interpolant, 200), ...
+                'referenceSystem:rotationItrsToGcrs:insideLeapSecond');
+            [~, rateClearOfIt] = localInterpolatedRate(clearOfIt, interpolant, 200);
+            testCase.verifySize(rateClearOfIt, [3 3], ...
+                'One second earlier the shoulder is clear of the leap second.');
+            testCase.verifySize(referenceSystem.rotationItrsToGcrs(inside, 'Eop', eop), ...
+                [3 3], 'The direct path takes the leap second like any other epoch.');
+        end
+
         function rotationItrsToGcrs_contract_cApiRateFixtureIsCurrent(testCase)
             % THE C API'S RATE TRUTH MUST STILL BE WHAT MATLAB COMPUTES (rev.
             % 1.222). test/c/testApi.c holds rsApiRotationRate to
@@ -152,8 +190,9 @@ classdef TestRotation < matlab.unittest.TestCase
             % side is right and regenerate the CSV as its header says, rather
             % than widening these bounds (obligation O8).
             %
-            % Bounds as in the C test: P19c's 5e-12 on R and 5e-12/h on Rdot
-            % (D123), with h read from the fixture (O33).
+            % Bounds as in the C test: P19c's 5e-12 on R, and on Rdot D28's
+            % 1 nm/s at 7000 km, 1.43e-16 1/s (rev. 1.223, H.11 item 5), with h
+            % read from the fixture (O33).
             testCase.assumeTrue(referenceSystem.mexInfo().built, ...
                 'The MEX gateway is not built.');
             folder = fullfile(testCase.toolboxRoot(), 'test', 'fixtures');
@@ -163,7 +202,9 @@ classdef TestRotation < matlab.unittest.TestCase
             testCase.assertNumElements(stepLine, 1, 'The rate fixture names no step.');
             step = str2double(extractAfter(stepLine, "step "));
             rows = str2double(split(lines(~startsWith(lines, ["#", "step"])), ","));
-            testCase.assertSize(rows, [24, 19], 'The rate fixture lost rows or columns.');
+            % 32 rows since rev. 1.226: eight about the 2017-01-01 leap second,
+            % then the 24 of the P19c arc.
+            testCase.assertSize(rows, [32, 19], 'The rate fixture lost rows or columns.');
 
             interpolant = referenceSystem.readInterpolant( ...
                 string(fullfile(folder, 'arcFormat2.eopi')));
@@ -182,7 +223,8 @@ classdef TestRotation < matlab.unittest.TestCase
                 'max|dRdot| %.3g 1/s at h = %g s'], max(abs(R - expectedR), [], 'all'), ...
                 max(abs(Rdot - expectedRdot), [], 'all'), info.differenceStep));
             testCase.verifyEqual(R, expectedR, 'AbsTol', 5e-12);
-            testCase.verifyEqual(Rdot, expectedRdot, 'AbsTol', 5e-12 / info.differenceStep);
+            testCase.verifyEqual(Rdot, expectedRdot, 'AbsTol', ...
+                TestRotation.VelocityBudget / TestRotation.OrbitRadius);
         end
 
         function rotationItrsToGcrsPartials_contract_eopIsRequired(testCase)
@@ -611,6 +653,15 @@ classdef TestRotation < matlab.unittest.TestCase
             rate = referenceSystem.earthRotationAngleRate();
             constants = referenceSystem.iersConstants();
 
+            % THE VALUE IS LOGGED, BECAUSE THE HELP QUOTES IT (rev. 1.227, H.11
+            % item 11). Until then both help blocks quoted 7.292115146705669e-5,
+            % which is 1.31e-17 from the exact value and would fail the 1e-17
+            % below - so it was a transcription, not a reading from any host
+            % this suite passes on. The log is how each runner's reading reaches
+            % the record.
+            testCase.log(1, sprintf(['earthRotationAngleRate = %.16e rad/s, ', ...
+                '%.3g from the defining 7.292115146706979e-5'], rate, ...
+                rate - constants.eraRatePerUt1Second));
             testCase.verifyEqual(rate, 7.292115146706979e-5, 'AbsTol', 1e-17, ...
                 'The rate must be the defining rate of advance of ERA.');
             testCase.verifyGreaterThan( ...
@@ -1326,18 +1377,20 @@ classdef TestRotation < matlab.unittest.TestCase
             % bounds the error the panels add to the chain; the measured floor
             % and the wrong-panel control are in interpolatedMatchesDirect.
             %
-            % Rdot: 5e-12/h, THE SAME CLAIM IN RATE UNITS (D123), and on THIS
-            % test it is the bound that matters. The LOD channel enters only
-            % the rate, through omega, so R cannot see it. The whole
-            % length-of-day term is 1.2e-12 1/s on this arc (8.5 um/s at
-            % 7000 km), and an interpolant with its LOD channel zeroed PASSED
-            % the old 5e-12 on Rdot - this test passed whether or not the
-            % channel was read. It fails 5e-12/h 49 times over. If it fails,
-            % the length-of-day fit is the suspect and its degree is the knob
-            % - not this tolerance (obligation O8).
+            % Rdot: D28's 1 nm/s at 7000 km, 1.43e-16 1/s, SINCE REV. 1.223 (H.11
+            % item 5), and on THIS test it is the bound that matters. The LOD
+            % channel enters only the rate, through omega, so R cannot see it.
+            % The whole length-of-day term is 1.2e-12 1/s on this arc (8.5 um/s
+            % at 7000 km); an interpolant with its LOD channel zeroed passed the
+            % 5e-12 1/s this line held until rev. 1.217, and failed D123's
+            % 5e-12/h 49 times over. That bound was still 175 times the
+            % budget, so a length of day wrong by 1% (1.2e-14 1/s) passed it;
+            % it fails this one. Measured floor 5.5e-19 1/s, 260 times below.
+            % If it fails, the length-of-day fit is the suspect and its degree
+            % is the knob - not this tolerance (obligation O8).
             testCase.verifyEqual(fitted, direct, 'AbsTol', 5e-12);
             testCase.verifyEqual(fittedDot, directDot, 'AbsTol', ...
-                5e-12 / fittedInfo.differenceStep);
+                TestRotation.VelocityBudget / TestRotation.OrbitRadius);
         end
 
         function rotationItrsToGcrs_reference_interpolatedMatchesDirect(testCase)
@@ -1377,17 +1430,54 @@ classdef TestRotation < matlab.unittest.TestCase
             % is 2e-16 rad). Loose enough to survive a compiler; a panel chosen
             % one index wrong measured 3.9e-7, 7.7e4 times over.
             %
-            % Rdot: NOT THE SAME NUMBER, BECAUSE A RATE IS NOT AN ANGLE (D123).
-            % Both paths difference the samples at t-h and t+h, so a sample
-            % disagreement e reaches Rdot as e/h: measured 5.5e-19 1/s against
-            % |dR(t+h) - dR(t-h)|/2h = 5.6e-19, while omega*dR is 1.6e-20. The
-            % R claim in rate units is therefore 5e-12/h - 2.5e-14 1/s at the
-            % default h = 200 s, 0.18 um/s at 7000 km. The 5e-12 it replaces
-            % is 35 um/s and admitted the whole length-of-day term (1.2e-12
-            % 1/s); see panelsAloneMatchTheDirectChain.
+            % Rdot: NOT THE SAME NUMBER, BECAUSE A RATE IS NOT AN ANGLE, AND
+            % SINCE REV. 1.223 NOT DERIVED FROM R AT ALL. Both paths difference
+            % the samples at t-h and t+h, so a sample disagreement e reaches
+            % Rdot as e/h: measured 5.5e-19 1/s against |dR(t+h) - dR(t-h)|/2h
+            % = 5.6e-19, while omega*dR is 1.6e-20. D123 stated the R claim in
+            % rate units, 5e-12/h (0.18 um/s at 7000 km at h = 200 s), and
+            % that was 175 times D28's 1 nm/s budget and moved with h. The
+            % bound is now the budget itself, 1.43e-16 1/s, whatever the step:
+            % 260 times the measured floor (H.11 item 5).
             testCase.verifyEqual(fitted, direct, 'AbsTol', 5e-12);
             testCase.verifyEqual(fittedDot, directDot, 'AbsTol', ...
-                5e-12 / fittedInfo.differenceStep);
+                TestRotation.VelocityBudget / TestRotation.OrbitRadius);
+        end
+
+        function rotationItrsToGcrs_reference_interpolantAcrossALeapSecondMatchesDirect(testCase)
+            % AN INTERPOLANT MAY SPAN A LEAP SECOND (rev. 1.226, H.11 item 9).
+            % Until then building one across 2017-01-01 failed toleranceNotMet
+            % at 3.58e5: the panel ending in the leap second took its last node
+            % at 0h of the next day, where UT1-UTC had already stepped by a
+            % second, and fitted the step. Five GRACE-era leap seconds made
+            % that a real limit for reprocessing.
+            %
+            % THE EPOCHS STRADDLE THE BOUNDARY, two of them 86.4 s from it, so
+            % that one difference shoulder at the default h = 200 s lies on
+            % each side. Bounds as in interpolatedMatchesDirect: P19c's 5e-12
+            % on R and D28's 1 nm/s at 7000 km on Rdot. Measured: R 2.2e-16,
+            % Rdot 5.5e-19 1/s - the same floors as a span with no leap second.
+            testCase.assumeTrue(referenceSystem.mexInfo().built, ...
+                'The MEX gateway is not built.');
+            eop = testCase.cookbookEop();
+            span = referenceSystem.daySecondToEpoch([57752 0; 57756 0], "UTC");
+            interpolant = referenceSystem.earthOrientationInterpolant(span, 'Eop', eop);
+            testCase.verifyEqual(interpolant.taiMinusUtc', [36 36 37 37 37], ...
+                'The span must hold the leap second at a panel boundary.');
+
+            before = [0.9; 0.5; 0.1; 0.01; 0.003; 0.001];
+            after = [0.001; 0.003; 0.01; 0.1; 0.5; 0.9];
+            query = referenceSystem.daySecondToEpoch( ...
+                [[repmat(57753, 6, 1); repmat(57754, 6, 1)], ...
+                [86400 * (1 - before); 86400 * after]], "UTC");
+
+            [direct, directDot] = referenceSystem.rotationItrsToGcrs(query, 'Eop', eop);
+            [fitted, fittedDot, ~, info] = referenceSystem.rotationItrsToGcrs(query, ...
+                'Interpolant', interpolant);
+            testCase.verifyEqual(info.sampleSource, "panels");
+            testCase.verifyEqual(fitted, direct, 'AbsTol', 5e-12);
+            testCase.verifyEqual(fittedDot, directDot, 'AbsTol', ...
+                TestRotation.VelocityBudget / TestRotation.OrbitRadius);
         end
 
         function earthOrientationInterpolant_reference_matchesTheDirectChain(testCase)
@@ -1448,29 +1538,35 @@ classdef TestRotation < matlab.unittest.TestCase
                     interpolant, queryMjd(k), panel);
             end
 
-            % 5e-12 rad IS 1.03 uas (5e-12 x 2.063e11 uas/rad), not the "about
-            % 1e-3 uas" this comment said until rev. 1.218 (D124) - rad to mas,
-            % labelled uas. So it is TWICE the 0.5 uas gate the builder applies
-            % at its midpoints, not below it, and 4e6 above section B.9.2's
-            % 2.6e-7 uas, not three orders.
+            % 1e-3 uas ON ALL FIVE ANGLES, 4.85e-15 rad, SINCE REV. 1.224 (H.11
+            % item 6). It bounds the error the panels add to each angle at an
+            % epoch the fit never saw, and the number is the builder's own
+            % ACCURACY claim for the pole, applied to the CIP as well.
             %
-            % It bounds the error the panels add to each angle before the
-            % rotation, which carries an angle error about one for one into
-            % R: it is P19c's 5e-12 on R (section H.4), asserted per input.
-            % Measured on these five epochs: worst column Y, 8.4e-17 rad
-            % (1.7e-5 uas). That is the CIP series' own evaluation noise, not
-            % the fit - Y reads 8.4e-17 to 1.4e-16 at every degree from 8 to
-            % 20 - while the truncation shows in xp and yp at 8.8e-19 rad
-            % (1.8e-7 uas, B.9.2's order). 5.9e4 above that floor, it fails on
-            % a broken fit and not on a compiler changing its mind about a
-            % cosine.
+            % WHY NOT THE 5e-12 IT REPLACES. That was P19c's bound on R, asserted
+            % per input: 1.03 uas, TWICE the 0.5 uas gate the builder applies
+            % at its midpoints. It passed a degree-12 fit (xp 9.1e-13 rad, 0.19
+            % uas) and a panel mapping about a second late (X moves 4.1e-12 rad
+            % per second). It was not a claim about which error dominates.
             %
-            % WHAT IT CANNOT SEE, MEASURED: degree 12 reaches xp at 9.1e-13
-            % (0.19 uas) and PASSES, as it passes the builder's own gate;
-            % degree 10 (1.4e-11) and a fit without the sub-daily tides
-            % (2.5e-9) fail. residualIsRecordedAndSmall is what tells degree 12
-            % from degree 20, not this test (obligation O8).
-            testCase.verifyEqual(fitted(:, 1:5), direct(:, 1:5), 'AbsTol', 5e-12);
+            % WHAT DOMINATES, MEASURED ON THESE FIVE EPOCHS: worst column Y,
+            % 8.4e-17 rad (1.7e-5 uas), the CIP series' own evaluation noise
+            % rather than the fit - Y reads 8.4e-17 to 1.4e-16 at every degree
+            % from 8 to 20. The truncation the degree controls shows in xp and
+            % yp at 8.8e-19 rad (1.8e-7 uas, B.9.2's order). The bound is 58
+            % times the noise floor, 5500 times the truncation.
+            %
+            % WHAT IT NOW SEES, MEASURED: degree 12 fails (xp 9.1e-13, 190 times
+            % over), as do degree 10 and a fit without the sub-daily tides; a
+            % mapping error of more than about 1.2 ms fails. Degree 16 (xp
+            % 1.05e-15 rad, 2.2e-4 uas) still passes, which is right: it meets
+            % the accuracy the builder documents. WHY NOT THE CIP's 1e-4 uas:
+            % Y's noise would leave a margin of six on one host, and noise
+            % that close to a bound fails on a compiler rather than on a fit
+            % (obligation O8).
+            microarcsecond = referenceSystem.iersConstants().arcsecondsToRadians * 1e-6;
+            testCase.verifyEqual(fitted(:, 1:5), direct(:, 1:5), 'AbsTol', ...
+                1e-3 * microarcsecond);
             testCase.verifyEqual(fitted(:, 6), direct(:, 6), 'AbsTol', 1e-10);
             % Excess LOD is seconds per day of order 1e-3 and is fitted from
             % the same daily table as dut1, so it carries dut1's bound.
@@ -1628,6 +1724,55 @@ classdef TestRotation < matlab.unittest.TestCase
             % section B.9.2 measures degree 8 at 30 uas - so this must breach
             % the 0.5 uas default. At rev. 1.90 it did not, and that was the
             % first sign that the sub-daily terms were missing from the fit.
+        end
+
+        function earthOrientationInterpolant_contract_refusesALeapSecondInsideAPanel(testCase)
+            % A PANEL CARRIES ONE TAI-UTC (rev. 1.226). Three-day panels align
+            % to MJD 57753, so the 2017-01-01 leap second at 57754 falls inside
+            % the second panel; that is refused by name before anything is
+            % fitted, where it used to surface as toleranceNotMet. One-day
+            % panels over the same span build: see
+            % interpolantAcrossALeapSecondMatchesDirect.
+            eop = testCase.cookbookEop();
+            span = referenceSystem.daySecondToEpoch([57752 0; 57756 0], "UTC");
+            testCase.verifyError(@() referenceSystem.earthOrientationInterpolant( ...
+                span, 'Eop', eop, 'PanelSpan', 3), ...
+                'referenceSystem:earthOrientationInterpolant:leapSecondInsidePanel');
+        end
+
+        function earthOrientationInterpolant_contract_toleranceGatesDut1AsAnAngle(testCase)
+            % TOLERANCE IS MICROARCSECONDS OF ROTATION FOR EVERY GATED CHANNEL,
+            % dut1 INCLUDED (rev. 1.225, H.11 item 8). Until then dut1's
+            % residual, in microseconds, was compared with the same number as
+            % if it were microseconds, so dut1 was held 15 times more loosely
+            % than the angles it turns into.
+            %
+            % A CONFIGURATION IN WHICH THE TWO READINGS DISAGREE, MEASURED
+            % rather than hoped for: two-day panels over MJD 57800-57805 put a
+            % daily-row kink inside each panel. The angles then reach 6.78 uas
+            % and dut1 2.13 us, which is 32 uas of rotation. A tolerance of
+            % 15 uas lies between the two readings with a margin of about two
+            % on each side: the old gate built this interpolant, the new one
+            % must refuse it. The second call proves the refusal is about dut1
+            % and not blanket, by admitting the same fit at 40 uas.
+            eop = testCase.cookbookEop();
+            span = referenceSystem.daySecondToEpoch([57800 0; 57805 0], "UTC");
+
+            testCase.verifyError(@() referenceSystem.earthOrientationInterpolant( ...
+                span, 'Eop', eop, 'PanelSpan', 2, 'Tolerance', 15), ...
+                'referenceSystem:earthOrientationInterpolant:toleranceNotMet');
+
+            admitted = referenceSystem.earthOrientationInterpolant(span, ...
+                'Eop', eop, 'PanelSpan', 2, 'Tolerance', 40);
+            name = string(admitted.quantity);
+            dut1 = admitted.meta.residual(name == "dut1");
+            angles = max(admitted.meta.residual(~ismember(name, ["dut1", "lod"])));
+            testCase.log(1, sprintf('dut1 gate: angles %.3g uas, dut1 %.3g us', ...
+                angles, dut1));
+            % Both below 15 in their own units, so only the conversion can
+            % have refused the first call.
+            testCase.verifyLessThan([angles, dut1], [15, 15], ...
+                'The configuration no longer separates the old gate from the new.');
         end
 
         function earthOrientationInterpolant_contract_panelsAlignToWholeDays(testCase)
@@ -2397,6 +2542,16 @@ function varargout = localTwoOutputs(epoch, eop, step)
 
     [varargout{1:2}] = referenceSystem.rotationItrsToGcrs(epoch, 'Eop', eop, ...
         'DifferenceStep', step);
+end
+
+
+function varargout = localInterpolatedRate(epoch, interpolant, step)
+%LOCALINTERPOLATEDRATE The interpolated path with Rdot requested.
+%   A one-output call computes no difference shoulders, so a refusal that
+%   only a shoulder can trigger is invisible to verifyError's plain call.
+
+    [varargout{1:2}] = referenceSystem.rotationItrsToGcrs(epoch, ...
+        'Interpolant', interpolant, 'DifferenceStep', step);
 end
 
 % -------------------------------------------------------------------------

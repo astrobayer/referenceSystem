@@ -121,6 +121,7 @@ static int rsApiRotationCore(const rsApiInterpolant *ip, double mjdUtc,
     double localR[9];
     double localRdot[9];
     double dayShift;
+    int centrePanel;
     int panel;
     int sample;
     int status;
@@ -132,6 +133,10 @@ static int rsApiRotationCore(const rsApiInterpolant *ip, double mjdUtc,
     }
     if (r == NULL || (derivativeOrder > 0 && (rdot == NULL || !(step > 0.0)))) {
         return RS_API_NULL_ARGUMENT;
+    }
+    centrePanel = rsApiPanelIndex(ip, mjdUtc);
+    if (centrePanel < 0) {
+        return RS_API_OUT_OF_RANGE;
     }
 
     /* Sample 1 is the epoch; 0 and 2 are the difference shoulders and are
@@ -149,6 +154,26 @@ static int rsApiRotationCore(const rsApiInterpolant *ip, double mjdUtc,
         if (panel < 0) {
             return RS_API_OUT_OF_RANGE;
         }
+        /* A SHOULDER ACROSS A LEAP SECOND IS STEP SI SECONDS AWAY, NOT STEP UTC
+         * LABEL SECONDS (rev. 1.226). mjdUtc is a UTC label, and across a
+         * change in TAI-UTC the label moves by the step MINUS that change.
+         * Until this revision the shoulder was taken at the naive label, one
+         * second off in every fitted channel, and within one step of
+         * 2017-01-01 the rate missed MATLAB's by 1.1e-14 1/s - 77 times D28's
+         * 1 nm/s at 7000 km. If the corrected label lands back on the other
+         * side of the boundary, the shoulder is inside the leap second itself,
+         * which no MJD names: refused, as rotationItrsToGcrs refuses it. */
+        if (ip->taiMinusUtc[panel] != ip->taiMinusUtc[centrePanel]) {
+            double labelShift = (shift - (ip->taiMinusUtc[panel]
+                                          - ip->taiMinusUtc[centrePanel])) / 86400.0;
+            int labelled = rsApiPanelIndex(ip, mjdUtc + labelShift);
+            if (labelled < 0
+                || ip->taiMinusUtc[labelled] != ip->taiMinusUtc[panel]) {
+                return RS_API_OUT_OF_RANGE;
+            }
+            dayShift = labelShift;
+            panel = labelled;
+        }
         status = rsApiSample(ip, panel, mjdUtc + dayShift, value);
         if (status != RS_API_OK) {
             return status;
@@ -163,9 +188,8 @@ static int rsApiRotationCore(const rsApiInterpolant *ip, double mjdUtc,
         dX[sample] = 0.0;
         dY[sample] = 0.0;
         if (sample == 1) {
-            panel = rsApiPanelIndex(ip, mjdUtc);
             ttSec[0] = (mjdUtc - floor(mjdUtc)) * 86400.0
-                     + ip->taiMinusUtc[panel] + RS_API_TT_MINUS_TAI;
+                     + ip->taiMinusUtc[centrePanel] + RS_API_TT_MINUS_TAI;
             ttDay[0] = floor(mjdUtc);
             ut1Sec[0] = (mjdUtc - floor(mjdUtc)) * 86400.0 + value[5];
             ut1Day[0] = floor(mjdUtc);

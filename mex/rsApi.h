@@ -132,6 +132,12 @@ int rsApiRotation(const rsApiInterpolant *interpolant, double mjdUtc,
  * 'ApplyLengthOfDay' true. With six channels there is no lod to read and lod is
  * 0, which is MATLAB's 'ApplyLengthOfDay' false. Until rev. 1.222 this used the
  * nominal 7.292115e-5 and no lod: 5.8e-13 1/s from MATLAB's default.
+ *
+ * LEAP SECONDS (rev. 1.226). The shoulders are step SI seconds either side, so
+ * a shoulder beyond a change in taiMinusUtc is taken at the label that instant
+ * has - the naive label is one second off. A shoulder that lands inside the
+ * leap second itself, which no MJD names, returns RS_API_OUT_OF_RANGE: the
+ * window is one second wide at each of +step and -step from the leap second.
  */
 int rsApiRotationRate(const rsApiInterpolant *interpolant, double mjdUtc,
                       double step, double *r, double *rdot);
