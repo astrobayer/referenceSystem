@@ -45,9 +45,11 @@ function interpolant = earthOrientationInterpolant(epoch, options)
 %                                        that misses it raises toleranceNotMet
 %                                        rather than returning quietly. The
 %                                        same number gates every channel but
-%                                        lod: the five angles in uas and dut1
-%                                        in us. lod is reported, not gated,
-%                                        because it is not an angle.
+%                                        lod, as microarcseconds of rotation:
+%                                        dut1's residual is converted at the
+%                                        ERA rate, 15.04 uas per us. lod is
+%                                        reported, not gated, because it is
+%                                        not an angle.
 %
 % OUTPUT ARGUMENTS
 %   Name              Size          Type     Units  Description
@@ -261,14 +263,31 @@ function interpolant = earthOrientationInterpolant(epoch, options)
     % does not enter the angle at all - it enters the ERA RATE - so bounding
     % it in microarcseconds is a category error, not a strict or a lax choice.
     % Its residual is reported in meta.residual alongside the others so it is
-    % visible, and the gate is applied to every other channel - the five
-    % angles in uas and dut1 in us, compared against the same number.
-    angular = ~ismember(string(interpolant.quantity), "lod");
-    if any(residual(angular) > options.Tolerance)
+    % visible, and the gate is applied to every other channel.
+    %
+    % DUT1 IS GATED AS THE ANGLE IT BECOMES (rev. 1.225, H.11 item 8). Its
+    % residual is in microseconds, and until this revision it was compared
+    % with the tolerance as if that number were microseconds too: at the
+    % default 0.5, dut1 was held to 7.5 uas of rotation while the angles were
+    % held to 0.5 - the category error the lod exclusion above avoids, made
+    % in the other direction. A UT1 error of dt turns the Earth by
+    % omega*dt, so the residual is scaled by the ERA rate (D63) into
+    % microarcseconds, 15.04 uas per us, before the comparison. meta.residual
+    % still reports microseconds.
+    name = string(interpolant.quantity);
+    constants = referenceSystem.iersConstants();
+    asAngle = residual;
+    isUt1 = name == "dut1";
+    asAngle(isUt1) = residual(isUt1) * ...
+        referenceSystem.earthRotationAngleRate() / constants.arcsecondsToRadians;
+    gated = name ~= "lod";
+    if any(asAngle(gated) > options.Tolerance)
+        [worst, worstIndex] = max(asAngle .* gated);
         error('referenceSystem:earthOrientationInterpolant:toleranceNotMet', ...
-            ['The fit reached %.4g against a tolerance of %.4g. Raise ', ...
-            'Degree or shorten PanelSpan; handover section B.9.2 tabulates ', ...
-            'what each buys.'], max(residual(angular)), options.Tolerance);
+            ['The fit reached %.4g uas of rotation in %s against a tolerance ', ...
+            'of %.4g uas (dut1 counted at 15.04 uas per us). Raise Degree or ', ...
+            'shorten PanelSpan; handover section B.9.2 tabulates what each ', ...
+            'buys.'], worst, name(worstIndex), options.Tolerance);
     end
 
     versionInfo = referenceSystem.toolboxVersion();

@@ -1648,6 +1648,41 @@ classdef TestRotation < matlab.unittest.TestCase
             % first sign that the sub-daily terms were missing from the fit.
         end
 
+        function earthOrientationInterpolant_contract_toleranceGatesDut1AsAnAngle(testCase)
+            % TOLERANCE IS MICROARCSECONDS OF ROTATION FOR EVERY GATED CHANNEL,
+            % dut1 INCLUDED (rev. 1.225, H.11 item 8). Until then dut1's
+            % residual, in microseconds, was compared with the same number as
+            % if it were microseconds, so dut1 was held 15 times more loosely
+            % than the angles it turns into.
+            %
+            % A CONFIGURATION IN WHICH THE TWO READINGS DISAGREE, MEASURED
+            % rather than hoped for: two-day panels over MJD 57800-57805 put a
+            % daily-row kink inside each panel. The angles then reach 6.78 uas
+            % and dut1 2.13 us, which is 32 uas of rotation. A tolerance of
+            % 15 uas lies between the two readings with a margin of about two
+            % on each side: the old gate built this interpolant, the new one
+            % must refuse it. The second call proves the refusal is about dut1
+            % and not blanket, by admitting the same fit at 40 uas.
+            eop = testCase.cookbookEop();
+            span = referenceSystem.daySecondToEpoch([57800 0; 57805 0], "UTC");
+
+            testCase.verifyError(@() referenceSystem.earthOrientationInterpolant( ...
+                span, 'Eop', eop, 'PanelSpan', 2, 'Tolerance', 15), ...
+                'referenceSystem:earthOrientationInterpolant:toleranceNotMet');
+
+            admitted = referenceSystem.earthOrientationInterpolant(span, ...
+                'Eop', eop, 'PanelSpan', 2, 'Tolerance', 40);
+            name = string(admitted.quantity);
+            dut1 = admitted.meta.residual(name == "dut1");
+            angles = max(admitted.meta.residual(~ismember(name, ["dut1", "lod"])));
+            testCase.log(1, sprintf('dut1 gate: angles %.3g uas, dut1 %.3g us', ...
+                angles, dut1));
+            % Both below 15 in their own units, so only the conversion can
+            % have refused the first call.
+            testCase.verifyLessThan([angles, dut1], [15, 15], ...
+                'The configuration no longer separates the old gate from the new.');
+        end
+
         function earthOrientationInterpolant_contract_panelsAlignToWholeDays(testCase)
             % TWO CALLERS ASKING FOR OVERLAPPING SPANS MUST GET THE SAME PANELS.
             % If the grid started at the requested epoch instead, two arcs that
