@@ -2645,9 +2645,11 @@ Created: 2026-07-25 21:40 (CEST, UTC+02:00)
                                        that misses it raises toleranceNotMet
                                        rather than returning quietly. The
                                        same number gates every channel but
-                                       lod: the five angles in uas and dut1
-                                       in us. lod is reported, not gated,
-                                       because it is not an angle.</pre>
+                                       lod, as microarcseconds of rotation:
+                                       dut1's residual is converted at the
+                                       ERA rate, 15.04 uas per us. lod is
+                                       reported, not gated, because it is
+                                       not an angle.</pre>
 <h4>OUTPUT ARGUMENTS</h4>
 <pre>Name              Size          Type     Units  Description
   ----              ----          ----     -----  -----------
@@ -2664,9 +2666,11 @@ Created: 2026-07-25 21:40 (CEST, UTC+02:00)
                                                   second table of its own, and
                                                   a per-panel scalar is EXACT
                                                   rather than approximate
-                                                  because panels are aligned
-                                                  to whole UTC days, so a leap
-                                                  second falls on a boundary.
+                                                  because a leap second may
+                                                  only fall on a panel
+                                                  boundary; one inside a
+                                                  panel is refused (see
+                                                  LEAP SECONDS).
   .quantity         1xQ           string   -      Channel names, in column
                                                   order. THE SINGLE AUTHORITY
                                                   for the count Q and the
@@ -2726,7 +2730,21 @@ Created: 2026-07-25 21:40 (CEST, UTC+02:00)
   a residual of zero for any degree, which is worse than reporting none. The
   check therefore samples the midpoints between nodes, where a Chebyshev fit
   is at its weakest, and compares against the same direct chain
-  rotationItrsToGcrs would have evaluated.</pre>
+  rotationItrsToGcrs would have evaluated.
+
+  LEAP SECONDS. A panel carries one TAI-UTC, so a leap second may fall on a
+  panel boundary and nowhere else. One-day panels always meet that; a
+  longer PanelSpan with a leap second strictly inside a panel is refused
+  with leapSecondInsidePanel. The panel that ENDS in a leap second takes its
+  last node at 23:59:60, the instant its own linear time reaches, with
+  UT1-UTC continued in that day's convention - which is what lets a span
+  cross 2017-01-01 at all. Evaluation follows the MJD a caller hands in,
+  and the one second 23:59:60 has no MJD of its own, so rotationItrsToGcrs
+  refuses a sample inside it (insideLeapSecond) and the C API returns
+  RS_API_OUT_OF_RANGE for a difference shoulder that lands in it. Across the
+  boundary itself, measured on 2017-01-01 at twelve epochs from 0.9 d before
+  to 0.9 d after, including two 86.4 s from it: R within 2.3e-16 and Rdot
+  within 5.6e-19 1/s of the direct path.</pre>
 <h4>ACCURACY</h4>
 <pre>With the default degree and panel span, against the direct chain:
     CIP X, Y, s              better than 1e-4 uas
@@ -2748,9 +2766,11 @@ Created: 2026-07-25 21:40 (CEST, UTC+02:00)
   discontinuity at every midnight into a variable-step integrator's right
   hand side.</pre>
 <h4>ERRORS</h4>
-<pre>referenceSystem:earthOrientationInterpolant:wrongScale
+<pre>referenceSystem:earthOrientationInterpolant:missingEop
+  referenceSystem:earthOrientationInterpolant:wrongScale
   referenceSystem:earthOrientationInterpolant:singleEpoch
   referenceSystem:earthOrientationInterpolant:spanNotCovered
+  referenceSystem:earthOrientationInterpolant:leapSecondInsidePanel
   referenceSystem:earthOrientationInterpolant:toleranceNotMet</pre>
 <h4>REFERENCES</h4>
 <pre>IERS Conventions (2010), IERS Technical Note 36, chapter 5.
@@ -3266,9 +3286,13 @@ Created: 2026-07-27 21:10 (CEST, UTC+02:00)
   difference of two angles of order unity keeps 14 significant digits, and
   small enough that no wrap of iauEra00 into [0, 2*pi) can fall inside it.</pre>
 <h4>ACCURACY</h4>
-<pre>Measured 7.292115146705669e-5 rad/s against the exact defining value
-  7.292115146706979e-5, a difference of 1.3e-18 rad/s carried entirely by the
-  differencing interval. At 7000 km that is 9 picometres per second.</pre>
+<pre>Measured 7.292115146706913e-5 rad/s on R2026a/PCWIN64 against the exact
+  defining value 7.292115146706979e-5 (iersConstants.eraRatePerUt1Second): a
+  difference of 6.8e-19 rad/s, the rounding of two angles of order unity
+  divided by the 1000 s interval, and 4.7 picometres per second at 7000 km.
+  The reference test logs the reading on every host and holds it to 1e-17.
+  Until rev. 1.227 this block quoted 7.292115146705669e-5 and "1.3e-18"; that
+  number is 1.31e-17 from exact, fails the test, and was a transcription.</pre>
 <h4>ERRORS</h4>
 <pre>referenceSystem:earthRotationAngleRate:gatewayMissing</pre>
 <h4>REFERENCES</h4>
@@ -3366,10 +3390,11 @@ Created: 2026-07-25 22:00 (CEST, UTC+02:00)
   Delta UT1: of order 10 us for an IERS C04 series, which is 7.3e-10 rad of
   rotation, or 4.6 mm at the equator.
 
-  The derived rate measures 7.292115146705669e-5 rad/s against the exact
-  7.292115146706979e-5, a difference of 1.3e-18 rad/s carried by the
-  1000 s differencing interval. At 7000 km that is 9 picometres per second,
-  eleven orders below the LOD term it sits beside.</pre>
+  The derived rate measures 7.292115146706913e-5 rad/s on R2026a/PCWIN64
+  against the exact 7.292115146706979e-5, a difference of 6.8e-19 rad/s
+  carried by the 1000 s differencing interval. At 7000 km that is 4.7
+  picometres per second, six orders below the LOD term it sits beside. See
+  earthRotationAngleRate, which states the reading on every host it has.</pre>
 <h4>ERRORS</h4>
 <pre>referenceSystem:earthRotationAngle:wrongScale
   referenceSystem:earthRotationAngle:sizeMismatch
@@ -3932,7 +3957,11 @@ Created: 2026-07-25 22:15 (CEST, UTC+02:00)
   midnight slope discontinuity that piecewise linear EOP interpolation puts
   into a variable-step integrator's right-hand side. A format-2 interpolant
   also carries the excess length of day, so no series is read at all (P19c);
-  info.sampleSource records which of the three cases ran.
+  info.sampleSource records which of the three cases ran. Panels are indexed
+  by UTC MJD, which the second 23:59:60 of a leap-second day does not have,
+  so on the interpolated path a sample inside a leap second - the epoch or
+  either difference shoulder - is refused with insideLeapSecond; the direct
+  path takes it as it takes any other epoch (rev. 1.226).
 
   SINGLE-EPOCH PATH. With N = 1 the outputs are 3x3, because MATLAB drops a
   trailing singleton dimension, and no interpolation object, temporary array
@@ -3995,6 +4024,7 @@ Created: 2026-07-25 22:15 (CEST, UTC+02:00)
   referenceSystem:rotationItrsToGcrs:badInterpolant
   referenceSystem:rotationItrsToGcrs:tidalMismatch
   referenceSystem:rotationItrsToGcrs:outsideInterpolant
+  referenceSystem:rotationItrsToGcrs:insideLeapSecond
   referenceSystem:rotationItrsToGcrs:badDifferenceStep
   referenceSystem:rotationItrsToGcrs:gatewayMissing</pre>
 <h4>WARNINGS</h4>
@@ -9364,11 +9394,20 @@ Created: 2026-07-28 11:10 (CEST, UTC+02:00)
   Overwrite    1x1    logical           false      Refetch files already there.
   Announce     1x1    function_handle   no-op      Called as
                                                    Announce(name, bytes, index,
-                                                   total) before each transfer.</pre>
+                                                   total) before each transfer.
+  Catalogue    Mx7    table             empty      Entries to use INSTEAD of
+                                                   the built-in catalogue, with
+                                                   variables File, Url, Set,
+                                                   Span, ApproximateBytes,
+                                                   Purpose and Note as below.
+                                                   Empty means the built-in
+                                                   one. Set and Span select
+                                                   from it as from the
+                                                   built-in one. See METHOD.</pre>
 <h4>OUTPUT ARGUMENTS</h4>
 <pre>Name                 Size   Type      Units  Description
   ----                 ----   ----      -----  -----------
-  manifest             Nx9    table     -      One row per catalogue entry.
+  manifest             Nx10   table     -      One row per catalogue entry.
   .File                Nx1    string    -      Kernel file name.
   .Url                 Nx1    string    -      Where it comes from.
   .Set                 Nx1    string    -      Content group it belongs to.
@@ -9454,7 +9493,16 @@ Created: 2026-07-28 11:10 (CEST, UTC+02:00)
   .tls reaches this catalogue - a rule enforced at both ends of the path.
 
   Identity is recorded and bulk is not: each fetched file gets a SHA-256 in
-  the manifest, which is what a result should carry (data/README.md).</pre>
+  the manifest, which is what a result should carry (data/README.md).
+
+  A CALLER'S CATALOGUE (rev. 1.233). Catalogue replaces the built-in table,
+  so a user with a private kernel mirror can point every Url at it, and a
+  test can point one at a host that cannot resolve and observe a failed
+  transfer on any machine - which is what made the D98 test deterministic.
+  It is held to the same rules as the built-in one: the seven descriptive
+  variables must be present (badCatalogue), and a leapseconds kernel is
+  refused (D89, leapSecondKernelInCatalogue). Status, Bytes and Digest are
+  added as for the built-in rows.</pre>
 <h4>ACCURACY</h4>
 <pre>Not applicable; this function transfers files and computes no quantity.
   ApproximateBytes is the published size and is for planning only; Bytes is
@@ -9463,7 +9511,9 @@ Created: 2026-07-28 11:10 (CEST, UTC+02:00)
 <pre>referenceSystem:downloadKernels:unknownSet
   referenceSystem:downloadKernels:unknownSpan
   referenceSystem:downloadKernels:unknownMode
-  referenceSystem:downloadKernels:cacheNotWritable</pre>
+  referenceSystem:downloadKernels:cacheNotWritable
+  referenceSystem:downloadKernels:badCatalogue
+  referenceSystem:downloadKernels:leapSecondKernelInCatalogue</pre>
 <h4>WARNINGS</h4>
 <pre>referenceSystem:downloadKernels:incompleteFetch
       At least one entry failed. THIS IS A WARNING AND NOT AN ERROR because
@@ -10825,6 +10875,6 @@ Created: 2026-07-26 12:30 (CEST, UTC+02:00) - session S4, folder-lock report
 -------------------------------------------------------------------------</pre>
 <p class="top"><a href="#contents">back to contents</a></p>
 </div>
-<p class="foot">referenceSystem v2.1.222 &mdash; generated from the
+<p class="foot">referenceSystem v2.1.233 &mdash; generated from the
 package help blocks. See the handover document for the design.</p>
 </body></html>
