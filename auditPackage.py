@@ -762,7 +762,7 @@ def check_no_unexpected_file_at_the_root():
         'BEST_PRACTICE.md', 'THIRD_PARTY_NOTICES.md',
         'HANDOVER_referenceSystem.md', 'WORKFLOW_GUIDE.md', 'CODING_GUIDE.md',
         'VALIDATION_GUIDE.md', 'DOCUMENTATION_GUIDE.md',
-        'auditPackage.py', 'ciGate.m', 'setupReferenceSystem.m',
+        'auditPackage.py', 'referenceSystemCiGate.m', 'setupReferenceSystem.m',
         'info.xml', 'codeAnalyzerConfiguration.json',
     }
     for leaf in sorted(os.listdir(ROOT)):

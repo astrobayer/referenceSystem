@@ -1,10 +1,16 @@
-function ciGate()
-%CIGATE The ONE CI entry point: install, run the suite, judge, or error.
+function referenceSystemCiGate()
+%REFERENCESYSTEMCIGATE The ONE CI entry point: install, run the suite, judge, or error.
 %
-%   ciGate()
+%   RENAMED FROM ciGate AT REV. 1.229. Two projects on the development machine
+%   both put a file called ciGate.m on the MATLAB path, the other one won, and
+%   TestDispatch/namespace_contract_noBaseMatlabCollision was red on every
+%   local run from rev. 1.216 to 1.228 - so the local gate could never be
+%   green there. A name that carries the toolbox's cannot collide that way.
 %
-%   Called by the CI (`matlab-actions/run-command`: `ciGate`) and usable as a
-%   local postflight (`matlab -batch ciGate`). It is the gate that protects
+%   referenceSystemCiGate()
+%
+%   Called by the CI (`matlab-actions/run-command`: `referenceSystemCiGate`) and usable as a
+%   local postflight (`matlab -batch referenceSystemCiGate`). It is the gate that protects
 %   main, and it is NEVER a bare runTestSuite call: runTestSuite RETURNS its
 %   results and raises only on a class that failed to load, so a caller that
 %   merely checks for an exception treats a red run as a pass. The judgement
@@ -21,7 +27,7 @@ function ciGate()
 %               red so that `matlab -batch` exits non-zero.
 %
 % ERRORS
-%   referenceSystem:ciGate:red
+%   referenceSystem:referenceSystemCiGate:red
 %       The run is not green. Raised for any of: a failed test; a filtered
 %       test that is NOT on the runTestSuite allow-list; a test class on disk
 %       that contributed nothing to the run; a report file that was not
@@ -51,8 +57,8 @@ function ciGate()
 %
 % EXAMPLE
 %   % exactly what the CI runs:
-%   %   matlab -batch "ciGate"
-%   ciGate();
+%   %   matlab -batch "referenceSystemCiGate"
+%   referenceSystemCiGate();
 %
 % REFERENCES
 %   Handover section C.10 (installation and entry points), decision D116
@@ -68,7 +74,7 @@ function ciGate()
 % referenceSystem v2.1
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-08-21 15:20 (CEST, UTC+02:00)
-% Revised: 2026-08-21 15:20 (CEST, UTC+02:00)
+% Revised: 2026-09-15 14:00 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------
 
     toolboxRoot = string(fileparts(mfilename('fullpath')));
@@ -131,16 +137,16 @@ function ciGate()
     end
 
     % --- verdict ---------------------------------------------------------
-    fprintf(['\nciGate: %d tests, %d passed, %d failed, %d skipped by ', ...
+    fprintf(['\nreferenceSystemCiGate: %d tests, %d passed, %d failed, %d skipped by ', ...
         'design, %d unexpected filters\n'], numel(results), ...
         sum([results.Passed]), failedCount, summary.intendedSkip, ...
         summary.unexpectedFilter);
-    fprintf('ciGate: report at %s\n', reportFile);
+    fprintf('referenceSystemCiGate: report at %s\n', reportFile);
 
     if ~isempty(reason)
-        error('referenceSystem:ciGate:red', 'ciGate RED:\n  %s', ...
+        error('referenceSystem:referenceSystemCiGate:red', 'referenceSystemCiGate RED:\n  %s', ...
             join(reason, sprintf('\n  ')));
     end
 
-    fprintf('ciGate: GREEN\n');
+    fprintf('referenceSystemCiGate: GREEN\n');
 end

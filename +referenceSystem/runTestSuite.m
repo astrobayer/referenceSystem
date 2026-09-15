@@ -282,7 +282,7 @@ function [results, reportFile, summary] = runTestSuite(options)
         warningPlugin.WarningRecord, runFailure, instrument);
 
     % THE CLASSIFICATION THE REPORT PRINTS, RETURNED RATHER THAN REPRINTED.
-    % ciGate has to distinguish a skip that D116 foresaw from one that nobody
+    % referenceSystemCiGate has to distinguish a skip that D116 foresaw from one that nobody
     % did, and the allow-list that makes the distinction lives in this file.
     % A copy in the caller is the defect auditPackage.py's own header names -
     % two instruments disagreeing after one of them is edited - so the counts
