@@ -29,7 +29,11 @@ function interpolant = earthOrientationInterpolant(epoch, options)
 %   Degree      1x1    double   20       Chebyshev degree per panel. The
 %                                        default is decision D82 and is
 %                                        measured, not assumed - see METHOD.
-%   PanelSpan   1x1    double   1        Panel length in days.
+%   PanelSpan   1x1    double   1        Panel length in whole days. A
+%                                        fraction of a day is refused with
+%                                        nonIntegerPanelSpan: boundaries lie
+%                                        on UTC midnight, where the EOP rows
+%                                        change and leap seconds fall.
 %   ApplyTidalCorrections
 %               1x1    logical  true     Whether the sub-daily ocean tide and
 %                                        libration are folded into the fitted
@@ -171,6 +175,7 @@ function interpolant = earthOrientationInterpolant(epoch, options)
 %
 % ERRORS
 %   referenceSystem:earthOrientationInterpolant:missingEop
+%   referenceSystem:earthOrientationInterpolant:nonIntegerPanelSpan
 %   referenceSystem:earthOrientationInterpolant:wrongScale
 %   referenceSystem:earthOrientationInterpolant:singleEpoch
 %   referenceSystem:earthOrientationInterpolant:spanNotCovered
@@ -212,6 +217,19 @@ function interpolant = earthOrientationInterpolant(epoch, options)
         error('referenceSystem:earthOrientationInterpolant:missingEop', ...
             ['An EOP series is required. The pole coordinates and UT1 are ', ...
             'measured quantities and there is no model to fall back on.']);
+    end
+    % A FRACTION OF A DAY IS REFUSED BY NAME (rev. 1.237, H.11 item 12). Until
+    % then PanelSpan 0.5 or 1.5 failed inside the leap-second lookup with
+    % normalizeEpoch:nonIntegerDay, an error that names neither this function
+    % nor the option. Supporting it would put boundaries off midnight, where
+    % neither the EOP rows nor the leap seconds change, and degree 20 over a
+    % whole day already reaches 2.6e-7 uas: nothing measured asks for less.
+    if options.PanelSpan ~= floor(options.PanelSpan)
+        error('referenceSystem:earthOrientationInterpolant:nonIntegerPanelSpan', ...
+            ['PanelSpan is %g days. Panels are whole UTC days, so that every ', ...
+            'boundary falls on midnight, where the EOP series changes row and ', ...
+            'a leap second can fall; use a whole number of days.'], ...
+            options.PanelSpan);
     end
     if epoch.scale ~= "UTC"
         error('referenceSystem:earthOrientationInterpolant:wrongScale', ...
@@ -283,10 +301,16 @@ function interpolant = earthOrientationInterpolant(epoch, options)
     % with the sub-daily terms, UT1-UTC read +0.591313 s at 2017-01-01 0h
     % against -0.408687 s one second before 23:59:60, so the panel fitted a
     % one-second step and the build failed at 3.58e5. At 23:59:60 the TT, the
-    % CIP and the pole continue the panel smoothly, but interpolateEop reports
-    % UT1-UTC in the NEW day's convention, so the step in TAI-UTC is taken back
-    % out to continue the old one. The node is row 1 of its panel: rsChebNodes
-    % puts u = cos(0) = 1, the panel's end, first.
+    % CIP, the pole and UT1-UTC all continue the panel smoothly. The node is
+    % row 1 of its panel: rsChebNodes puts u = cos(0) = 1, the panel's end,
+    % first.
+    %
+    % UNTIL REV. 1.235 THE STEP IN TAI-UTC WAS SUBTRACTED HERE, because
+    % interpolateEop reported UT1-UTC at 23:59:60 in the new day's
+    % convention. That was interpolateEop's defect, not a property of the
+    % second, and it also turned the Earth one second ahead on the direct path.
+    % It is fixed there, so nothing is subtracted here: doing both would fit
+    % the one-second step again.
     taiAtEnd = localLeapSeconds(panelStartMjd + options.PanelSpan);
     endsInLeap = find(taiAtEnd ~= taiAtStart);
     if ~isempty(endsInLeap)
@@ -294,13 +318,9 @@ function interpolant = earthOrientationInterpolant(epoch, options)
         leapDay = panelStartMjd(endsInLeap) + options.PanelSpan - 1;
         assert(all(nodeMjd(endRow) == leapDay + 1), ...
             'The end node of a panel is not the first node of its block.');
-        leapValue = localEvaluateEpochs(referenceSystem.daySecondToEpoch( ...
+        value(endRow, :) = localEvaluateEpochs(referenceSystem.daySecondToEpoch( ...
             [leapDay, repmat(86400, numel(leapDay), 1)], "UTC"), ...
             options.Eop, options.ApplyTidalCorrections);
-        isUt1 = localQuantityNames() == "dut1";
-        leapValue(:, isUt1) = leapValue(:, isUt1) - ...
-            (taiAtEnd(endsInLeap) - taiAtStart(endsInLeap));
-        value(endRow, :) = leapValue;
     end
 
     % THE CHANNEL COUNT IS TAKEN FROM THE DATA, NOT WRITTEN DOWN A SECOND

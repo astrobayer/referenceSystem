@@ -619,13 +619,20 @@ def chapterWalkthrough(story, st):
         '                     rsApiInterpolantSize(&ip),\n'
         '                     taiMinusUtc, ip.panelCount);\n\n'
         'double R[9];\n'
-        'rsApiRotation(&ip, mjdUtc, R);      /* 0.564 us per call */\n',
+        'rsApiRotation(&ip, mjdUtc, R);      /* 0.564 us per call */\n'
+        'rsApiRotationDaySecond(&ip, dayUtc, secUtc, R);   /* v2.1.236 */\n',
         st['code']))
     story.append(Paragraph(
         'If you build an <font face="Courier">rsApiInterpolant</font> by hand '
         'rather than reading a file, set <font face="Courier">quantityCount'
         '</font>. Zero means six, so code written before v2.1.179 keeps its '
         'meaning.', st['note']))
+    story.append(Paragraph(
+        'An MJD double resolves 0.63 &micro;s, so <font face="Courier">'
+        'rsApiRotation</font> can be 2.3e-11 out, and a whole second of '
+        'rotation in the last 0.3 &micro;s before a leap second. The '
+        'day-and-second form has neither limit and gives MATLAB\'s matrix for '
+        'the same day and second.', st['note']))
 
     story.append(Paragraph('5.4 &nbsp; Estimating EOP corrections',
                            st['section']))

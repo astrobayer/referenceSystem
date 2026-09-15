@@ -65,6 +65,10 @@ needs: <code>(degree+1) * quantityCount * panelCount</code>.</td></tr>
 column-major, ITRS to GCRS.</td></tr>
 <tr><td><code>rsApiRotationRate</code></td><td>The rotation and its time
 derivative, per second, by central difference.</td></tr>
+<tr><td><code>rsApiRotationDaySecond</code><br><code>rsApiRotationRateDaySecond</code></td>
+<td>The same two at a UTC day and second, the form
+<code>rotationItrsToGcrs</code> takes. Since v2.1.236; use them when time must be
+right below a microsecond &mdash; see <a href="#leap">leap seconds</a>.</td></tr>
 <tr><td><code>rsApiPanelIndex</code></td><td>Which panel holds an epoch, or
 &minus;1. An optimisation, never a requirement.</td></tr>
 </table>
@@ -138,8 +142,8 @@ out of whatever happened to be in the buffer.</p>
 
 <h2 id="threads">Thread safety (risk R11)</h2>
 
-<p><code>rsApiRotation</code> and <code>rsApiRotationRate</code> take the
-interpolant as <code>const</code> and hold no state between calls, so <b>any
+<p><code>rsApiRotation</code>, <code>rsApiRotationRate</code> and their
+day-and-second forms take the interpolant as <code>const</code> and hold no state between calls, so <b>any
 number of threads may share one interpolant concurrently</b>.
 <code>rsApiReadInterpolant</code> writes into it and is <b>not</b> thread safe;
 it must complete before the threads start.</p>
@@ -186,13 +190,41 @@ MATLAB's interpolated path refuses the same instants.</p>
 
 <div class="warn">
 <p><b>An MJD passed as one double resolves about 0.63&nbsp;&micro;s at current
-dates</b> (one unit in the last place of 5.8e4 days). The Earth turns
-7.3e-5&nbsp;rad/s, so that step alone is up to 4.6e-11 of rotation &mdash; nine
-times P19c's 5e-12 on a direction cosine. The MATLAB functions carry a day and a
-second separately and do not have this limit. A C caller comparing against MATLAB
-must hand both sides the same double; a caller who needs better than a microsecond
-must not pass time as a single MJD.</p>
+dates</b> (one unit in the last place of 5.8e4 days). The nearest double can lie
+half of that from the instant meant, and the Earth turns 7.3e-5&nbsp;rad/s, so
+<code>rsApiRotation</code> can be up to 2.3e-11 out &mdash; 4.6 times P19c's
+5e-12 on a direction cosine. Measured against MATLAB at seconds an MJD cannot
+name: 2.15e-11 on R and 1.57e-15&nbsp;1/s on Rdot, eleven times D28's
+1&nbsp;nm/s at 7000&nbsp;km.</p>
+<p><b>In the last 0.3&nbsp;&micro;s before a leap second the MJD form is out by a
+whole second of rotation</b>, 7.2e-5&nbsp;rad: the nearest double there is 0h of the
+next day, which is one SI second later.</p>
 </div>
+
+<div class="key">
+<p><b>Since v2.1.236, pass a day and a second instead.</b>
+<code>rsApiRotationDaySecond</code> and <code>rsApiRotationRateDaySecond</code>
+take the UTC day as a whole-number MJD and the second of that day. UT1 is formed
+from the second itself, and the panels are read at the same
+<code>day&nbsp;+&nbsp;sec/86400</code> MATLAB reads them at. In 0.63&nbsp;&micro;s
+the fastest fitted angle, X under precession, moves 1.9e-18&nbsp;rad, so only the
+Earth rotation angle needed the second. For the same day and second the
+matrices are <code>rotationItrsToGcrs</code>'s, bit for bit on the committed
+fixture, including an epoch 0.2&nbsp;&micro;s before 23:59:60.</p>
+<p>A second outside [0,&nbsp;86400) is carried into the neighbouring days as
+<code>daySecondToEpoch</code> carries it, with the day before a leap second
+86401&nbsp;s long, and the difference shoulders are carried the same way. The
+leap second itself &mdash; an epoch or a shoulder in it &mdash; returns
+<code>RS_API_OUT_OF_RANGE</code>, as it does for the MJD form. A day that is not
+a whole number, or a day or second that is not finite, returns
+<code>RS_API_BAD_EPOCH</code>.</p>
+</div>
+
+<p><b>MATLAB itself was out by a second there until v2.1.235.</b>
+<code>interpolateEop</code> read TAI&minus;UTC at <code>day&nbsp;+&nbsp;sec/86400</code>,
+which lands 23:59:60 and the last 0.3&nbsp;&micro;s before it on the next day. Both
+MATLAB paths then turned the Earth a second ahead, 15&nbsp;arcseconds, and agreed
+with each other. The C fixture is MATLAB's result after that fix.</p>
 
 <h2 id="example">Worked example</h2>
 

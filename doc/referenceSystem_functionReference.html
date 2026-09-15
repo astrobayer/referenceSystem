@@ -1998,6 +1998,13 @@ Created: 2026-07-25 11:20 (CEST, UTC+02:00)
   leapSecondTable, which is the only leap-second authority in the toolbox, and
   the lookup is vectorised rather than an arrayfun per row.
 
+  THE COUNT ADDED BACK IS THE ONE ON THE EPOCH'S OWN UTC DAY. Through the
+  leap second 23:59:60, and in the last 0.3 us before it, the value
+  therefore stays in the old day's convention, and UT1 = UTC + dut1 is
+  continuous. Until rev. 1.235 the count was read at day + sec/86400, which
+  lands on the next day there, so UT1 ran one second ahead: 15 arcseconds
+  of rotation.
+
   THE SERIES IS RESTRICTED TO THE MODERN UTC ERA BEFORE ANYTHING IS
   INTERPOLATED, which is the leap-second argument above taken one step
   further back. From 1972-01-01 TAI - UTC is an integer, so removing it is a
@@ -2629,7 +2636,11 @@ Created: 2026-07-25 21:40 (CEST, UTC+02:00)
   Degree      1x1    double   20       Chebyshev degree per panel. The
                                        default is decision D82 and is
                                        measured, not assumed - see METHOD.
-  PanelSpan   1x1    double   1        Panel length in days.
+  PanelSpan   1x1    double   1        Panel length in whole days. A
+                                       fraction of a day is refused with
+                                       nonIntegerPanelSpan: boundaries lie
+                                       on UTC midnight, where the EOP rows
+                                       change and leap seconds fall.
   ApplyTidalCorrections
               1x1    logical  true     Whether the sub-daily ocean tide and
                                        libration are folded into the fitted
@@ -2767,6 +2778,7 @@ Created: 2026-07-25 21:40 (CEST, UTC+02:00)
   hand side.</pre>
 <h4>ERRORS</h4>
 <pre>referenceSystem:earthOrientationInterpolant:missingEop
+  referenceSystem:earthOrientationInterpolant:nonIntegerPanelSpan
   referenceSystem:earthOrientationInterpolant:wrongScale
   referenceSystem:earthOrientationInterpolant:singleEpoch
   referenceSystem:earthOrientationInterpolant:spanNotCovered
@@ -3961,7 +3973,11 @@ Created: 2026-07-25 22:15 (CEST, UTC+02:00)
   by UTC MJD, which the second 23:59:60 of a leap-second day does not have,
   so on the interpolated path a sample inside a leap second - the epoch or
   either difference shoulder - is refused with insideLeapSecond; the direct
-  path takes it as it takes any other epoch (rev. 1.226).
+  path takes it as it takes any other epoch (rev. 1.226). Until rev. 1.235
+  both paths turned the Earth one second ahead through that second, and in
+  the last 0.3 us before it, where day + sec/86400 rounds up to the next
+  day: 7.2e-5 rad. interpolateEop took UT1 - UTC in the next day's
+  convention there, and the interpolated path read the next day's panel.
 
   SINGLE-EPOCH PATH. With N = 1 the outputs are 3x3, because MATLAB drops a
   trailing singleton dimension, and no interpolation object, temporary array
@@ -10875,6 +10891,6 @@ Created: 2026-07-26 12:30 (CEST, UTC+02:00) - session S4, folder-lock report
 -------------------------------------------------------------------------</pre>
 <p class="top"><a href="#contents">back to contents</a></p>
 </div>
-<p class="foot">referenceSystem v2.1.233 &mdash; generated from the
+<p class="foot">referenceSystem v2.1.237 &mdash; generated from the
 package help blocks. See the handover document for the design.</p>
 </body></html>

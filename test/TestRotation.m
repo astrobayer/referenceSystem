@@ -173,6 +173,8 @@ classdef TestRotation < matlab.unittest.TestCase
             [~, rateClearOfIt] = localInterpolatedRate(clearOfIt, interpolant, 200);
             testCase.verifySize(rateClearOfIt, [3 3], ...
                 'One second earlier the shoulder is clear of the leap second.');
+            % Accepted here; directPathTurnsOnceThroughALeapSecond holds the
+            % value to SI time, which this size check could not (rev. 1.235).
             testCase.verifySize(referenceSystem.rotationItrsToGcrs(inside, 'Eop', eop), ...
                 [3 3], 'The direct path takes the leap second like any other epoch.');
         end
@@ -220,6 +222,48 @@ classdef TestRotation < matlab.unittest.TestCase
             expectedR = reshape(rows(:, 2:10)', 3, 3, []);
             expectedRdot = reshape(rows(:, 11:19)', 3, 3, []);
             testCase.log(1, sprintf(['C API rate fixture: max|dR| %.3g, ', ...
+                'max|dRdot| %.3g 1/s at h = %g s'], max(abs(R - expectedR), [], 'all'), ...
+                max(abs(Rdot - expectedRdot), [], 'all'), info.differenceStep));
+            testCase.verifyEqual(R, expectedR, 'AbsTol', 5e-12);
+            testCase.verifyEqual(Rdot, expectedRdot, 'AbsTol', ...
+                TestRotation.VelocityBudget / TestRotation.OrbitRadius);
+        end
+
+        function rotationItrsToGcrs_contract_cApiDaySecondFixtureIsCurrent(testCase)
+            % THE SAME CONTRACT FOR THE C API'S DAY-AND-SECOND FORM (rev. 1.236).
+            % test/c/testApi.c holds rsApiRotationRateDaySecond to
+            % test/fixtures/arcFormat2DaySecond.csv, which is this function at
+            % a day and a second: seconds an MJD double cannot name, and six
+            % epochs about the 2017-01-01 leap second, one of them 0.2 us before
+            % 23:59:60. Recomputed here from the committed arcFormat2.eopi, so a
+            % change on either side fails a test on that side. Regenerate the
+            % CSV as its header says, rather than widening these bounds (O8).
+            %
+            % Bounds as in cApiRateFixtureIsCurrent. Measured when written: 0
+            % and 0 in MATLAB, and in C.
+            testCase.assumeTrue(referenceSystem.mexInfo().built, ...
+                'The MEX gateway is not built.');
+            folder = fullfile(testCase.toolboxRoot(), 'test', 'fixtures');
+            text = string(fileread(fullfile(folder, 'arcFormat2DaySecond.csv')));
+            lines = splitlines(strtrim(text));
+            stepLine = lines(startsWith(lines, "step "));
+            testCase.assertNumElements(stepLine, 1, 'The fixture names no step.');
+            step = str2double(extractAfter(stepLine, "step "));
+            rows = str2double(split(lines(~startsWith(lines, ["#", "step"])), ","));
+            testCase.assertSize(rows, [21, 20], 'The fixture lost rows or columns.');
+
+            interpolant = referenceSystem.readInterpolant( ...
+                string(fullfile(folder, 'arcFormat2.eopi')));
+            epoch = referenceSystem.daySecondToEpoch(rows(:, 1:2), "UTC");
+            [R, Rdot, ~, info] = referenceSystem.rotationItrsToGcrs(epoch, ...
+                'Interpolant', interpolant, 'DifferenceStep', step);
+
+            testCase.verifyEqual(info.sampleSource, "panels");
+            testCase.verifyTrue(info.lengthOfDayApplied, ...
+                'The fixture is the DEFAULT rate, which applies the length of day.');
+            expectedR = reshape(rows(:, 3:11)', 3, 3, []);
+            expectedRdot = reshape(rows(:, 12:20)', 3, 3, []);
+            testCase.log(1, sprintf(['C API day-and-second fixture: max|dR| %.3g, ', ...
                 'max|dRdot| %.3g 1/s at h = %g s'], max(abs(R - expectedR), [], 'all'), ...
                 max(abs(Rdot - expectedRdot), [], 'all'), info.differenceStep));
             testCase.verifyEqual(R, expectedR, 'AbsTol', 5e-12);
@@ -1457,6 +1501,15 @@ classdef TestRotation < matlab.unittest.TestCase
             % each side. Bounds as in interpolatedMatchesDirect: P19c's 5e-12
             % on R and D28's 1 nm/s at 7000 km on Rdot. Measured: R 2.2e-16,
             % Rdot 5.5e-19 1/s - the same floors as a span with no leap second.
+            %
+            % THE THIRTEENTH EPOCH IS 0.2 us BEFORE 23:59:60 (rev. 1.235), where
+            % day + sec/86400 rounds up to the next whole MJD. The panel is
+            % chosen by that MJD, and until the rounding was held below the
+            % next day it read the next panel's dut1, a second higher, and the
+            % rotation was 7.2e-5 rad out. The direct path was out by the same
+            % amount there, so this comparison could not see it until
+            % directPathTurnsOnceThroughALeapSecond held the direct path to SI
+            % time.
             testCase.assumeTrue(referenceSystem.mexInfo().built, ...
                 'The MEX gateway is not built.');
             eop = testCase.cookbookEop();
@@ -1468,8 +1521,8 @@ classdef TestRotation < matlab.unittest.TestCase
             before = [0.9; 0.5; 0.1; 0.01; 0.003; 0.001];
             after = [0.001; 0.003; 0.01; 0.1; 0.5; 0.9];
             query = referenceSystem.daySecondToEpoch( ...
-                [[repmat(57753, 6, 1); repmat(57754, 6, 1)], ...
-                [86400 * (1 - before); 86400 * after]], "UTC");
+                [[repmat(57753, 6, 1); repmat(57754, 6, 1); 57753], ...
+                [86400 * (1 - before); 86400 * after; 86400 - 2e-7]], "UTC");
 
             [direct, directDot] = referenceSystem.rotationItrsToGcrs(query, 'Eop', eop);
             [fitted, fittedDot, ~, info] = referenceSystem.rotationItrsToGcrs(query, ...
@@ -1478,6 +1531,49 @@ classdef TestRotation < matlab.unittest.TestCase
             testCase.verifyEqual(fitted, direct, 'AbsTol', 5e-12);
             testCase.verifyEqual(fittedDot, directDot, 'AbsTol', ...
                 TestRotation.VelocityBudget / TestRotation.OrbitRadius);
+        end
+
+        function rotationItrsToGcrs_reference_directPathTurnsOnceThroughALeapSecond(testCase)
+            % THE DIRECT PATH IS HELD TO SI TIME, NOT TO THE INTERPOLATED PATH
+            % (rev. 1.235). Until then interpolateEop gave UT1 - UTC in the next
+            % day's convention through 23:59:60, and in the last 0.3 us before
+            % it. UT1 ran a second ahead there and the rotation was 7.2e-5 rad
+            % out. The interpolated path inherited the same error through its
+            % fitted dut1, so every comparison between the two agreed. Measured
+            % on 2017-01-01, over labels one SI second apart: the Earth turned
+            % 2 s, then 0 s.
+            %
+            % THE REFERENCE IS THE ROTATION'S OWN NEIGHBOURS. Rotations at
+            % 23:59:59.5 and 00:00:00.5, two SI seconds apart and each clear of
+            % the defect, are joined along the geodesic, and the rotation at an
+            % instant between them must lie on it at the fraction of SI time
+            % elapsed. Bound: P19c's 5e-12. It separates the 3.6e-5 that a
+            % second-early step leaves at the midpoint from everything that
+            % bends the path in two seconds - the moving pole and CIP, and the
+            % series read a second late at 23:59:60.5 - which together measured
+            % 4.6e-13 and are logged. The angle's own advance is not a term: the
+            % geodesic is exact for a constant axis.
+            testCase.assumeTrue(referenceSystem.mexInfo().built, ...
+                'The MEX gateway is not built.');
+            eop = testCase.cookbookEop();
+            label = [57753, 86399.5; 57753, 86400 - 2e-7; 57753, 86400.5; 57754, 0.5];
+            utc = referenceSystem.daySecondToEpoch(label, "UTC");
+            R = referenceSystem.rotationItrsToGcrs(utc, 'Eop', eop);
+
+            tai = referenceSystem.convertTimeScale(utc, "TAI");
+            elapsed = (tai.day - tai.day(1)) * 86400 + (tai.sec - tai.sec(1));
+            testCase.assertEqual(elapsed(end), 2, 'AbsTol', 1e-9, ...
+                'The outer labels must lie two SI seconds apart.');
+            chord = logm(R(:, :, 1)' * R(:, :, end));
+            worst = 0;
+            for k = 2:3
+                onGeodesic = real(R(:, :, 1) * expm(elapsed(k) / 2 * chord));
+                worst = max(worst, max(abs(R(:, :, k) - onGeodesic), [], 'all'));
+                testCase.verifyEqual(R(:, :, k), onGeodesic, 'AbsTol', 5e-12, ...
+                    sprintf(['The direct rotation at %d %.7f s is off the SI-time ', ...
+                    'geodesic: UT1 is stepping inside the leap second.'], label(k, 1), label(k, 2)));
+            end
+            testCase.log(1, sprintf('direct path off the SI-time geodesic by %.3g', worst));
         end
 
         function earthOrientationInterpolant_reference_matchesTheDirectChain(testCase)
@@ -1773,6 +1869,31 @@ classdef TestRotation < matlab.unittest.TestCase
             % have refused the first call.
             testCase.verifyLessThan([angles, dut1], [15, 15], ...
                 'The configuration no longer separates the old gate from the new.');
+        end
+
+        function earthOrientationInterpolant_contract_refusesANonIntegerPanelSpan(testCase)
+            % A FRACTION OF A DAY IS REFUSED UNDER THIS FUNCTION'S OWN NAME (rev.
+            % 1.237, H.11 item 12, Matthias's decision). Until then PanelSpan
+            % 0.5 and 1.5 both failed with normalizeEpoch:nonIntegerDay from
+            % inside the leap-second lookup, which names neither the function
+            % nor the option. Both are asserted, below and above one day, and
+            % the refusal must come before any EOP is evaluated - so the Eop
+            % here is a real series and the span a valid one. PanelSpan 2 is
+            % the whole-day case that must still build; at degree 20 two days
+            % miss the default 0.5 uas (36.7 uas in dut1 on this span), so the
+            % tolerance is the 40 that toleranceGatesDut1AsAnAngle admits
+            % two-day panels at.
+            eop = testCase.cookbookEop();
+            span = referenceSystem.daySecondToEpoch([57754 0; 57756 0], "UTC");
+            for fraction = [0.5, 1.5]
+                testCase.verifyError(@() referenceSystem.earthOrientationInterpolant( ...
+                    span, 'Eop', eop, 'PanelSpan', fraction), ...
+                    'referenceSystem:earthOrientationInterpolant:nonIntegerPanelSpan', ...
+                    sprintf('PanelSpan %g was not refused by name.', fraction));
+            end
+            whole = referenceSystem.earthOrientationInterpolant(span, 'Eop', eop, ...
+                'PanelSpan', 2, 'Tolerance', 40);
+            testCase.verifyEqual(whole.panelSpan, 2);
         end
 
         function earthOrientationInterpolant_contract_panelsAlignToWholeDays(testCase)

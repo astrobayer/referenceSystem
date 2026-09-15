@@ -95,62 +95,34 @@ static int rsApiSample(const rsApiInterpolant *ip, int panel, double mjdUtc,
     return RS_API_OK;
 }
 
-/*
- * Both entry points come here. derivativeOrder is 0 or 1; the three-sample
- * blocking is exactly what the MATLAB path builds, so rsRotationItrsToGcrsFromCip
- * cannot tell the two callers apart - which is the whole point.
- */
-static int rsApiRotationCore(const rsApiInterpolant *ip, double mjdUtc,
-                             double step, int derivativeOrder,
-                             double *r, double *rdot)
+/* The shift of difference shoulder `sample`, in SI seconds: -step, 0, +step.
+ * Sample 1 is the epoch; an unwanted shoulder sits on the epoch itself rather
+ * than being left uninitialised - the core does not read it, and a stale stack
+ * value that it might one day read is a defect waiting for a change of mind. */
+static double rsApiShift(int sample, double step, int derivativeOrder)
 {
-    double ttDay[1];
-    double ttSec[1];
-    double ut1Day[1];
-    double ut1Sec[1];
-    double omega[1];
-    double xp[3];
-    double yp[3];
-    double dX[3];
-    double dY[3];
-    double cipX[3];
-    double cipY[3];
-    double cipS[3];
-    double value[RS_API_MAX_QUANTITIES];
-    double lengthOfDay = 0.0;          /* s; stays 0 without a lod channel */
-    double localR[9];
-    double localRdot[9];
-    double dayShift;
-    int centrePanel;
-    int panel;
-    int sample;
-    int status;
-    int k;
+    if (derivativeOrder <= 0) {
+        return 0.0;
+    }
+    return (sample == 0) ? -step : ((sample == 2) ? step : 0.0);
+}
 
-    status = rsApiCheck(ip);
-    if (status != RS_API_OK) {
-        return status;
-    }
-    if (r == NULL || (derivativeOrder > 0 && (rdot == NULL || !(step > 0.0)))) {
-        return RS_API_NULL_ARGUMENT;
-    }
-    centrePanel = rsApiPanelIndex(ip, mjdUtc);
+/*
+ * The three labels of the MJD form, each the UTC MJD the panels are read at.
+ */
+static int rsApiMjdSamples(const rsApiInterpolant *ip, double mjdUtc,
+                           double step, int derivativeOrder, double *sampleMjd)
+{
+    int centrePanel = rsApiPanelIndex(ip, mjdUtc);
+    int sample;
+
     if (centrePanel < 0) {
         return RS_API_OUT_OF_RANGE;
     }
-
-    /* Sample 1 is the epoch; 0 and 2 are the difference shoulders and are
-     * filled only when a derivative is wanted. An unwanted shoulder is left at
-     * the epoch's own value rather than uninitialised - the core does not read
-     * it, and a stale stack value that it might one day read is a defect
-     * waiting for a change of mind. */
     for (sample = 0; sample < 3; sample++) {
-        double shift = 0.0;
-        if (derivativeOrder > 0) {
-            shift = (sample == 0) ? -step : ((sample == 2) ? step : 0.0);
-        }
-        dayShift = shift / 86400.0;
-        panel = rsApiPanelIndex(ip, mjdUtc + dayShift);
+        double shift = rsApiShift(sample, step, derivativeOrder);
+        double dayShift = shift / 86400.0;
+        int panel = rsApiPanelIndex(ip, mjdUtc + dayShift);
         if (panel < 0) {
             return RS_API_OUT_OF_RANGE;
         }
@@ -172,9 +144,150 @@ static int rsApiRotationCore(const rsApiInterpolant *ip, double mjdUtc,
                 return RS_API_OUT_OF_RANGE;
             }
             dayShift = labelShift;
-            panel = labelled;
         }
-        status = rsApiSample(ip, panel, mjdUtc + dayShift, value);
+        sampleMjd[sample] = mjdUtc + dayShift;
+    }
+    return RS_API_OK;
+}
+
+/* TAI - UTC on the UTC day that begins at MJD day, read from the panel that
+ * holds it. Constant across the panel, because a leap second may fall only on
+ * a panel boundary. */
+static int rsApiDayTai(const rsApiInterpolant *ip, double day, double *tai)
+{
+    int panel = rsApiPanelIndex(ip, day);
+    if (panel < 0) {
+        return RS_API_OUT_OF_RANGE;
+    }
+    *tai = ip->taiMinusUtc[panel];
+    return RS_API_OK;
+}
+
+/*
+ * A UTC day and second carried into range, as daySecondToEpoch carries them:
+ * a day is 86400 s plus the change in TAI - UTC at its end. The one second
+ * that is no day's own - 23:59:60 of a leap-second day - is RS_API_OUT_OF_RANGE,
+ * for the reason given at rsApiRotationRate. So is a day outside the panels,
+ * which bounds both loops.
+ */
+static int rsApiCarry(const rsApiInterpolant *ip, double *day, double *sec)
+{
+    double taiHere;
+    double taiNext;
+    double length;
+
+    while (*sec >= 86400.0) {
+        if (rsApiDayTai(ip, *day, &taiHere) != RS_API_OK
+            || rsApiDayTai(ip, *day + 1.0, &taiNext) != RS_API_OK) {
+            return RS_API_OUT_OF_RANGE;
+        }
+        length = 86400.0 + (taiNext - taiHere);
+        if (*sec < length) {
+            return RS_API_OUT_OF_RANGE;
+        }
+        *sec -= length;
+        *day += 1.0;
+    }
+    while (*sec < 0.0) {
+        if (rsApiDayTai(ip, *day - 1.0, &taiHere) != RS_API_OK
+            || rsApiDayTai(ip, *day, &taiNext) != RS_API_OK) {
+            return RS_API_OUT_OF_RANGE;
+        }
+        *sec += 86400.0 + (taiNext - taiHere);
+        *day -= 1.0;
+        if (*sec >= 86400.0) {
+            return RS_API_OUT_OF_RANGE;
+        }
+    }
+    return RS_API_OK;
+}
+
+/*
+ * The MJD the panels are read at for a carried day and second, formed as
+ * rotationItrsToGcrs forms it: day + sec/86400, held below the next day.
+ * WITHOUT THE HOLD, a second in the last 0.3 us of its day rounds up to the
+ * next whole MJD and reads the next panel, whose dut1 is a second higher before
+ * a leap second - while UT1 is formed from this day's label. The largest
+ * double below the next day keeps the panel, written as MATLAB writes it,
+ * nextDay - eps(nextDay), so that the two agree bit for bit.
+ */
+static double rsApiDayMjd(double day, double sec)
+{
+    double nextDay = day + 1.0;
+    double limit = nextDay - (nextafter(nextDay, HUGE_VAL) - nextDay);
+    double mjd = day + sec / 86400.0;
+    return (mjd > limit) ? limit : mjd;
+}
+
+/*
+ * The three labels of the day-and-second form. Each shoulder is the epoch's
+ * second plus the shift, carried as daySecondToEpoch carries it, which is how
+ * rotationItrsToGcrs builds its shoulders. The MJD form cannot do that, since
+ * it has no second to carry.
+ */
+static int rsApiDaySecondSamples(const rsApiInterpolant *ip, double day,
+                                 double sec, double step, int derivativeOrder,
+                                 double *sampleMjd)
+{
+    int sample;
+
+    for (sample = 0; sample < 3; sample++) {
+        double sampleDay = day;
+        double sampleSec = sec + rsApiShift(sample, step, derivativeOrder);
+        int status = rsApiCarry(ip, &sampleDay, &sampleSec);
+        if (status != RS_API_OK) {
+            return status;
+        }
+        sampleMjd[sample] = rsApiDayMjd(sampleDay, sampleSec);
+        if (rsApiPanelIndex(ip, sampleMjd[sample]) < 0) {
+            return RS_API_OUT_OF_RANGE;
+        }
+    }
+    return RS_API_OK;
+}
+
+/*
+ * Every entry point comes here, with the three labels already formed and the
+ * epoch as a carried UTC day and second. derivativeOrder is 0 or 1; the
+ * three-sample blocking is exactly what the MATLAB path builds, so
+ * rsRotationItrsToGcrsFromCip cannot tell the callers apart - which is the
+ * whole point.
+ */
+static int rsApiRotationCore(const rsApiInterpolant *ip, const double *sampleMjd,
+                             double utcDay, double utcSec,
+                             double step, int derivativeOrder,
+                             double *r, double *rdot)
+{
+    double ttDay[1];
+    double ttSec[1];
+    double ut1Day[1];
+    double ut1Sec[1];
+    double omega[1];
+    double xp[3];
+    double yp[3];
+    double dX[3];
+    double dY[3];
+    double cipX[3];
+    double cipY[3];
+    double cipS[3];
+    double value[RS_API_MAX_QUANTITIES];
+    double lengthOfDay = 0.0;          /* s; stays 0 without a lod channel */
+    double localR[9];
+    double localRdot[9];
+    int centrePanel = rsApiPanelIndex(ip, sampleMjd[1]);
+    int sample;
+    int status;
+    int k;
+
+    if (centrePanel < 0) {
+        return RS_API_OUT_OF_RANGE;
+    }
+    for (sample = 0; sample < 3; sample++) {
+        int panel = rsApiPanelIndex(ip, sampleMjd[sample]);
+        if (panel < 0) {
+            return RS_API_OUT_OF_RANGE;
+        }
+        status = rsApiSample(ip, panel, sampleMjd[sample], value);
         if (status != RS_API_OK) {
             return status;
         }
@@ -188,11 +301,10 @@ static int rsApiRotationCore(const rsApiInterpolant *ip, double mjdUtc,
         dX[sample] = 0.0;
         dY[sample] = 0.0;
         if (sample == 1) {
-            ttSec[0] = (mjdUtc - floor(mjdUtc)) * 86400.0
-                     + ip->taiMinusUtc[centrePanel] + RS_API_TT_MINUS_TAI;
-            ttDay[0] = floor(mjdUtc);
-            ut1Sec[0] = (mjdUtc - floor(mjdUtc)) * 86400.0 + value[5];
-            ut1Day[0] = floor(mjdUtc);
+            ttSec[0] = utcSec + ip->taiMinusUtc[centrePanel] + RS_API_TT_MINUS_TAI;
+            ttDay[0] = utcDay;
+            ut1Sec[0] = utcSec + value[5];
+            ut1Day[0] = utcDay;
             if (ip->quantityCount >= RS_API_MAX_QUANTITIES) {
                 lengthOfDay = value[6];
             }
@@ -230,16 +342,88 @@ static int rsApiRotationCore(const rsApiInterpolant *ip, double mjdUtc,
     return RS_API_OK;
 }
 
+/* The checks every entry point makes before it forms a label. */
+static int rsApiCheckCall(const rsApiInterpolant *ip, double step,
+                          int derivativeOrder, const double *r, const double *rdot)
+{
+    int status = rsApiCheck(ip);
+    if (status != RS_API_OK) {
+        return status;
+    }
+    if (r == NULL || (derivativeOrder > 0 && (rdot == NULL || !(step > 0.0)))) {
+        return RS_API_NULL_ARGUMENT;
+    }
+    return RS_API_OK;
+}
+
+static int rsApiMjdEntry(const rsApiInterpolant *ip, double mjdUtc,
+                         double step, int derivativeOrder, double *r, double *rdot)
+{
+    double sampleMjd[3];
+    int status = rsApiCheckCall(ip, step, derivativeOrder, r, rdot);
+    if (status != RS_API_OK) {
+        return status;
+    }
+    status = rsApiMjdSamples(ip, mjdUtc, step, derivativeOrder, sampleMjd);
+    if (status != RS_API_OK) {
+        return status;
+    }
+    /* The day and second are recovered from the MJD, so UT1 carries the
+     * double's 0.63 us resolution; see rsApiRotationDaySecond. */
+    return rsApiRotationCore(ip, sampleMjd, floor(mjdUtc),
+                             (mjdUtc - floor(mjdUtc)) * 86400.0,
+                             step, derivativeOrder, r, rdot);
+}
+
+static int rsApiDaySecondEntry(const rsApiInterpolant *ip, double dayUtc,
+                               double secUtc, double step, int derivativeOrder,
+                               double *r, double *rdot)
+{
+    double sampleMjd[3];
+    double day = dayUtc;
+    double sec = secUtc;
+    int status = rsApiCheckCall(ip, step, derivativeOrder, r, rdot);
+    if (status != RS_API_OK) {
+        return status;
+    }
+    if (!isfinite(dayUtc) || dayUtc != floor(dayUtc) || !isfinite(secUtc)) {
+        return RS_API_BAD_EPOCH;
+    }
+    status = rsApiCarry(ip, &day, &sec);
+    if (status != RS_API_OK) {
+        return status;
+    }
+    status = rsApiDaySecondSamples(ip, day, sec, step, derivativeOrder, sampleMjd);
+    if (status != RS_API_OK) {
+        return status;
+    }
+    return rsApiRotationCore(ip, sampleMjd, day, sec, step, derivativeOrder,
+                             r, rdot);
+}
+
 int rsApiRotation(const rsApiInterpolant *interpolant, double mjdUtc,
                   double *r)
 {
-    return rsApiRotationCore(interpolant, mjdUtc, 0.0, 0, r, NULL);
+    return rsApiMjdEntry(interpolant, mjdUtc, 0.0, 0, r, NULL);
 }
 
 int rsApiRotationRate(const rsApiInterpolant *interpolant, double mjdUtc,
                       double step, double *r, double *rdot)
 {
-    return rsApiRotationCore(interpolant, mjdUtc, step, 1, r, rdot);
+    return rsApiMjdEntry(interpolant, mjdUtc, step, 1, r, rdot);
+}
+
+int rsApiRotationDaySecond(const rsApiInterpolant *interpolant, double dayUtc,
+                           double secUtc, double *r)
+{
+    return rsApiDaySecondEntry(interpolant, dayUtc, secUtc, 0.0, 0, r, NULL);
+}
+
+int rsApiRotationRateDaySecond(const rsApiInterpolant *interpolant,
+                               double dayUtc, double secUtc, double step,
+                               double *r, double *rdot)
+{
+    return rsApiDaySecondEntry(interpolant, dayUtc, secUtc, step, 1, r, rdot);
 }
 
 /* ------------------------------------------------------------------ */

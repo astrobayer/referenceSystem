@@ -69,6 +69,13 @@ function eopAtEpoch = interpolateEop(eop, epoch, options)
 %   leapSecondTable, which is the only leap-second authority in the toolbox, and
 %   the lookup is vectorised rather than an arrayfun per row.
 %
+%   THE COUNT ADDED BACK IS THE ONE ON THE EPOCH'S OWN UTC DAY. Through the
+%   leap second 23:59:60, and in the last 0.3 us before it, the value
+%   therefore stays in the old day's convention, and UT1 = UTC + dut1 is
+%   continuous. Until rev. 1.235 the count was read at day + sec/86400, which
+%   lands on the next day there, so UT1 ran one second ahead: 15 arcseconds
+%   of rotation.
+%
 %   THE SERIES IS RESTRICTED TO THE MODERN UTC ERA BEFORE ANYTHING IS
 %   INTERPOLATED, which is the leap-second argument above taken one step
 %   further back. From 1972-01-01 TAI - UTC is an integer, so removing it is a
@@ -252,14 +259,22 @@ function eopAtEpoch = interpolateEop(eop, epoch, options)
 
     tableMjd = eop.mjd;
 
+    unclampedMjd = queryMjd;
     [queryMjd, isOutside, nOutside] = localApplyPolicy(queryMjd, tableMjd, ...
         options.ExtrapolationPolicy);
+
+    % TAI - UTC IS READ ON THE EPOCH'S OWN DAY, NOT ON queryMjd (rev. 1.235).
+    % Only a clamped epoch takes the day of its clamp, so "hold" keeps holding
+    % the edge value of UT1 - UTC.
+    labelDay = epoch.day + zeros(size(queryMjd));
+    clamped = queryMjd ~= unclampedMjd;
+    labelDay(clamped) = floor(queryMjd(clamped));
 
     method = char(options.Method);
     eopAtEpoch = struct( ...
         'xp', interp1(tableMjd, eop.xp, queryMjd, method), ...
         'yp', interp1(tableMjd, eop.yp, queryMjd, method), ...
-        'dut1', localInterpolateDut1(tableMjd, eop.dut1, queryMjd, method), ...
+        'dut1', localInterpolateDut1(tableMjd, eop.dut1, queryMjd, labelDay, method), ...
         'lod', interp1(tableMjd, eop.lod, queryMjd, method), ...
         'dX', interp1(tableMjd, eop.dX, queryMjd, method), ...
         'dY', interp1(tableMjd, eop.dY, queryMjd, method));
@@ -365,11 +380,21 @@ function [eop, nIgnored] = localTrimToUtcEpoch(eop, firstUtcDay, firstUtcDate, s
         nKept, eop.mjd(1), eop.mjd(end));
 end
 
-function dut1 = localInterpolateDut1(tableMjd, tableDut1, queryMjd, method)
+function dut1 = localInterpolateDut1(tableMjd, tableDut1, queryMjd, labelDay, method)
 %LOCALINTERPOLATEDUT1 Interpolate UT1 - UTC across leap seconds without a step.
 %   UT1 - TAI is continuous where UT1 - UTC is not, so the integer TAI - UTC is
 %   removed before interpolating and added back afterwards. Both lookups are
 %   vectorised; v1 called arrayfun once per table row and once per epoch.
+%
+%   THE COUNT ADDED BACK IS THE ONE ON THE EPOCH'S OWN UTC DAY, labelDay, AND
+%   UNTIL REV. 1.235 IT WAS READ FROM queryMjd. That rebuilt the epoch from
+%   day + sec/86400, which lands 23:59:60.x on the next day, and so undid the
+%   day-number lookup leapSecondTable makes for exactly this second (finding
+%   C-3). Throughout every positive leap second, and in the last 0.3 us before
+%   it, where an MJD double rounds up to the next day, UT1 - UTC came back in
+%   the new day's convention. UT1 then ran one second ahead, and the rotation
+%   was off by 7.2e-5 rad, about 15 arcseconds. Measured on 2017-01-01: over
+%   three labels one SI second apart, the Earth turned 2 s, then 0 s.
 %
 %   NEITHER LOOKUP NEEDS A RANGE GUARD AND ONE MUST NOT BE ADDED HERE. The
 %   caller has already refused a query before the modern UTC era and trimmed
@@ -381,7 +406,7 @@ function dut1 = localInterpolateDut1(tableMjd, tableDut1, queryMjd, method)
     tableEpoch = referenceSystem.daySecondToEpoch( ...
         [floor(tableMjd), (tableMjd - floor(tableMjd)) * 86400], "UTC");
     queryEpoch = referenceSystem.daySecondToEpoch( ...
-        [floor(queryMjd), (queryMjd - floor(queryMjd)) * 86400], "UTC");
+        [labelDay(:), zeros(numel(labelDay), 1)], "UTC");
 
     tableDeltaAt = referenceSystem.leapSecondTable("deltaAT", tableEpoch);
     queryDeltaAt = referenceSystem.leapSecondTable("deltaAT", queryEpoch);
