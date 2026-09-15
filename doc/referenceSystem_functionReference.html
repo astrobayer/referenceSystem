@@ -260,8 +260,8 @@ Revised: 2026-08-09 10:15 (CEST, UTC+02:00)
   downloadKernels each carried a private localDefaultCache that composed
   data/ from their own mfilename, so the toolbox held two answers to one
   question and neither could be moved. Both now resolve through this
-  function, which is rev. 1.53's rule applied to a path: where a value has
-  more than one definition, delete the copies rather than keep them equal.
+  function: where a value has more than one definition, the copies are
+  deleted rather than kept equal.
 
   THE MECHANISM IS setpref AND IT MATCHES shAnalysis DELIBERATELY. The same
   author maintains both toolboxes and calls shLowLevel.dataFolder with the
@@ -297,7 +297,7 @@ Revised: 2026-08-09 10:15 (CEST, UTC+02:00)
       The folder does not exist and could not be created; the message
       carries the reason the file system gave.</pre>
 <h4>REFERENCES</h4>
-<pre>Handover decision D119 (rev. 1.207) and section C.10. The sibling
+<pre>Handover decision D119 and section C.10. The sibling
   implementation is shLowLevel.dataFolder in the shAnalysis toolbox.</pre>
 <h4>EXAMPLE</h4>
 <pre>% Where does installed data go, and how do I move it off the system disk?
@@ -982,7 +982,8 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
                                                    the given scale. Negative
                                                    values precede it.
   scale              1x1    string | char   -      Time scale, any case, one
-                                                   of the names in timeScale.</pre>
+                                                   of the names in timeScale
+                                                   except UTC and GLONASS.</pre>
 <h4>OUTPUT ARGUMENTS</h4>
 <pre>Name       Size   Type      Units  Description
   ----       ----   ----      -----  -----------
@@ -1002,9 +1003,10 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
   may well be counting TAI or GPS seconds from that instant, and assuming TT
   would be a silent 32.184 s error.
 
-  For a UTC input the count is UTC seconds and therefore not proper time
-  across a leap second; normalizeEpoch will refuse an offset larger than a
-  day for that scale. Count in TAI or TT if the arc spans a leap second.</pre>
+  A LEAP-BEARING SCALE IS REFUSED. Seconds counted in UTC or GLONASS since
+  J2000.0 are not a time: 22 leap seconds lie between J2000.0 and 2017, and
+  a count of labelled seconds does not say which of them it skipped. Count in
+  TAI, TT or GPS and convert the epoch with convertTimeScale.</pre>
 <h4>ACCURACY</h4>
 <pre>Exact to the resolution of the input. For an arc of one day the seconds
   field stays below 1e5, where one unit in the last place is 1.5e-11 s, so
@@ -1012,7 +1014,8 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
   reaches 3e9 s, where one unit in the last place is 4.8e-7 s, and that
   limitation belongs to the caller's representation, not to this function.</pre>
 <h4>ERRORS</h4>
-<pre>referenceSystem:timeScale:unknownScale</pre>
+<pre>referenceSystem:j2000SecondsToEpoch:leapBearingScale
+  referenceSystem:timeScale:unknownScale</pre>
 <h4>REFERENCES</h4>
 <pre>IAU 1994 Resolution C7 and IERS Conventions (2010), TN36 Ch. 1 (J2000.0).</pre>
 <h4>EXAMPLE</h4>
@@ -1278,27 +1281,23 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
   is about 83000 iauDat evaluations in one vectorised call, takes a few
   milliseconds and is cached in a persistent variable for the session.
 
-  The coverage end date is discovered the same way: iauDat flags a year more
-  than five years beyond its own release with status +1, and validThrough is
-  the day before the first such day. It is not a literal here either.
+  The coverage end date of the SOFA table is discovered the same way: iauDat
+  flags a year more than five years beyond its own release with status +1,
+  and validThrough is the day before the first such day. It is not a literal
+  here either.
 
   EACH COVERAGE BOUND IS PUBLISHED TWICE, AS A DATE AND AS A DAY NUMBER, and
   the second form is not a convenience. Consumers compare a bound against
   epoch.day, which is an MJD, so a date-only bound forces every one of them to
-  write days(bound - datetime(1858, 11, 17)) - and that is the MJD epoch,
-  copied out of this file into theirs. Four such copies had accumulated by
-  rev. 1.215, one of them in package code, which is the same shape as finding
-  M-2 one layer down: a constant with no single owner, free to diverge, and
-  invisible to the contract test that greps for leap-second dates because
-  1858-11-17 is not one. The day numbers cost nothing to hand back - both are
-  already cached, one by localScanSofaTable and one by localColumnsOf - and
-  they are what removes the copies.
+  write days(bound - datetime(1858, 11, 17)) - a copy of the MJD epoch in
+  each of them, free to diverge. The day numbers cost nothing to hand back:
+  both are cached with the active table.
 
-  THE TWO BOUNDS ARE NOT SYMMETRIC UNDER AN OVERRIDE AND THAT IS DELIBERATE.
-  validFrom follows the ACTIVE table, so leapSecondTable("load", file) moves
-  it and every consumer that trims to it. validThrough reports where SOFA
-  stops being willing to answer, which is a property of the bundled iauDat
-  rather than of the step list, so an override does not move it.
+  AN OVERRIDE MOVES BOTH BOUNDS WHERE IT STATES THEM. validFrom follows the
+  active table's first row. validThrough is the day before the expiry a
+  leap-seconds.list states on its "#@" line, because that is how far its
+  publisher vouches for it; a two-column table states no expiry and keeps
+  the coverage of the bundled SOFA release. "reset" restores both.
 
   TRAP, measured against SOFA 20231011 and the reason this function
   range-checks rather than trusting the status. iauDat answers a pre-1960
@@ -1319,15 +1318,11 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
   SOFA table. Install the override inside the parfor body, or pass the table
   in as sliced data. leapSecondTable("state") reports which table answered.
 
-  THE COLUMNS "deltaAT" READS ARE DERIVED ONCE, NOT PER CALL (prompt P28b,
-  rev. 1.122). The step days, the offsets, the discretize edges, the date of
-  the first row and the coverage end AS A DAY NUMBER are all fixed for the
-  life of the active table, and are computed when that table is installed:
-  after the SOFA scan, after "load" and after "reset". A profiled single-epoch
-  rotation reached this function six times, four of them on "deltaAT", and
-  each of those four built a datetime for 1858-11-17, subtracted it, called
-  days and floored the result to recover a number the scan already knew, then
-  indexed the timetable three times for columns that had not changed.
+  THE COLUMNS "deltaAT" READS ARE DERIVED ONCE, NOT PER CALL (prompt P28b).
+  The step days, the offsets, the discretize edges, the date of the first
+  row and the coverage end are all fixed for the life of the active table,
+  and are computed when that table is installed: after the SOFA scan, after
+  "load" and after "reset".
 
   The cache is not an optimisation of the lookup: the lookup was already one
   discretize on integer day numbers. It removes work that was never a function
@@ -1351,9 +1346,10 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
   MATLAB:validators:mustBeMember</pre>
 <h4>WARNINGS</h4>
 <pre>referenceSystem:leapSecondTable:dubiousYear   One per call, however large N is.
-      Raised from 2029-01-01 on the bundled SOFA release, because iauDat
-      flags any year more than five beyond its own IYV. It is SOFA's
-      reminder that leap seconds cannot be predicted, not a defect.</pre>
+      Raised beyond validThrough: from 2029-01-01 on the bundled SOFA
+      release, because iauDat flags any year more than five beyond its own
+      IYV, or beyond the expiry of a loaded leap-seconds.list. Loading a
+      newer leap-seconds.list moves it.</pre>
 <h4>REFERENCES</h4>
 <pre>IAU SOFA release 20231011, iauDat (mex/sofa/dat.c).
   ITU-R TF.460-6, Standard-frequency and time-signal emissions.
@@ -1509,14 +1505,10 @@ Created: 2026-07-24 19:40 (CEST, UTC+02:00)
   referenceSystem:convertTimeScale:unrepresentableLeapSecond
   referenceSystem:convertTimeScale:gatewayMissing
   referenceSystem:convertTimeScale:beforeUtcEpoch
-      Raised HERE, by this function, when a TAI epoch maps to a UTC day
-      before the leap-second table begins. It was named
-      referenceSystem:leapSecondTable:beforeUtcEpoch until revision 1.52,
-      which contradicted the binding section C.2 rule that an identifier
-      names the function that raised it - the same correction revision 1.36
-      made to the epoch scale check. leapSecondTable raises an identifier of
-      its own name for its own range check; the two are distinct conditions
-      in distinct functions and must be catchable separately.
+      Raised by this function when a TAI epoch maps to a UTC day before the
+      leap-second table begins. leapSecondTable raises an identifier of its
+      own name for its own range check; the two are distinct conditions in
+      distinct functions and are catchable separately.
   referenceSystem:timeScale:unknownScale</pre>
 <h4>WARNINGS</h4>
 <pre>referenceSystem:convertTimeScale:deltaUt1Defaulted   Raised once per call
@@ -1524,7 +1516,7 @@ Created: 2026-07-24 19:40 (CEST, UTC+02:00)
       The conversion proceeds with zero, and the caller is told what that
       costs. An EXPLICIT 'DeltaUt1', 0 is a decision and does not warn -
       decision D67's rule that a consequential physical choice is never
-      silently defaulted, applied here (decision D113, rev. 1.184).
+      silently defaulted, applied here (decision D113).
   referenceSystem:leapSecondTable:dubiousYear   Raised once per call by
       leapSecondTable when an epoch lies beyond the table's coverage.</pre>
 <h4>REFERENCES</h4>
@@ -1910,6 +1902,10 @@ Created: 2026-07-24 20:10 (CEST, UTC+02:00)
   referenceSystem:readEop:notMonotonic
   referenceSystem:readEop:implausibleValue
   referenceSystem:readEop:unsupportedBulletin</pre>
+<h4>WARNINGS</h4>
+<pre>referenceSystem:readEop:samplingGap   One per call. The series has rows
+      further apart than its sampling step; interpolating across a gap is an
+      extrapolation in all but name.</pre>
 <h4>REFERENCES</h4>
 <pre>IERS Conventions (2010), IERS Technical Note 36, Ch. 5.
   Capitaine, N. and Wallace, P. T., 2006, Astron. Astrophys. 450, 855.
@@ -2313,11 +2309,6 @@ Created: 2026-07-25 12:15 (CEST, UTC+02:00)
   under the conventional 35-day boundary. At the equator one millisecond of
   UT1 is 0.465 m of surface displacement.
 
-  Handover approximation #6 previously quoted 30 microseconds and 14 mm for
-  this quantity. Both are wrong by three to four orders of magnitude, in the
-  direction that makes D30 more necessary rather than less. Corrected in
-  revision 1.40 on the measurement above.
-
   The model's own accuracy is that of IERS Conventions (2010) Chapter 8; the
   coefficients are tabulated to four decimals in units of 1e-4 s, so the
   representation floor is about 10 ns in UT1.</pre>
@@ -2473,10 +2464,7 @@ Created: 2026-07-25 12:45 (CEST, UTC+02:00)
                                                      "IAU2006/2000A" or
                                                      "IAU2000A". Required
                                                      whenever an offset is
-                                                     non-zero.
-  Interpolant   1x1         struct          none     Reserved. Supplying it
-                                                     raises notImplemented;
-                                                     see METHOD.</pre>
+                                                     non-zero.</pre>
 <h4>OUTPUT ARGUMENTS</h4>
 <pre>Name   Size   Type     Units  Description
   ----   ----   ----     -----  -----------
@@ -2517,11 +2505,10 @@ Created: 2026-07-25 12:45 (CEST, UTC+02:00)
   round trips per single-epoch rotation.
 
   The model is evaluated DIRECTLY at every epoch, through SOFA iauXys06a.
-  There is no interpolated path in v2.0 (decisions D17 and D24): interpolation
-  belongs to earthOrientationInterpolant, which interpolates X, Y and s
-  alongside the EOP quantities, and two mechanisms for one job would mean two
-  error budgets and two code paths. 'Interpolant' is declared here so that the
-  signature is final now and P19 changes no call site later.
+  Interpolated X, Y and s, with the offsets already applied, are the panels
+  of earthOrientationInterpolant: evaluateInterpolant reads them by channel
+  name, and rotationItrsToGcrs assembles the rotation from them. There is no
+  second interpolated path here.
 
   The vocabulary is direct and interpolated at every level of this toolbox,
   never exact and interp.</pre>
@@ -2555,7 +2542,6 @@ Created: 2026-07-25 12:45 (CEST, UTC+02:00)
   referenceSystem:cipCoordinates:cipModelRequired
   referenceSystem:cipCoordinates:sizeMismatch
   referenceSystem:cipCoordinates:conflictingOffsets
-  referenceSystem:cipCoordinates:notImplemented
   referenceSystem:cipCoordinates:gatewayMissing</pre>
 <h4>REFERENCES</h4>
 <pre>IERS Conventions (2010), IERS Technical Note 36, Ch. 5.4 to 5.5.
@@ -2570,7 +2556,8 @@ Created: 2026-07-25 12:45 (CEST, UTC+02:00)
 <h4>KEYWORDS</h4>
 <pre>CIP, CIO, celestial intermediate pole, precession, nutation, dX, dY, SOFA
 
-See also ROTATIONGCRSTOCIRS, ROTATIONITRSTOGCRS, INTERPOLATEEOP, READEOP.
+See also ROTATIONGCRSTOCIRS, ROTATIONITRSTOGCRS, INTERPOLATEEOP, READEOP,
+  EVALUATEINTERPOLANT.
 
 -------------------------------------------------------------------------
 referenceSystem v2.1
@@ -2827,15 +2814,13 @@ Created: 2026-07-27 10:20 (CEST, UTC+02:00)
 
   xp ROTATES ABOUT MINUS Y AND yp ABOUT MINUS X, not the other way round.
   iauPom00 builds W as R3(-s')*R2(xp)*R1(yp), so xp enters through the
-  SECOND-axis factor and yp through the first. Revision 1.107 had them
-  transposed - the natural reading of "the x pole coordinate" is a rotation
-  about x, and it is wrong. The finite-difference test caught it on the first
-  run, which is the only reason this comment can be written in the past
-  tense.
+  SECOND-axis factor and yp through the first. The natural reading of "the x
+  pole coordinate" is a rotation about x, and it is wrong; the
+  finite-difference test holds the assignment.
 
   THE SIGNS WERE MEASURED, NOT DERIVED FROM THE FACTOR ORDER OF iauPom00.
-  Handover revision 1.106 records the experiment: the generators were
-  finite-differenced against rsRotationItrsToGcrs itself, so the code being
+  The generators were finite-differenced against rsRotationItrsToGcrs
+  itself, so the code being
   differentiated is the authority for its own derivative. Differentiating a
   remembered factor order is the one place in this function where a sign error
   is likely, and a sign error in a partial does not announce itself - it slows
@@ -2860,7 +2845,7 @@ Created: 2026-07-27 10:20 (CEST, UTC+02:00)
 <pre>referenceSystem:earthOrientationPartials:sizeMismatch</pre>
 <h4>REFERENCES</h4>
 <pre>IERS Conventions (2010), IERS Technical Note 36, chapter 5.
-  Handover revision 1.106 for the measured generators.</pre>
+  Handover section H.10 (P20) for the measured generators.</pre>
 <h4>EXAMPLE</h4>
 <pre>eop = referenceSystem.readEop('eop20c04.txt');
   utc = referenceSystem.daySecondToEpoch([57754 0], "UTC");
@@ -2981,11 +2966,7 @@ Created: 2026-07-27 20:10 (CEST, UTC+02:00)
   half-offset, samples at t-h and t+h, divisor 2h - and the default 200 s is
   that function's measured default, so with the defaults the rate partial is
   the partial of the Rdot the rotation actually returns (decision D112).
-  Until rev. 1.184 this function read DifferenceStep as the FULL span,
-  sampling at t-h/2 with a default of 600 s; the same option name carried
-  two meanings in two sibling functions, which is the class of silent
-  defect O28 exists for, and the same-step claim above was false as
-  written. The other order - differentiating the already-differenced Rdot -
+  The other order - differentiating the already-differenced Rdot -
   would agree only to the differencing error and would drift from Rdot as
   the step changed. info.rateConstruction records which was done, because
   the two are not interchangeable and a reader cannot tell from the numbers.</pre>
@@ -3271,9 +3252,7 @@ Created: 2026-07-27 21:10 (CEST, UTC+02:00)
   defining value 7.292115146706979e-5 (iersConstants.eraRatePerUt1Second): a
   difference of 6.8e-19 rad/s, the rounding of two angles of order unity
   divided by the 1000 s interval, and 4.7 picometres per second at 7000 km.
-  The reference test logs the reading on every host and holds it to 1e-17.
-  Until rev. 1.227 this block quoted 7.292115146705669e-5 and "1.3e-18"; that
-  number is 1.31e-17 from exact, fails the test, and was a transcription.</pre>
+  The reference test logs the reading on every host and holds it to 1e-17.</pre>
 <h4>ERRORS</h4>
 <pre>referenceSystem:earthRotationAngleRate:gatewayMissing</pre>
 <h4>REFERENCES</h4>
@@ -3693,8 +3672,7 @@ Created: 2026-07-25 22:10 (CEST, UTC+02:00)
   4.7e-06 at the pole rates of 2007, which is 30 metres at the surface: large
   enough to be obvious in a residual and small enough to survive every
   orthogonality and round-trip check, since a transpose is still a rotation.
-  Revisions 1.0 to 1.72 of the handover printed equation 5.3 here unchanged
-  and the code has always returned iauPom00; the code was right.
+  The code returns iauPom00.
 
   RADIANS, NOT ARCSECONDS. The IERS publishes xp and yp in arcseconds and
   every EOP file carries them that way; readEop converts on the way in and
@@ -5546,14 +5524,12 @@ Created: 2026-07-26 05:28 (CEST, UTC+02:00) - session S4, prompt P12
         6 deg             2.2e-05 m      1.75e-04 m
        20 deg             8.8e-05 m      2.27e-04 m
 
-  THE TWO COLUMNS ARE DIFFERENT ERRORS AND THE FIRST MEASUREMENT OF THIS
-  MISSED ONE OF THEM. The easting error is the transverse part and grows with
+  THE TWO COLUMNS ARE DIFFERENT ERRORS. The easting error is the transverse
+  part and grows with
   the offset from the central meridian, which is the behaviour one expects and
   looks for. The northing error is the MERIDIAN ARC series and is essentially
   independent of the offset - it is 1.71e-04 m even ON the central meridian,
-  where the easting error is exactly zero. Revision 1.52 of the handover
-  recorded 6.3e-05 m for this truncation; that figure was the easting alone,
-  and the dominant term is three times larger. Corrected in revision 1.53.
+  where the easting error is exactly zero, so it is the dominant term.
 
   Both are still well inside a millimetre, so the verdict is unchanged and n^6
   would buy nothing a UTM coordinate can use. The figures also show that the
@@ -5911,8 +5887,7 @@ Created: 2026-07-26 07:25 (CEST, UTC+02:00) - session S4, prompt P13
 <pre>h = H + N, the exact inverse of ellipsoidalToOrthometric. Two named
   functions rather than one with a direction flag: the direction belongs in
   the name (section C.7 rule 2), and a sign flag on a one-line function is
-  pure risk with no benefit. Revision 1.0 of the design merged the pair into a
-  single heightConvert with a direction argument; decision D6 reversed that.
+  pure risk with no benefit (decision D6).
 
   THE ARGUMENT IS NAMED undulation AND NOT geoidUndulation, which reads worse
   and is nevertheless right: geoidUndulation is a sibling function in this
@@ -8020,13 +7995,8 @@ Created: 2026-07-26 22:20 (CEST, UTC+02:00) - session S5, prompt P26
   factor of two rather than the factor of hundreds the term deserves.
 
   THAT IS ALSO WHY THE TWO METHODS AGREE. They differ by less than 1e-11 rad
-  here - which is what the suite asserts and all it can see; the figure of
-  5e-11 carried here until rev. 1.119 was FALSIFIED by run 38, because the
-  test now bounds the separation at 1e-11 and passes. That figure never came
-  from a run: until rev. 1.118 the metric it would have been measured with
-  returned exactly zero below 2e-08 rad. An independent mirror puts the
-  separation at 5e-14, and that number is attributed rather than adopted -
-  two mirrors have now disagreed about it by three orders (O20). The methods
+  here, which is what the suite asserts; an independent mirror puts the
+  separation at 5e-14, a figure attributed rather than adopted. The methods
   differ by far less than either differs from the truth, not
   because the integrators are equivalent but because neither is what limits
   the answer: both reconstruct omega from the same two samples per interval.
@@ -9028,6 +8998,10 @@ Created: 2026-07-28 10:05 (CEST, UTC+02:00)
       own error. Convert deliberately with convertTimeScale first.
   referenceSystem:barycentricBodyState:gatewayMissing
   referenceSystem:barycentricBodyState:providerNotAvailable
+  referenceSystem:barycentricBodyState:staleEphemeris
+      Source "mice": the SPICE pool does not hold exactly the kernels the
+      Ephemeris struct names - a later readEphemeris replaced them, or other
+      code loaded an SPK beside them. Call readEphemeris again.
   referenceSystem:ephemerisBodies:unknownSource</pre>
 <h4>WARNINGS</h4>
 <pre>referenceSystem:barycentricBodyState:outsideModelRange
@@ -9124,7 +9098,11 @@ Created: 2026-07-28 10:25 (CEST, UTC+02:00)
 <pre>referenceSystem:geocentricBodyState:unknownBody
   referenceSystem:geocentricBodyState:wrongScale
   referenceSystem:geocentricBodyState:gatewayMissing
-  referenceSystem:geocentricBodyState:providerNotAvailable</pre>
+  referenceSystem:geocentricBodyState:providerNotAvailable
+  referenceSystem:geocentricBodyState:staleEphemeris
+      Source "mice": the SPICE pool does not hold exactly the kernels the
+      Ephemeris struct names - a later readEphemeris replaced them, or other
+      code loaded an SPK beside them. Call readEphemeris again.</pre>
 <h4>WARNINGS</h4>
 <pre>referenceSystem:geocentricBodyState:outsideModelRange
   referenceSystem:geocentricBodyState:seriesNotConverged</pre>
@@ -9155,10 +9133,10 @@ Created: 2026-07-28 10:50 (CEST, UTC+02:00)
 <pre>ephemeris = readEphemeris(kernelFile)
   ephemeris = readEphemeris(kernelFile, Name, Value)
 
-  The only cspice_furnsh wrapper the toolbox permits (decision D26). It loads
-  the kernels, reads each one's comment area, records identity rather than
-  content, and refuses combinations that would be wrong in ways nothing
-  downstream could notice.</pre>
+  The only cspice_furnsh wrapper the toolbox permits (decision D26). It reads
+  each kernel's comment area, records identity rather than content, refuses
+  combinations that would be wrong in ways nothing downstream could notice,
+  and only then loads the set - in place of the set it loaded before.</pre>
 <h4>INPUT ARGUMENTS</h4>
 <pre>Name         Size   Type              Units  Description
   ----         ----   ----              -----  -----------
@@ -9214,8 +9192,8 @@ Created: 2026-07-28 10:50 (CEST, UTC+02:00)
   the same rule mexSourceDigest applies to the C sources.
 
   THE KERNEL PAIRING IS MEASURED, NOT DECLARED (decision D15, and D110 for
-  what happens when it disagrees: a warning, never a refusal), mechanism added
-  rev. 1.127). SB441-N16 pairs with DE440/441 and SB431-N16 with DE430; mixing
+  what happens when it disagrees: a warning, never a refusal). SB441-N16
+  pairs with DE440/441 and SB431-N16 with DE430; mixing
   generations shifts the barycentre by of order 100 km, and nothing downstream
   would report it. Each SPK names the planetary ephemeris it expects in its
   own comment area, which cspice_dafec reads, so the pairing is checked
@@ -9228,6 +9206,17 @@ Created: 2026-07-28 10:50 (CEST, UTC+02:00)
   place, and a silent one, because the two agree until the day a
   leapSecondTable("load") override is installed and SPICE does not see it.
   Seam contract S1 item 2 exists to make that impossible by construction.
+
+  ONE FURNISHED SET IS LIVE AT A TIME. SPICE keeps one kernel pool per
+  process and answers from whatever is loaded, whatever struct a caller
+  passes. So every check runs before anything is loaded - a refused set
+  leaves the pool as it was - and loading unloads the set this function
+  loaded last. The MICE consumers (barycentricBodyState, geocentricBodyState,
+  bodyRotationElements, rotationIcrfToBodyFixed) refuse a struct whose
+  kernels are not exactly the loaded SPK and binary PCK files with
+  staleEphemeris, so an older result cannot quietly read a newer set. To
+  compare two generations, furnish them together in one call. Inside a
+  parfor worker the pool is the worker's own: call this function there.
 
   THE TOOLKIT VERSION IS A CHECKED PRECONDITION AND NOT AN ASSUMPTION, because
   pck00011.tpc's Mars system data used with Toolkit N0066 or earlier may cause
@@ -9244,10 +9233,9 @@ Created: 2026-07-28 10:50 (CEST, UTC+02:00)
   referenceSystem:readEphemeris:fileNotFound
   referenceSystem:readEphemeris:leapSecondKernelRefused
   referenceSystem:readEphemeris:mismatchedGeneration
-  referenceSystem:readEphemeris:toolkitTooOld
-
-  WARNINGS
-  referenceSystem:readEphemeris:mixedGenerations
+  referenceSystem:readEphemeris:toolkitTooOld</pre>
+<h4>WARNINGS</h4>
+<pre>referenceSystem:readEphemeris:mixedGenerations
       The furnished kernels name more than one planetary ephemeris. A
       WARNING and not an error since decision D110: the choice of models and
       of their combination belongs to the caller, and comparing two
@@ -9358,11 +9346,9 @@ Created: 2026-07-28 11:10 (CEST, UTC+02:00)
                    sixteen D15 perturbing asteroids matter. "smallBodies"
                    is accepted as a synonym.
 
-  "all" MEANS ALL (decision D99). Rev. 1.134 gave it the meaning "everything
-  except the biggest file", wrote that into the help and added a test
-  asserting it - documenting and enforcing a name that lied. The size was a
-  real concern and that was a bad answer to it; the protection is that Mode
-  defaults to "list", which shows the bill before anything moves.
+  "all" MEANS ALL (decision D99). The size is a real concern, and the
+  protection is that Mode defaults to "list", which shows the bill before
+  anything moves.
 
   Span says WHICH ISSUE of the planetary ephemeris:
 
@@ -9374,9 +9360,9 @@ Created: 2026-07-28 11:10 (CEST, UTC+02:00)
 
   THE TWO FILES ARE THE SAME INTEGRATION - de440s.bsp is a time-restricted
   issue of de440.bsp - so in the overlap they answer identically and SPICE
-  resolves an overlapping body from whichever was furnished last. Until
-  rev. 1.191 that was taken as a reason to REFUSE both, and it is not one.
-  D110 already settled the principle one level up, for whole generations:
+  resolves an overlapping body from whichever was furnished last. That is
+  not a reason to refuse both. D110 settles the principle one level up, for
+  whole generations:
   this toolbox prevents an UNKNOWING mixture, not a deliberate choice.
   Holding the small file for routine work and the long one for the
   occasional deep-time epoch is ordinary, and readEphemeris reports the
@@ -9404,9 +9390,8 @@ Created: 2026-07-28 11:10 (CEST, UTC+02:00)
 
   EVERY ENTRY IS ATTEMPTED AND EVERY FAILURE IS RECORDED BEFORE ANYTHING IS
   RAISED. A failure on the third of five files must not discard the two that
-  succeeded - that is precisely what run 44 got wrong with the HORIZONS
-  fetcher (rev. 1.130), and the manifest carries "FAILED | reason" rows for
-  the same reason runTestSuite writes its report before reporting failure.
+  succeeded, so the manifest carries "FAILED | reason" rows, for the same
+  reason runTestSuite writes its report before reporting failure.
 
   NO LEAPSECONDS KERNEL APPEARS IN THIS CATALOGUE AND NONE MAY BE ADDED.
   Decision D89: a .tls would install a second leap-second authority beside
@@ -9418,7 +9403,7 @@ Created: 2026-07-28 11:10 (CEST, UTC+02:00)
   Identity is recorded and bulk is not: each fetched file gets a SHA-256 in
   the manifest, which is what a result should carry (data/README.md).
 
-  A CALLER'S CATALOGUE (rev. 1.233). Catalogue replaces the built-in table,
+  A CALLER'S CATALOGUE. Catalogue replaces the built-in table,
   so a user with a private kernel mirror can point every Url at it, and a
   test can point one at a host that cannot resolve and observe a failed
   transfer on any machine - which is what made the D98 test deterministic.
@@ -9436,7 +9421,11 @@ Created: 2026-07-28 11:10 (CEST, UTC+02:00)
   referenceSystem:downloadKernels:unknownMode
   referenceSystem:downloadKernels:cacheNotWritable
   referenceSystem:downloadKernels:badCatalogue
-  referenceSystem:downloadKernels:leapSecondKernelInCatalogue</pre>
+  referenceSystem:downloadKernels:leapSecondKernelInCatalogue
+  referenceSystem:downloadKernels:notReachable
+      Raised for one catalogue entry in Mode "verify" when the server does
+      not answer OK, and caught: that row's Status reads "FAILED | " and the
+      message, and incompleteFetch is warned. It never leaves the function.</pre>
 <h4>WARNINGS</h4>
 <pre>referenceSystem:downloadKernels:incompleteFetch
       At least one entry failed. THIS IS A WARNING AND NOT AN ERROR because
@@ -9471,37 +9460,44 @@ Created: 2026-07-29 09:15 (CEST, UTC+02:00)
 <h3>referenceSystem.gcrsToBcrs</h3>
 <p class="h1">Express a geocentric vector in barycentric (BCRS) coordinates.</p>
 <h4>SYNTAX</h4>
-<pre>rBcrs = gcrsToBcrs(rGcrs, epoch, Scale = "tdbCompatible")
-  [rBcrs, info] = gcrsToBcrs(rGcrs, epoch, Name, Value)
+<pre>rBcrs = gcrsToBcrs(rGcrs, [], epoch, Scale = "tdbCompatible")
+  [rBcrs, vBcrs] = gcrsToBcrs(rGcrs, vGcrs, epoch, Scale = "tdbCompatible")
+  [rBcrs, vBcrs, info] = gcrsToBcrs(rGcrs, vGcrs, epoch, Name, Value)
 
-  Applies IERS Conventions (2010) Eq. (11.19), or Eq. (11.18) with
-  Scale "none": the Lorentz contraction along the Earth's barycentric
-  velocity, the scaling by the external gravitational potential, and - for
-  "tdbCompatible" - the TT-to-TDB length scale L_C.
+  Applies the spatial part of IAU 2000 Resolution B1.3 in the direction
+  GCRS to BCRS: the Lorentz contraction along the Earth's barycentric
+  velocity, the scaling by the external gravitational potential, the two
+  acceleration terms and - for "tdbCompatible" - the TT-to-TDB length scale
+  L_C. Without the acceleration terms this is IERS Conventions (2010)
+  Eq. (11.19), or Eq. (11.18) with Scale "none". On request the velocity is
+  transformed with the same resolution's time part.
 
   IT RETURNS THE SAME SEPARATION VECTOR IN DIFFERENT COORDINATES, NOT A
-  BARYCENTRIC POSITION. See METHOD; the distinction is four orders of
-  magnitude wide and is the first thing to get right about this function.</pre>
+  BARYCENTRIC POSITION. See METHOD.</pre>
 <h4>INPUT ARGUMENTS</h4>
 <pre>Name    Size   Type      Units  Description
   ----    ----   ----      -----  -----------
   rGcrs   3xN    double    m      Geocentric vector in the GCRS, one column
                                   per epoch, or one column for all epochs.
-  vGcrs   3xN    double    m/s    Velocity per unit of the SOURCE frame's
-                                  coordinate time. PASS [] FOR POSITION ONLY.
+  vGcrs   3xN    double    m/s    Its rate per second of GCRS coordinate
+                                  time, or [] for position only.
   epoch   1x1    struct    -      Epoch struct, N entries, any scale but UT1.</pre>
 <h4>OPTIONAL NAME-VALUE ARGUMENTS</h4>
 <pre>Name         Size   Type     Default     Description
   ----         ----   ----     -------     -----------
-  Scale        1x1    string   NONE        Required. "tdbCompatible" applies
-                                           Eq. (11.19); "none" applies
-                                           Eq. (11.18). See ERRORS.
+  Scale        1x1    string   NONE        Required. "tdbCompatible" (GCRS in
+                                           TT-compatible and BCRS in
+                                           TDB-compatible units) or "none"
+                                           (TCG and TCB). See ERRORS.
   Source       1x1    string   "sofa"      Ephemeris provider for U and V.
   Ephemeris    1x1    struct   struct([])  Kernels, for Source "mice".</pre>
 <h4>OUTPUT ARGUMENTS</h4>
 <pre>Name                   Size   Type     Units    Description
   ----                   ----   ----     -----    -----------
   rBcrs                  3xN    double   m        The vector in BCRS coordinates.
+  vBcrs                  3xN    double   m/s      Its rate per second of BCRS
+                                                  coordinate time, or [] when
+                                                  vGcrs was [].
   info                   1x1    struct   -        Fields listed below.
   .scale                 1x1    string   -        The Scale actually applied.
   .scaleTerm             1x1    double   1        L_C, or 0 for "none".
@@ -9513,90 +9509,75 @@ Created: 2026-07-29 09:15 (CEST, UTC+02:00)
 <pre>THIS IS A CHANGE OF COORDINATES FOR A VECTOR, NOT A CHANGE OF ORIGIN. The
   barycentric POSITION of the point is
 
-      xBcrs = barycentricBodyState("earth", epoch) + gcrsToBcrs(rGcrs, ...)
+      xBcrs = barycentricBodyState("earth", epoch) + gcrsToBcrs(rGcrs, [], ...)
 
-  and that addition is deliberately left to the caller, because the two
-  quantities have accuracies four orders apart and combining them silently
-  would hide which one dominates. This function is good to the Conventions'
-  stated 1 mm; the Earth's barycentric position from the bundled SOFA
-  provider is good to 4.6 km. Adding them without noticing produces a number
-  whose 1 mm claim is nonsense.
+  and that addition is left to the caller, because the two quantities have
+  accuracies four orders apart: this function is good to the Conventions'
+  stated 1 mm, while the Earth's barycentric position from the bundled SOFA
+  provider is good to 4.6 km.
 
-  THE TRANSFORMATION IS EXACTLY LINEAR AND THAT IS WHY THE INVERSE IS EXACT.
-  Both equations have the form r_out = M r_in with M = alpha*I + beta*V*V',
-  a rank-one update of a scaled identity, so bcrsToGcrs inverts it in closed
-  form by Sherman-Morrison rather than by negating parameters (decision D68's
-  rule, met here by an exact solution rather than by an accurate one).
+  THE FORWARD MAP IS THE RESOLUTION'S, AND THIS DIRECTION INVERTS IT. The
+  resolution gives the GCRS vector X in terms of the BCRS separation r,
 
-  U and V come from barycentricBodyState and geocentricBodyState, so P22a is
-  a genuine dependency and not a convenience. They enter only at order 1/c^2,
-  which is why the bundled provider suffices - see ACCURACY.</pre>
+      X = r + (1/c^2)[ (1/2) V (V.r) + w r + r (A.r) - (1/2) A |r|^2 ]
+
+  with V and A the Earth's barycentric velocity and acceleration and w the
+  external potential, plus L_C c^2 for "tdbCompatible". bcrsToGcrs applies it
+  in closed form; this function solves it by fixed-point iteration, because
+  the acceleration terms are quadratic in r. The correction is 1.5e-8 of r,
+  so two iterations leave roundoff.
+
+  THE VELOCITY. Along a trajectory r(t), dX/dt follows from the map, and the
+  GCRS rate is dX/dT = (dX/dt) / (dT/dt), with
+
+      dT/dt = 1 - (1/c^2)[ |V|^2/2 + w + A.r + V.rdot ]
+
+  from the time part of the same resolution. Rates carry no L_C: the length
+  and the time scalings cancel in a velocity. Terms in dw/dt and dA/dt are
+  dropped: 5.7e-28 m/s and 6.1e-13 m/s at GRACE altitude.
+
+  U and V come from barycentricBodyState and geocentricBodyState (Sun and
+  Moon; the planets contribute at most 12 micrometres through U).</pre>
 <h4>ACCURACY</h4>
-<pre>The Conventions state their own uncertainty for Eq. (11.19) as BELOW 1 mm,
-  and that is the accuracy of this function. Every quantity neglected inside
-  it is smaller than that and is quantified in the private helper: the
-  planets contribute at most 12 micrometres through U, the Moon 0.9
-  micrometres, and the measured uncertainties of GM_sun and L_C are nine and
-  six orders below the millimetre respectively.
+<pre>The Conventions state their own uncertainty for the position as below
+  1 mm, and that is the accuracy of this function. The ephemeris barely
+  matters: U and V enter only at order 1/c^2, so the bundled provider's
+  2.8 mm/s on the Earth's velocity moves the result by 4.8e-9 m and its
+  8.3 km on the solar distance by 3.5e-9 m.
 
-  THE EPHEMERIS IS ALMOST IRRELEVANT HERE, WHICH IS COUNTER-INTUITIVE AND
-  WORTH STATING. U and V reach the answer only through 1/c^2 terms, so their
-  errors are suppressed by 1e-8. Measured against the bundled SOFA provider's
-  own budget: 2.8 mm/s on the Earth's velocity moves the result by 4.8e-9 m,
-  and 8.3 km on the solar distance by 3.5e-9 m - six orders inside the 1 mm.
-  Do not reach for MICE on account of this function.
-
-  TERM SIZES AT A MID-LATITUDE STATION (|r| = 6391 km), measured, so that the
-  choice of Scale is a decision taken with the numbers in view:
+  TERM SIZES AT A MID-LATITUDE STATION (|r| = 6391 km), measured:
 
     L_C scale term          -0.0947 m   (present only for "tdbCompatible")
     U/c^2 potential term    -0.0631 m
     Lorentz term             +0.0322 m  (maximum, when r is along V)
-    total, "tdbCompatible"  -0.1715 m
-    total, "none"           -0.0769 m
 
-  THE VELOCITY IS NOW PROVIDED, FROM IAU 2000 RESOLUTION B1.3, AND THE TERM
-  THAT COULD NOT BE PINNED DOWN AT REV. 1.132 IS ITS dT/dt FACTOR:
-  1 - (v_E^2/2 + w_ext + a_E.r + v_E.v)/c^2, which is 1.5e-8 - on 31 km/s
-  that is 4.7e-4 m/s, four thousand times the 1e-7 m/s a KBR reduction works
-  at. Refusing to guess it was right. Validated by central difference at six
-  step sizes: the residual falls by exactly four at each halving, order 2.00
-  throughout, so it is the difference's own truncation and not a formula
-  error. Superseded note follows.
-
-  NO VELOCITY TRANSFORMATION IS PROVIDED AND THAT IS NOT AN OVERSIGHT. The
-  IERS Conventions (2010) give Eqs. (11.18) and (11.19) for POSITION and
-  state no transformation for velocity anywhere in Chapters 10 or 11.
-  Differentiating (11.18) would need the Earth's barycentric acceleration and
-  dU/dt, which are available, but also the rate relation between the two
-  frames' time arguments, which is a convention question rather than an
-  arithmetic one and whose size - d(TDB-TT)/dt is about 3.3e-10, i.e. 2.5e-6
-  m/s at 7.5 km/s - is twenty-five times the 1e-7 m/s tier a KBR or LRI
-  reduction works at. Supplying a velocity derived from a rule this document
-  does not state would produce something smooth, self-consistent and wrong at
-  exactly the level the function exists to reach.</pre>
+  THE VELOCITY is held to a difference of the position map over the
+  resolution's own time transformation; see the ACCURACY of bcrsToGcrs:
+  1.9e-10 m/s, where leaving out the time factor misses by 1.3e-4 m/s under
+  "none" and 2.0e-5 m/s under "tdbCompatible".</pre>
 <h4>ERRORS</h4>
 <pre>referenceSystem:gcrsToBcrs:scaleRequired
       Scale has no default. The two settings differ by 9.5 cm at the Earth's
       surface, ninety-five times the formula's own uncertainty, and neither
-      is visible in the result - decision D67's rule, applied again.
+      is visible in the result.
   referenceSystem:gcrsToBcrs:unknownScale
   referenceSystem:gcrsToBcrs:sizeMismatch
   referenceSystem:barycentricBodyState:wrongScale</pre>
 <h4>REFERENCES</h4>
-<pre>IERS Conventions (2010), IERS Technical Note 36, G. Petit and B. Luzum
+<pre>Soffel, M. et al., 2003, AJ 126, 2687, Appendix A (IAU 2000 Resolution
+      B1.3, space and time parts).
+  IERS Conventions (2010), IERS Technical Note 36, G. Petit and B. Luzum
       (eds.), Eq. (11.18) and Eq. (11.19), Section 11.2; Table 1.1.
-  IAU 2000 Resolutions B1.3 and B1.5 (the BCRS, GCRS and L_C).
-  Klioner, S. A. et al., 2010, Proc. IAU Symp. 261.</pre>
+  IAU 2000 Resolutions B1.3 and B1.5 (the BCRS, GCRS and L_C).</pre>
 <h4>EXAMPLE</h4>
 <pre>t = referenceSystem.datetimeToEpoch(datetime(2023, 3, 1), "TT");
   station = [4517590; 837897; 4442892];
-  rBcrs = referenceSystem.gcrsToBcrs(station, t, Scale = "tdbCompatible");
+  rBcrs = referenceSystem.gcrsToBcrs(station, [], t, Scale = "tdbCompatible");
   fprintf('length changes by %.4f m\n', norm(rBcrs) - norm(station));</pre>
 <h4>KEYWORDS</h4>
 <pre>BCRS, GCRS, barycentric, Lorentz, L_C, TT-compatible, TDB-compatible, scale
 
-See also BCRSTOGCRS, BARYCENTRICBODYSTATE, GEOCENTRICBODYSTATE, ITERSCONSTANTS.
+See also BCRSTOGCRS, BARYCENTRICBODYSTATE, GEOCENTRICBODYSTATE, IERSCONSTANTS.
 
 -------------------------------------------------------------------------
 referenceSystem v2.1
@@ -9609,23 +9590,24 @@ Created: 2026-07-28 15:35 (CEST, UTC+02:00)
 <h3>referenceSystem.bcrsToGcrs</h3>
 <p class="h1">Express a barycentric-coordinate vector in the GCRS.</p>
 <h4>SYNTAX</h4>
-<pre>rGcrs = bcrsToGcrs(rBcrs, epoch, Scale = "tdbCompatible")
-  [rGcrs, info] = bcrsToGcrs(rBcrs, epoch, Name, Value)
+<pre>rGcrs = bcrsToGcrs(rBcrs, [], epoch, Scale = "tdbCompatible")
+  [rGcrs, vGcrs] = bcrsToGcrs(rBcrs, vBcrs, epoch, Scale = "tdbCompatible")
+  [rGcrs, vGcrs, info] = bcrsToGcrs(rBcrs, vBcrs, epoch, Name, Value)
 
-  The exact inverse of gcrsToBcrs: IERS Conventions (2010) Eq. (11.19), or
-  Eq. (11.18) with Scale "none", solved rather than approximated.
+  The spatial part of IAU 2000 Resolution B1.3, in the direction it is
+  written, and the inverse of gcrsToBcrs; on request the velocity, with the
+  resolution's time part.
 
   THE INPUT IS A SEPARATION VECTOR FROM THE GEOCENTRE EXPRESSED IN BCRS
   COORDINATES, NOT A BARYCENTRIC POSITION. Subtract the Earth's barycentric
-  position first; see METHOD in gcrsToBcrs, where the distinction is four
-  orders of magnitude wide.</pre>
+  position first; see METHOD in gcrsToBcrs.</pre>
 <h4>INPUT ARGUMENTS</h4>
 <pre>Name    Size   Type      Units  Description
   ----    ----   ----      -----  -----------
   rBcrs   3xN    double    m      Geocentric vector in BCRS coordinates, one
                                   column per epoch, or one column for all.
-  vBcrs   3xN    double    m/s    Velocity per unit of the SOURCE frame's
-                                  coordinate time. PASS [] FOR POSITION ONLY.
+  vBcrs   3xN    double    m/s    Its rate per second of BCRS coordinate
+                                  time, or [] for position only.
   epoch   1x1    struct    -      Epoch struct, N entries, any scale but UT1.</pre>
 <h4>OPTIONAL NAME-VALUE ARGUMENTS</h4>
 <pre>Name         Size   Type     Default     Description
@@ -9637,47 +9619,44 @@ Created: 2026-07-28 15:35 (CEST, UTC+02:00)
 <pre>Name    Size   Type     Units  Description
   ----    ----   ----     -----  -----------
   rGcrs   3xN    double   m      The vector in GCRS coordinates.
+  vGcrs   3xN    double   m/s    Its rate per second of GCRS coordinate
+                                 time, or [] when vBcrs was [].
   info    1x1    struct   -      As gcrsToBcrs.</pre>
 <h4>METHOD</h4>
-<pre>THE INVERSE IS EXACT, NOT ACCURATE, AND THAT IS THE POINT OF THIS FILE.
-  Both Conventions equations are linear in the geocentric vector,
-  r_out = M r_in with M = alpha*I + beta*V*V', a rank-one update of a scaled
-  identity. Sherman-Morrison gives
-
-      M^-1 = (1/alpha) [ I - beta V V' / (alpha + beta |V|^2) ]
-
-  in closed form. Cross-checked in numpy against a dense inverse: both leave
-  ||M M^-1 - I|| at 1.11e-16, so nothing is bought by forming the matrix.
-
-  Decision D68 requires every inverse in this toolbox to be SOLVED and never
-  obtained by negating the forward parameters. Negation would in fact be
-  accurate here - the correction is 1.5e-8, so its square is 2e-16 relative,
-  a nanometre at the Earth's surface - but an exact solution that costs the
-  same removes the argument entirely, and a rule that is followed only where
-  it is cheap is not a rule.</pre>
+<pre>The map is applied in closed form, X = r + (1/c^2)[ ... ] as gcrsToBcrs
+  writes it, and the velocity is dX/dt divided by dT/dt, with dT/dt from the
+  resolution's time part; see gcrsToBcrs for both equations.</pre>
 <h4>ACCURACY</h4>
 <pre>The Conventions' own stated uncertainty, below 1 mm, exactly as gcrsToBcrs.
   The round trip through both functions closes to 9.3e-10 m at a
-  mid-latitude station, which is roundoff at the 6.4e6 m scale and not a
-  property of the formula.
+  mid-latitude station, which is roundoff at the 6.4e6 m scale.
 
-  THE VELOCITY IS PROVIDED; see gcrsToBcrs for its source and validation.</pre>
+  THE VELOCITY IS HELD TO THE RESOLUTION ITSELF: a straight BCRS trajectory
+  is mapped at t - h and t + h, and the difference of the two GCRS vectors
+  is divided by the GCRS time elapsed between the two events, formed from
+  the time part of Resolution B1.3 - 2h less the integral of
+  |V|^2/2 + w and the change in V.r, over c^2. Measured on a 7.6 km/s
+  trajectory at h = 50 s: 1.8e-10 m/s under "none" and 1.9e-10 m/s under
+  "tdbCompatible". Without the dT/dt factor the velocity missed the same
+  oracle by 1.3e-4 m/s and 2.0e-5 m/s.</pre>
 <h4>ERRORS</h4>
 <pre>referenceSystem:bcrsToGcrs:scaleRequired
   referenceSystem:bcrsToGcrs:unknownScale
-  referenceSystem:bcrsToGcrs:sizeMismatch</pre>
+  referenceSystem:bcrsToGcrs:sizeMismatch
+  referenceSystem:barycentricBodyState:wrongScale</pre>
 <h4>REFERENCES</h4>
-<pre>IERS Conventions (2010), IERS Technical Note 36, Eq. (11.18) and (11.19),
-      Section 11.2; Table 1.1.
-  Sherman, J. and Morrison, W. J., 1950, Ann. Math. Statist. 21(1), 124.</pre>
+<pre>Soffel, M. et al., 2003, AJ 126, 2687, Appendix A (IAU 2000 Resolution
+      B1.3, space and time parts).
+  IERS Conventions (2010), IERS Technical Note 36, Eq. (11.18) and (11.19),
+      Section 11.2; Table 1.1.</pre>
 <h4>EXAMPLE</h4>
 <pre>t = referenceSystem.datetimeToEpoch(datetime(2023, 3, 1), "TT");
   station = [4517590; 837897; 4442892];
-  b = referenceSystem.gcrsToBcrs(station, t, Scale = "tdbCompatible");
-  back = referenceSystem.bcrsToGcrs(b, t, Scale = "tdbCompatible");
+  b = referenceSystem.gcrsToBcrs(station, [], t, Scale = "tdbCompatible");
+  back = referenceSystem.bcrsToGcrs(b, [], t, Scale = "tdbCompatible");
   fprintf('round trip %.3e m\n', norm(back - station));</pre>
 <h4>KEYWORDS</h4>
-<pre>BCRS, GCRS, barycentric, Lorentz, L_C, inverse, Sherman-Morrison
+<pre>BCRS, GCRS, barycentric, Lorentz, L_C, velocity, Resolution B1.3
 
 See also GCRSTOBCRS, BARYCENTRICBODYSTATE, GEOCENTRICBODYSTATE, IERSCONSTANTS.
 
@@ -9819,7 +9798,8 @@ Created: 2026-07-28 15:45 (CEST, UTC+02:00)
   and says so in section 5. The comparator was wrong, not the table - which
   is the kind of thing only a check against an outside quantity can tell you.</pre>
 <h4>ERRORS</h4>
-<pre>referenceSystem:bodyRotationElements:unknownBody
+<pre>referenceSystem:bodyRotationElements:unknownSource
+  referenceSystem:bodyRotationElements:unknownBody
   referenceSystem:bodyRotationElements:earthNotTabulated
       The 2015 report REMOVED the approximate expressions for the Earth
       (section 10, item 2) because their accuracy was poor and they failed
@@ -9831,7 +9811,11 @@ Created: 2026-07-28 15:45 (CEST, UTC+02:00)
       axis frame must come from a lunar ephemeris. This is decision D14's
       non-defaulting lunar frame arriving from the authority rather than from
       a scoping choice.
-  referenceSystem:bodyRotationElements:wrongScale</pre>
+  referenceSystem:bodyRotationElements:wrongScale
+  referenceSystem:bodyRotationElements:staleEphemeris
+      Source "pck": the SPICE pool does not hold exactly the kernels the
+      Ephemeris struct names - a later readEphemeris replaced them, or other
+      code loaded an SPK beside them. Call readEphemeris again.</pre>
 <h4>REFERENCES</h4>
 <pre>Archinal, B. A. et al., 2018, Celest. Mech. Dyn. Astron. 130, 22:
       "Report of the IAU Working Group on Cartographic Coordinates and
@@ -9944,7 +9928,11 @@ Created: 2026-07-30 20:15 (CEST, UTC+02:00)
   referenceSystem:bodyRotationElements:wrongScale
       All raised by bodyRotationElements, which resolves the body. The
       identifiers name that function because that is where the refusal is
-      decided; section C.2 binds an identifier to the deciding function.</pre>
+      decided; section C.2 binds an identifier to the deciding function.
+  referenceSystem:rotationIcrfToBodyFixed:staleEphemeris
+      Source "pck": the SPICE pool does not hold exactly the kernels the
+      Ephemeris struct names - a later readEphemeris replaced them, or other
+      code loaded an SPK beside them. Call readEphemeris again.</pre>
 <h4>REFERENCES</h4>
 <pre>Archinal, B. A. et al., 2018, Celest. Mech. Dyn. Astron. 130, 22,
       Section 2 and Figure 1.</pre>
@@ -10233,12 +10221,9 @@ Created: 2026-07-24 12:20 (CEST, UTC+02:00)
   Because they do not survive the way this toolbox is delivered. A ZIP entry
   stores naive local time with no time zone, so an archive built on a UTC
   machine and unpacked on a UTC+2 one produces sources that appear two hours
-  OLDER than they are. Revisions 1.93, 1.94 and 1.99 each changed a C source,
-  each shipped it, and none of them rebuilt: mex/rsApi.c arrived stamped
-  15:44 against a gateway built at 17:26, so max(datenum) was behind the
-  binary and the check reported current. Every time, the symptom was read as
-  an installation problem and once it was written into the log as an
-  obligation about stale caches. It was arithmetic on wall clocks.
+  OLDER than they are: a changed C source can arrive stamped earlier than
+  the gateway built from the old one, and a timestamp check then reports the
+  binary current.
 
   A content digest has no such failure mode. It is immune to the time zone,
   to clock skew between machines, to a git checkout that writes every file
@@ -10275,7 +10260,7 @@ Created: 2026-07-24 12:20 (CEST, UTC+02:00)
 <h4>ERRORS</h4>
 <pre>referenceSystem:mexSourceDigest:noSources</pre>
 <h4>REFERENCES</h4>
-<pre>Handover revision 1.100 and the failures recorded at 1.85, 1.95 and 1.99.</pre>
+<pre>Handover section C.4 (MEX rules) and C.10 (installation).</pre>
 <h4>EXAMPLE</h4>
 <pre>digest = referenceSystem.mexSourceDigest(pwd);</pre>
 <h4>KEYWORDS</h4>
@@ -10463,6 +10448,10 @@ Created: 2026-07-24 20:20 (CEST, UTC+02:00)
 <pre>referenceSystem:buildDocumentation:packageNotFound
   referenceSystem:buildDocumentation:docFolderNotFound
   referenceSystem:buildDocumentation:outputNotWritable</pre>
+<h4>WARNINGS</h4>
+<pre>referenceSystem:buildDocumentation:searchDatabaseFailed
+      builddocsearchdb failed. The pages are written and open normally;
+      only the Help browser search will not find them.</pre>
 <h4>REFERENCES</h4>
 <pre>Handover Part E and decision D33. MathWorks, "Display Custom
   Documentation", for info.xml, helptoc.xml and builddocsearchdb.</pre>
@@ -10545,14 +10534,6 @@ Created: 2026-07-27 09:40 (CEST, UTC+02:00)
   Benchmark and convergence rows are not produced by this function. A test
   that measures something logs one pipe-separated record through
   testCase.log, the framework records it, and this function parses those
-  A WARNINGS section lists every test that raised a MATLAB warning it did not
-  suppress. Warnings appear in no TestResult, so before revision 1.58 they
-  reached the console and nowhere else: a real gimbal-lock warning survived
-  four S4 runs unreported and was found by a reader watching the console. The
-  count in SUMMARY is of TESTS THAT WARNED, not of warnings - lastwarn keeps
-  only the most recent - and the section says so rather than implying a total
-  it does not have.
-
   records into the BENCHMARKS, CONVERGENCE and NOTES sections. The measuring test
   therefore owns its numbers and the runner owns only their layout. The record
   formats are built by TestPerformance.benchmarkRecord and
@@ -10563,13 +10544,17 @@ Created: 2026-07-27 09:40 (CEST, UTC+02:00)
   durations are given to three decimals; benchmark medians to six, because a
   single-epoch call is measured in microseconds.
 
+  A WARNINGS section lists every test that raised a MATLAB warning it did not
+  suppress. Warnings appear in no TestResult, so without it they would reach
+  the console and nowhere else. The count in SUMMARY is of TESTS THAT WARNED,
+  not of warnings - lastwarn keeps only the most recent - and the section says
+  so rather than implying a total it does not have.
+
   A TEST THAT IS MEANT TO FILTER SAYS SO. Two checks in this suite cannot run
   on a healthy machine - one needs a MATLAB release that still permits a
   namespace folder on the path, the other needs a transfer slow enough to time
-  out - and until revision 1.204 the report described them in the framework's
-  words, "assumption was not met" and "assumeTrue failed". Read as intended
-  that says nothing is wrong; read at a glance it says two things are, on
-  every run, for the life of the toolbox. The runner therefore carries an
+  out - and in the framework's words, "assumption was not met", they read at
+  a glance as two things wrong on every run. The runner therefore carries an
   allow-list of the tests whose assumption is EXPECTED to fail, with the
   standing reason for each. They are labelled SKIP, counted separately in the
   summary, and listed under INTENTIONALLY SKIPPED with the reason instead of
@@ -10600,14 +10585,25 @@ Created: 2026-07-27 09:40 (CEST, UTC+02:00)
   its resolution, typically a few microseconds, which is why the speed tests
   of section D.1 take a median over repetitions rather than a single timing.</pre>
 <h4>ERRORS</h4>
-<pre>referenceSystem:runTestSuite:testFolderMissing</pre>
-<h4>WARNINGS</h4>
-<pre>None raised by this function. It RECORDS the warnings raised by the tests
-  it runs, in the WARNINGS section of the report; see WarningRecordingPlugin.
+<pre>referenceSystem:runTestSuite:testFolderMissing
       The test folder is not where the package expects it, next to the
       package folder. Reinstall the toolbox as one distribution folder.
   referenceSystem:runTestSuite:cannotWriteReport
-      The report file could not be opened for writing.</pre>
+      The report file could not be opened for writing.
+  referenceSystem:runTestSuite:packageNotResolvable
+      The referenceSystem namespace does not resolve, so no test could
+      reach the toolbox; the suite is not run.
+  referenceSystem:runTestSuite:testClassExcluded
+      A test class contributed no tests. Raised after the report is
+      written, so the results that did run can still be read.</pre>
+<h4>WARNINGS</h4>
+<pre>referenceSystem:runTestSuite:missingReportLine
+      A report block produced a missing string; the line is marked and the
+      rest of the report is written.
+  referenceSystem:runTestSuite:controlCharacterInReport
+      A report line carried a control character; it is replaced by a space.
+  The warnings raised BY THE TESTS are recorded in the report's own WARNINGS
+  section, not raised again; see WarningRecordingPlugin.</pre>
 <h4>REFERENCES</h4>
 <pre>Handover section D.1 (test categories), D.2 (structure), D.3 (this report).</pre>
 <h4>EXAMPLE</h4>
@@ -10798,6 +10794,6 @@ Created: 2026-07-26 12:30 (CEST, UTC+02:00) - session S4, folder-lock report
 -------------------------------------------------------------------------</pre>
 <p class="top"><a href="#contents">back to contents</a></p>
 </div>
-<p class="foot">referenceSystem v2.1.237 &mdash; generated from the
+<p class="foot">referenceSystem v2.1.242 &mdash; generated from the
 package help blocks. See the handover document for the design.</p>
 </body></html>
