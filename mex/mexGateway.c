@@ -33,12 +33,12 @@
  *                       seconds, seconds per day and radians per second.
  *   info              = mexGateway('info')
  *
- *   'dcm' is registered here and raises referenceSystem:mex:notImplemented
- *   naming the prompt that fills it (P9, the rotation and its derivatives).
- *   It is registered rather than omitted so that a caller gets "not yet
- *   built" rather than "unknown command", which are different diagnoses.
- *   'subdaily' and 'zonaltide' were registered the same way by P2 and are
- *   answered from S2 onward (handover obligation O3).
+ *   [R, Rdot, Rddot]  = mexGateway('dcm', ...)     see rsCommandDcm
+ *   [R, Rdot, Rddot]  = mexGateway('dcmcip', ...)  see rsCommandDcmCip
+ *   [x, y, s]         = mexGateway('cip', ...), q = mexGateway('c2ixys', ...),
+ *   gst = mexGateway('gst', ...), npb = mexGateway('pnm06a', ...),
+ *   the Chebyshev commands 'chebnodes', 'chebfit', 'chebeval' and
+ *   'bodystate': see the comment above each command below.
  *
  * Rules obeyed here (handover section C.4):
  *   - one gateway, command a char row vector;
@@ -399,7 +399,6 @@ static void rsCommandDcmCip(int nlhs, mxArray *plhs[], int nrhs,
     const double *ttSec;
     const double *ut1Day;
     const double *ut1Sec;
-    const double *omega;
     double *rdot = NULL;
     double *rddot = NULL;
     int derivativeOrder;
@@ -420,14 +419,13 @@ static void rsCommandDcmCip(int nlhs, mxArray *plhs[], int nrhs,
     ttSec = rsExpand(prhs[2], n, "ttSecOfDay", &scratch[0]);
     ut1Day = rsExpand(prhs[3], n, "ut1Day", &scratch[1]);
     ut1Sec = rsExpand(prhs[4], n, "ut1SecOfDay", &scratch[2]);
-    omega = rsExpand(prhs[9], n, "omega", &scratch[3]);
 
-    /* Arguments 5..8 are xp, yp, dX, dY and 12..14 are X, Y, s. All seven are
-     * n-by-3 and the same check covers them, because getting one of the CIP
-     * arrays a different length from the polar motion is exactly the mistake
-     * that would otherwise read past the end of an array. */
+    /* Arguments 5..9 are xp, yp, dX, dY and UT1 - TAI, and 12..14 are X, Y,
+     * s. All eight are n-by-3 and the same check covers them, because getting
+     * one of them a different length from the polar motion is exactly the
+     * mistake that would otherwise read past the end of an array. */
     for (argument = 5; argument <= 14; argument++) {
-        if (argument >= 9 && argument <= 11) {
+        if (argument == 10 || argument == 11) {
             continue;
         }
         if (mxGetNumberOfElements(prhs[argument]) != 3 * n) {
@@ -455,7 +453,7 @@ static void rsCommandDcmCip(int nlhs, mxArray *plhs[], int nrhs,
 
     status = rsRotationItrsToGcrsFromCip((int)n, ttDay, ttSec, ut1Day, ut1Sec,
         mxGetPr(prhs[5]), mxGetPr(prhs[6]), mxGetPr(prhs[7]), mxGetPr(prhs[8]),
-        omega, mxGetPr(prhs[12]), mxGetPr(prhs[13]), mxGetPr(prhs[14]),
+        mxGetPr(prhs[9]), mxGetPr(prhs[12]), mxGetPr(prhs[13]), mxGetPr(prhs[14]),
         (int)mxGetScalar(prhs[10]), derivativeOrder,
         mxGetScalar(prhs[11]), mxGetPr(plhs[0]), rdot, rddot);
 
@@ -947,9 +945,11 @@ static void rsCommandPnm06a(int nlhs, mxArray *plhs[], int nrhs,
 
 /*
  * [R, Rdot, Rddot] = mexGateway('dcm', ttDay, ttSec, ut1Day, ut1Sec,
- *                               xp, yp, dX, dY, omega, cipModel, step)
+ *                               xp, yp, dX, dY, ut1MinusTai, cipModel, step)
  *
- * xp, yp, dX and dY are n-by-3, sampled at t-step, t and t+step. The number
+ * xp, yp, dX, dY and UT1 - TAI are n-by-3, sampled at t-step, t and t+step;
+ * the Earth rotation rate and its change are formed from the last in rsCore
+ * (decision D128). The number
  * of derivatives computed follows nlhs, which is how the nargout gating of
  * rotationItrsToGcrs reaches the arithmetic: with one output requested the
  * CIP series is evaluated once per epoch instead of three times.
@@ -964,7 +964,6 @@ static void rsCommandDcm(int nlhs, mxArray *plhs[], int nrhs,
     const double *ttSec;
     const double *ut1Day;
     const double *ut1Sec;
-    const double *omega;
     double *rdot = NULL;
     double *rddot = NULL;
     int derivativeOrder;
@@ -985,9 +984,8 @@ static void rsCommandDcm(int nlhs, mxArray *plhs[], int nrhs,
     ttSec = rsExpand(prhs[2], n, "ttSecOfDay", &scratch[0]);
     ut1Day = rsExpand(prhs[3], n, "ut1Day", &scratch[1]);
     ut1Sec = rsExpand(prhs[4], n, "ut1SecOfDay", &scratch[2]);
-    omega = rsExpand(prhs[9], n, "omega", &scratch[3]);
 
-    for (argument = 5; argument <= 8; argument++) {
+    for (argument = 5; argument <= 9; argument++) {
         if (mxGetNumberOfElements(prhs[argument]) != 3 * n) {
             mexErrMsgIdAndTxt("referenceSystem:mex:sizeMismatch",
                 "Argument %d of 'dcm' must be %lu-by-3; it has %lu elements.",
@@ -1013,7 +1011,7 @@ static void rsCommandDcm(int nlhs, mxArray *plhs[], int nrhs,
 
     status = rsRotationItrsToGcrs((int)n, ttDay, ttSec, ut1Day, ut1Sec,
         mxGetPr(prhs[5]), mxGetPr(prhs[6]), mxGetPr(prhs[7]), mxGetPr(prhs[8]),
-        omega, (int)mxGetScalar(prhs[10]), derivativeOrder,
+        mxGetPr(prhs[9]), (int)mxGetScalar(prhs[10]), derivativeOrder,
         mxGetScalar(prhs[11]), mxGetPr(plhs[0]), rdot, rddot);
 
     for (k = 0; k < 5; k++) {

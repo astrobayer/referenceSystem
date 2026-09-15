@@ -135,6 +135,9 @@ static const char *rateFixturePath = "test/fixtures/arcFormat2Rate.csv";
  * MATLAB to it. */
 static const char *daySecondFixturePath = "test/fixtures/arcFormat2DaySecond.csv";
 
+/* A directory the suite may write a scratch file into and remove again. */
+static const char *scratchDir = ".";
+
 int main(int argc, char *argv[])
 {
     if (argc > 1) {
@@ -148,6 +151,9 @@ int main(int argc, char *argv[])
     }
     if (argc > 4) {
         daySecondFixturePath = argv[4];
+    }
+    if (argc > 5) {
+        scratchDir = argv[5];
     }
     static double coefficient[PANELS * 6 * STRIDE];
     double taiMinusUtc[PANELS];
@@ -230,7 +236,7 @@ int main(int argc, char *argv[])
             double xp[3];
             double yp[3];
             double zeros[3];
-            double omega[1];
+            double ut1MinusTai[3];
             int sample;
 
             check(rsApiRotationRate(&interpolant, query[i], step, r, rdot)
@@ -243,15 +249,15 @@ int main(int argc, char *argv[])
                 xp[sample] = value[3];
                 yp[sample] = value[4];
                 zeros[sample] = 0.0;
+                ut1MinusTai[sample] = value[5] - TAI_MINUS_UTC;
                 if (sample == 1) {
                     ut1Sec = (query[i] - ttDay) * 86400.0 + value[5];
                 }
             }
-            /* The omega rsApi takes for a six-channel interpolant (rev. 1.222):
-             * the ERA slope, with no length of day to apply. */
-            omega[0] = rsEarthRotationAngleRate();
+            /* The direct chain's UT1 - TAI at the same three samples, from
+             * which the core forms the rate for both paths (decision D128). */
             rsRotationItrsToGcrs(1, &ttDay, &ttSec, &ut1Day, &ut1Sec, xp, yp,
-                zeros, zeros, omega, 2006, 1, step, truthR, truthRdot, NULL);
+                zeros, zeros, ut1MinusTai, 2006, 1, step, truthR, truthRdot, NULL);
 
             for (j = 0; j < 9; j++) {
                 double d = fabs(r[j] - truthR[j]);
@@ -277,15 +283,11 @@ int main(int argc, char *argv[])
      * budget, and a bound that moved with the step. Both paths difference
      * samples at t-step and t+step, so a sample error e reaches the rate as
      * e/step: measured 9.28e-19 1/s, against 1.16e-16/60 = 1.9e-18, and 154
-     * times below the budget. No LOD term can hide here - the interpolant built
-     * above has six channels, so rsApi has no lod to apply, and both paths are
-     * handed the same ERA slope (the nominal omega until rev. 1.222) - so what
-     * this bound sees is a rate the two paths construct differently, which R
-     * cannot see at all. Because both paths share that omega, this block cannot
-     * tell a wrong omega from a right one; the MATLAB rate fixture below can.
-     * Fault-injected: rsApi's omega set 1.5 ms of excess LOD off gives
-     * Rdot 1.27e-12 with R unchanged at 1.16e-16; it passed 5e-12 and failed
-     * 5e-12/step 15 times over. */
+     * times below the budget. The rate the core forms comes from the UT1 - TAI
+     * samples - the panels' on one side and the chain's on the other - so this
+     * bound also sees a UT1 sample taken from the wrong panel or with the wrong
+     * TAI - UTC, which R cannot see at all. The MATLAB rate fixture below holds
+     * the construction to MATLAB's. */
     check(worst < 5.0e-12, "R matches the direct chain across panel boundaries");
     check(worstRate < RATE_BUDGET, "Rdot matches the direct chain");
 
@@ -310,6 +312,18 @@ int main(int argc, char *argv[])
               == RS_API_BAD_INTERPOLANT,
               "cipModel is validated even though the panels make it unread");
         interpolant.cipModel = 2006;
+        /* A channel count the rotation cannot read from - five leaves dut1
+         * unfilled - is refused, not read from the stack. */
+        interpolant.quantityCount = 5;
+        check(rsApiRotation(&interpolant, firstPanel + 0.5, sentinel)
+              == RS_API_BAD_INTERPOLANT,
+              "a quantityCount other than 0, 6 or 7 is refused");
+        interpolant.quantityCount = 8;
+        check(rsApiRotation(&interpolant, firstPanel + 0.5, sentinel)
+              == RS_API_BAD_INTERPOLANT,
+              "a quantityCount of 8 is refused");
+        check(sentinel[0] == -1.0, "a refused channel count leaves the output alone");
+        interpolant.quantityCount = RS_API_QUANTITIES;
     }
 
     /* ---- reading a file MATLAB actually wrote ------------------------ */
@@ -374,13 +388,14 @@ int main(int argc, char *argv[])
 
     /* ---- reading the format MATLAB writes today (rev. 1.221) ------------ */
     {
-        /* A FORMAT-2 FILE MUST READ, CARRY SEVEN CHANNELS, AND GIVE THE SAME
-         * ROTATION AS THE FORMAT-1 FILE OF THE SAME PANELS. The last check is
-         * what makes the striding visible: a reader that took seven channels
-         * as six would read panel 1 out of panel 0's lod column and rotate
-         * wrongly by far more than the bound. The bound is P19c's 5e-12 on a
-         * direction cosine (1.03 uas); the two files' first six channels agree
-         * to 2.2e-17 in their coefficients, so what is left is roundoff. */
+        /* A SEVEN-CHANNEL FORMAT-2 FILE MUST READ, AND GIVE THE SAME ROTATION
+         * AS THE FORMAT-1 FILE OF THE SAME PANELS. arcFormat2.eopi carries the
+         * lod channel earlier builders fitted, so the last check is what makes
+         * the striding visible: a reader that took seven channels as six would
+         * read panel 1 out of panel 0's lod column and rotate wrongly by far
+         * more than the bound. The bound is P19c's 5e-12 on a direction cosine
+         * (1.03 uas); the two files' first six channels agree to 2.2e-17 in
+         * their coefficients, so what is left is roundoff. */
         rsApiInterpolant one;
         rsApiInterpolant two;
         static double coefficientOne[64 * RS_API_MAX_QUANTITIES * 64];
@@ -678,6 +693,60 @@ int main(int argc, char *argv[])
                 check(same, "a second carried across the leap second lands on its own side, bit for bit");
             }
         }
+    }
+
+    /* ---- a header line longer than any line buffer ------------------- */
+    {
+        /* taiMinusUtc holds one value per panel on ONE line, as
+         * writeInterpolant writes it, so a year of one-day panels writes over
+         * a thousand characters there. A reader that took the header a line at
+         * a time into a fixed buffer read 167 panels' last value as 3 instead of
+         * 37 and refused 168 or more. Written here, with a TAI - UTC that
+         * changes at the last panel so a truncated read cannot pass, and read
+         * back at three lengths either side of the old limit. */
+        static const int panelCounts[3] = {167, 168, 400};
+        static double longCoefficient[2 * RS_API_QUANTITIES * 400];
+        double longTai[400];
+        char longPath[1024];
+        int trial;
+
+        snprintf(longPath, sizeof longPath, "%s/rsApiLongHeader.eopi", scratchDir);
+        for (trial = 0; trial < 3; trial++) {
+            int count = panelCounts[trial];
+            rsApiInterpolant longIp;
+            int status;
+            int allRead = 1;
+            FILE *out = fopen(longPath, "w");
+            int k;
+            check(out != NULL, "the long-header file can be written");
+            if (out == NULL) {
+                break;
+            }
+            fprintf(out, "referenceSystemInterpolant 2\ndegree 1\npanelCount %d\n"
+                    "panelSpan 1\nfirstPanelMjd 60000\ncipModel IAU2006/2000A\n"
+                    "tidalCorrections 1\nmethod lagrange\nzonalTides restore\n"
+                    "quantity X Y s xp yp dut1\ntaiMinusUtc", count);
+            for (k = 0; k < count; k++) {
+                fprintf(out, " %.17g", (k == count - 1) ? 38.0 : 37.0);
+            }
+            fprintf(out, "\ncoefficient\n");
+            for (k = 0; k < 2 * RS_API_QUANTITIES * count; k++) {
+                fprintf(out, "%.17g\n", 0.0);
+            }
+            fclose(out);
+
+            status = rsApiReadInterpolant(longPath, &longIp, longCoefficient,
+                (int)(sizeof longCoefficient / sizeof *longCoefficient), longTai, 400);
+            for (k = 0; status == RS_API_OK && k < count; k++) {
+                if (longTai[k] != ((k == count - 1) ? 38.0 : 37.0)) {
+                    allRead = 0;
+                }
+            }
+            check(status == RS_API_OK && allRead && longIp.panelCount == count &&
+                  longIp.quantityCount == RS_API_QUANTITIES,
+                  "a long taiMinusUtc line is read whole, keys it does not know skipped");
+        }
+        remove(longPath);
     }
 
     /* ------------------------------------------------------------------ *

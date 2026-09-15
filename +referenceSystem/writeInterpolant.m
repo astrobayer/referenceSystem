@@ -33,8 +33,9 @@ function file = writeInterpolant(interpolant, file)
 %
 %   The tidal setting is written because A READER MUST BE ABLE TO REFUSE A
 %   MISMATCH: an interpolant built without the sub-daily terms differs by tens
-%   of microarcseconds and the resulting rotation gives no sign of it (rev.
-%   1.91).
+%   of microarcseconds and the resulting rotation gives no sign of it. The
+%   interpolation method and zonal-tide treatment the panels were fitted
+%   through are written as provenance when the interpolant carries them.
 %
 % ACCURACY
 %   Exact. Every coefficient survives the round trip bit for bit, and the test
@@ -98,6 +99,11 @@ function file = writeInterpolant(interpolant, file)
     fprintf(fileId, 'firstPanelMjd %.17g\n', interpolant.panelStartMjd(1));
     fprintf(fileId, 'cipModel %s\n', interpolant.meta.cipModel);
     fprintf(fileId, 'tidalCorrections %d\n', interpolant.meta.tidalCorrections);
+    for key = ["method", "zonalTides"]
+        if isfield(interpolant.meta, key)
+            fprintf(fileId, '%s %s\n', key, interpolant.meta.(key));
+        end
+    end
     fprintf(fileId, 'quantity %s\n', strjoin(interpolant.quantity, " "));
     fprintf(fileId, 'taiMinusUtc');
     fprintf(fileId, ' %.17g', interpolant.taiMinusUtc);

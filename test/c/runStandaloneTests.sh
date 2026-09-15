@@ -82,15 +82,18 @@ echo
 # control, and TestTime reads it (handover obligation O3).
 "$buildDir/testIersModels" "$rootDir/test/fixtures/fundargIers.csv"
 echo
-# Both interpolant formats: arc.eopi is format 1 and arcFormat2.eopi is what
-# writeInterpolant has written since P19c (rev. 1.221). arcFormat2Rate.csv is
-# MATLAB's rate on the latter, the truth that does not share rsApi's omega
-# (rev. 1.222). arcFormat2DaySecond.csv is MATLAB's rotation and rate at a day
-# and a second, the truth for the day-and-second entry points (rev. 1.236).
+# Both interpolant formats: arc.eopi is format 1 (six channels) and
+# arcFormat2.eopi is format 2 with the seventh, lod, channel older builders
+# wrote. arcFormat2Rate.csv is MATLAB's rate on the latter, the truth that does
+# not share the C side's construction. arcFormat2DaySecond.csv is MATLAB's
+# rotation and rate at a day and a second, the truth for the day-and-second
+# entry points. The last argument is a directory testApi may write a scratch
+# file into and remove again.
 "$buildDir/testApi" "$rootDir/test/fixtures/arc.eopi" \
     "$rootDir/test/fixtures/arcFormat2.eopi" \
     "$rootDir/test/fixtures/arcFormat2Rate.csv" \
-    "$rootDir/test/fixtures/arcFormat2DaySecond.csv"
+    "$rootDir/test/fixtures/arcFormat2DaySecond.csv" \
+    "$buildDir"
 echo
 "$buildDir/testCheb"
 echo

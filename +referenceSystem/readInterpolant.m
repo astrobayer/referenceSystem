@@ -14,8 +14,9 @@ function interpolant = readInterpolant(file)
 %   ----          ----   ----     -----  -----------
 %   interpolant   1x1    struct   -      As earthOrientationInterpolant returns
 %                                        it, except that .meta carries only
-%                                        what the file holds: cipModel and
-%                                        tidalCorrections.
+%                                        what the file holds: cipModel,
+%                                        tidalCorrections and, where written,
+%                                        method and zonalTides.
 %
 % METHOD
 %   Header keys are read BY NAME, not by position, so a field added to the
@@ -112,4 +113,10 @@ function interpolant = readInterpolant(file)
         'meta', struct('cipModel', keyValue("cipModel"), ...
             'tidalCorrections', ...
             logical(str2double(keyValue("tidalCorrections")))));
+    % Provenance written by writeInterpolant when the panels carry it.
+    for key = ["method", "zonalTides"]
+        if any(startsWith(line, key + " "))
+            interpolant.meta.(key) = keyValue(key);
+        end
+    end
 end

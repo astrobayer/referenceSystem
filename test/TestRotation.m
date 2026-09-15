@@ -88,6 +88,36 @@ classdef TestRotation < matlab.unittest.TestCase
 
     methods (Test, TestTags = {'contract'})
 
+        function rotationItrsToGcrs_contract_infoReportsTheModelUsed(testCase)
+            % info.cipModel is the model the offsets were referred to IN THIS
+            % CALL. An override is what was used, and reporting the series'
+            % metadata instead would be a diagnostic contradicting the
+            % computation.
+            testCase.assumeTrue(referenceSystem.mexInfo().built, ...
+                'The MEX gateway is not built.');
+            eop = testCase.cookbookEop();
+            utc = referenceSystem.daySecondToEpoch([57754 3600], "UTC");
+            [~, ~, ~, info] = referenceSystem.rotationItrsToGcrs(utc, 'Eop', eop, ...
+                'CipModel', "IAU2000A", 'Derivatives', 0);
+            testCase.verifyEqual(info.cipModel, "IAU2000A");
+            [~, ~, ~, info] = referenceSystem.rotationItrsToGcrs(utc, 'Eop', eop, ...
+                'Derivatives', 0);
+            testCase.verifyEqual(info.cipModel, string(eop.meta.cipModel));
+        end
+
+        function rotationItrsToGcrs_contract_refusesAMissingEopValue(testCase)
+            % D129, end to end. A series that leaves dX blank where the epoch's
+            % stencil reads it gave an all-NaN rotation with no error; it is
+            % refused by name.
+            testCase.assumeTrue(referenceSystem.mexInfo().built, ...
+                'The MEX gateway is not built.');
+            eop = testCase.cookbookEop();
+            eop.dX(eop.mjd >= 57760) = NaN;
+            utc = referenceSystem.daySecondToEpoch([57761 3600], "UTC");
+            testCase.verifyError(@() referenceSystem.rotationItrsToGcrs(utc, ...
+                'Eop', eop), 'referenceSystem:interpolateEop:missingValue');
+        end
+
         function rotationItrsToGcrs_contract_refusesAMismatchedCipModel(testCase)
             % P19c DELIVERABLE 3. With the series no longer read on the
             % interpolated path, the CIP model can only come from the
@@ -126,10 +156,8 @@ classdef TestRotation < matlab.unittest.TestCase
             % seventh; if that had invalidated the fixture the format change
             % would have destroyed the check while claiming to extend it.
             %
-            % The old interpolant keeps working and takes the series path,
-            % which info.sampleSource reports as "panels+series" - so an
-            % interpolant on disk from before this revision is slower than a
-            % rebuilt one and never wrong.
+            % The old interpolant keeps working on its own: it carries the six
+            % channels the rotation reads, so no series is passed.
             testCase.assumeTrue(referenceSystem.mexInfo().built, ...
                 'The MEX gateway is not built.');
             file = fullfile(testCase.toolboxRoot(), 'test', 'fixtures', 'arc.eopi');
@@ -139,11 +167,12 @@ classdef TestRotation < matlab.unittest.TestCase
             testCase.verifyEqual(numel(old.quantity), 6, ...
                 'The committed fixture is a six-channel format 1 file.');
 
-            eop = testCase.cookbookEop();
             query = referenceSystem.daySecondToEpoch([57754 3600], "UTC");
-            [~, ~, ~, info] = referenceSystem.rotationItrsToGcrs(query, ...
-                'Eop', eop, 'Interpolant', old);
-            testCase.verifyEqual(info.sampleSource, "panels+series");
+            [R, Rdot, ~, info] = referenceSystem.rotationItrsToGcrs(query, ...
+                'Interpolant', old);
+            testCase.verifyEqual(info.path, "interpolated");
+            testCase.verifyTrue(all(isfinite([R(:); Rdot(:)])), ...
+                'A format-1 interpolant must still give a finite rotation and rate.');
         end
 
         function rotationItrsToGcrs_contract_refusesASampleInsideALeapSecond(testCase)
@@ -182,12 +211,11 @@ classdef TestRotation < matlab.unittest.TestCase
         function rotationItrsToGcrs_contract_cApiRateFixtureIsCurrent(testCase)
             % THE C API'S RATE TRUTH MUST STILL BE WHAT MATLAB COMPUTES (rev.
             % 1.222). test/c/testApi.c holds rsApiRotationRate to
-            % test/fixtures/arcFormat2Rate.csv, because every C-only truth
-            % shares rsApi's omega: none of them could see the nominal constant
-            % and the unread length of day that kept the C rate 5.8e-13 1/s
-            % from this function's default until rev. 1.222. That file is a
-            % truth only while this function still produces it, so this test
-            % recomputes it from the committed arcFormat2.eopi. A failure here
+            % test/fixtures/arcFormat2Rate.csv, because the C-only truths share
+            % the rate construction of rsCore and cannot see it differ from
+            % MATLAB's. That file is a truth only while this function still
+            % produces it, so this test recomputes it from the committed
+            % arcFormat2.eopi. A failure here
             % means the interpolated rotation or rate changed: decide which
             % side is right and regenerate the CSV as its header says, rather
             % than widening these bounds (obligation O8).
@@ -216,9 +244,7 @@ classdef TestRotation < matlab.unittest.TestCase
             [R, Rdot, ~, info] = referenceSystem.rotationItrsToGcrs(epoch, ...
                 'Interpolant', interpolant, 'DifferenceStep', step);
 
-            testCase.verifyEqual(info.sampleSource, "panels");
-            testCase.verifyTrue(info.lengthOfDayApplied, ...
-                'The fixture is the DEFAULT rate, which applies the length of day.');
+            testCase.verifyEqual(info.path, "interpolated");
             expectedR = reshape(rows(:, 2:10)', 3, 3, []);
             expectedRdot = reshape(rows(:, 11:19)', 3, 3, []);
             testCase.log(1, sprintf(['C API rate fixture: max|dR| %.3g, ', ...
@@ -258,9 +284,7 @@ classdef TestRotation < matlab.unittest.TestCase
             [R, Rdot, ~, info] = referenceSystem.rotationItrsToGcrs(epoch, ...
                 'Interpolant', interpolant, 'DifferenceStep', step);
 
-            testCase.verifyEqual(info.sampleSource, "panels");
-            testCase.verifyTrue(info.lengthOfDayApplied, ...
-                'The fixture is the DEFAULT rate, which applies the length of day.');
+            testCase.verifyEqual(info.path, "interpolated");
             expectedR = reshape(rows(:, 3:11)', 3, 3, []);
             expectedRdot = reshape(rows(:, 12:20)', 3, 3, []);
             testCase.log(1, sprintf(['C API day-and-second fixture: max|dR| %.3g, ', ...
@@ -1376,67 +1400,6 @@ classdef TestRotation < matlab.unittest.TestCase
             end
         end
 
-        function rotationItrsToGcrs_reference_panelsAloneMatchTheDirectChain(testCase)
-            % P19c's ACCURACY REQUIREMENT, AND THE ONE TEST THAT WOULD CATCH
-            % THE WHOLE PROMPT GOING WRONG. With the excess length of day in
-            % the panels the interpolated path reads NO series at all - no
-            % interpolateEop, no subdailyEopCorrection - so this compares two
-            % chains that now share only the SOFA core.
-            %
-            % NO 'Eop' IS PASSED, DELIBERATELY. That is the property P19c
-            % delivers, and passing one would let the old path satisfy the
-            % test. 'ApplyLengthOfDay' is on, because the LOD channel is the
-            % entire reason the series call could be removed and a test with
-            % it off would pass whether or not the channel was read.
-            %
-            % The arc CROSSES PANEL BOUNDARIES: a per-epoch panel lookup that
-            % is off by one is invisible inside a single panel.
-            testCase.assumeTrue(referenceSystem.mexInfo().built, ...
-                'The MEX gateway is not built.');
-            eop = testCase.cookbookEop();
-            span = referenceSystem.daySecondToEpoch([57754 0; 57757 0], "UTC");
-            interpolant = referenceSystem.earthOrientationInterpolant(span, ...
-                'Eop', eop);
-            testCase.assertTrue(any(string(interpolant.quantity) == "lod"), ...
-                'The builder did not fit the length-of-day channel.');
-
-            mjd = 57754.05 + (0:23)' * 0.125;      % three days, 24 epochs
-            query = referenceSystem.daySecondToEpoch( ...
-                [floor(mjd), (mjd - floor(mjd)) * 86400], "UTC");
-
-            [direct, directDot, ~, directInfo] = ...
-                referenceSystem.rotationItrsToGcrs(query, 'Eop', eop, ...
-                'ApplyLengthOfDay', true);
-            [fitted, fittedDot, ~, fittedInfo] = ...
-                referenceSystem.rotationItrsToGcrs(query, ...
-                'Interpolant', interpolant, 'ApplyLengthOfDay', true);
-
-            testCase.verifyEqual(directInfo.sampleSource, "series");
-            testCase.verifyEqual(fittedInfo.sampleSource, "panels", ...
-                'The interpolated path still read the series.');
-
-            % R: 5e-12 on a direction cosine is 1.03 uas (5e-12 x 2.063e11
-            % uas/rad), not the "1e-3 uas" this comment said until rev. 1.217.
-            % It is the bound P19c was required to hold unchanged, and it
-            % bounds the error the panels add to the chain; the measured floor
-            % and the wrong-panel control are in interpolatedMatchesDirect.
-            %
-            % Rdot: D28's 1 nm/s at 7000 km, 1.43e-16 1/s, SINCE REV. 1.223 (H.11
-            % item 5), and on THIS test it is the bound that matters. The LOD
-            % channel enters only the rate, through omega, so R cannot see it.
-            % The whole length-of-day term is 1.2e-12 1/s on this arc (8.5 um/s
-            % at 7000 km); an interpolant with its LOD channel zeroed passed the
-            % 5e-12 1/s this line held until rev. 1.217, and failed D123's
-            % 5e-12/h 49 times over. That bound was still 175 times the
-            % budget, so a length of day wrong by 1% (1.2e-14 1/s) passed it;
-            % it fails this one. Measured floor 5.5e-19 1/s, 260 times below.
-            % If it fails, the length-of-day fit is the suspect and its degree
-            % is the knob - not this tolerance (obligation O8).
-            testCase.verifyEqual(fitted, direct, 'AbsTol', 5e-12);
-            testCase.verifyEqual(fittedDot, directDot, 'AbsTol', ...
-                TestRotation.VelocityBudget / TestRotation.OrbitRadius);
-        end
-
         function rotationItrsToGcrs_reference_interpolatedMatchesDirect(testCase)
             % PROMPT P19b, AND THE FIRST CHECK THAT EXERCISES THE WHOLE CHAIN.
             % Everything before it tested a piece: the fit against the models,
@@ -1444,7 +1407,8 @@ classdef TestRotation < matlab.unittest.TestCase
             % This one asks the question a user asks - does 'Interpolant' give
             % the same rotation as not passing it - across an arc that CROSSES
             % PANEL BOUNDARIES, because a per-epoch panel lookup that is off by
-            % one is invisible inside a single panel.
+            % one is invisible inside a single panel. No series is passed
+            % beside the panels: the interpolated path reads none.
             eop = testCase.cookbookEop();
             span = referenceSystem.daySecondToEpoch([57754 0; 57757 0], "UTC");
             interpolant = referenceSystem.earthOrientationInterpolant(span, ...
@@ -1457,7 +1421,7 @@ classdef TestRotation < matlab.unittest.TestCase
             [direct, directDot, ~, directInfo] = ...
                 referenceSystem.rotationItrsToGcrs(query, 'Eop', eop);
             [fitted, fittedDot, ~, fittedInfo] = ...
-                referenceSystem.rotationItrsToGcrs(query, 'Eop', eop, ...
+                referenceSystem.rotationItrsToGcrs(query, ...
                 'Interpolant', interpolant);
 
             testCase.verifyEqual(directInfo.path, "direct");
@@ -1486,6 +1450,60 @@ classdef TestRotation < matlab.unittest.TestCase
             testCase.verifyEqual(fitted, direct, 'AbsTol', 5e-12);
             testCase.verifyEqual(fittedDot, directDot, 'AbsTol', ...
                 TestRotation.VelocityBudget / TestRotation.OrbitRadius);
+        end
+
+        function rotationItrsToGcrs_reference_rateIsTheDerivativeOfTheRotation(testCase)
+            % D128: Rdot IS THE TIME DERIVATIVE OF THE R RETURNED. The oracle is
+            % the motion of R itself: the angular velocity
+            % logm(R(t-h)' R(t+h)) / 2h, with R at t-h and t+h from this
+            % function, is compared with R(t)' Rdot(t), at hourly epochs of one
+            % day with the sub-daily tides on and off. A matrix logarithm is
+            % exact for a constant rotation rate, so, unlike a central
+            % difference of the matrix elements, it carries no (omega h)^2 / 6
+            % truncation - 2.6e-13 1/s at h = 2 s, which is larger than what is
+            % under test.
+            %
+            % Until the Earth rotation rate was formed from the interpolated UT1
+            % it came from the series' LOD column, and this oracle measured the
+            % difference at 2.0e-13 1/s with the tides (1.37 um/s at 7000 km)
+            % and 5.8e-14 without, the same at h = 50, 100, 200 and 400 s.
+            %
+            % BOUND 3e-16 1/s (2 nm/s at 7000 km), NOT D28's 1.43e-16: the
+            % oracle's own floor at h = 200 s measured 1.1e-16 with the tides
+            % and 1.05e-16 without - the ERA resolution of 1.6e-14 rad over
+            % 400 s and the logarithm's roundoff - so the budget itself would
+            % leave a margin of 1.3. The bound is 2.7 times that floor and 190
+            % times below the smaller of the two defects. The epochs are 1000 s
+            % past each hour, so no shoulder reaches midnight, where the
+            % interpolated rows change slope.
+            testCase.assumeTrue(referenceSystem.mexInfo().built, ...
+                'The MEX gateway is not built.');
+            eop = testCase.cookbookEop();
+            second = (0:3600:82800)' + 1000;
+            dayNumber = repmat(57700, numel(second), 1);
+            h = 200;
+            worst = zeros(1, 2);
+            tides = [true, false];
+            for tide = 1:2
+                at = @(shift, order) referenceSystem.rotationItrsToGcrs( ...
+                    referenceSystem.daySecondToEpoch([dayNumber, second + shift], "UTC"), ...
+                    'Eop', eop, 'ApplyTidalCorrections', tides(tide), ...
+                    'Derivatives', order);
+                [R, Rdot] = at(0, 1);
+                before = at(-h, 0);
+                after = at(h, 0);
+                for k = 1:size(R, 3)
+                    motion = real(logm(before(:, :, k)' * after(:, :, k))) / (2 * h);
+                    worst(tide) = max(worst(tide), ...
+                        max(abs(Rdot(:, :, k) - R(:, :, k) * motion), [], 'all'));
+                end
+            end
+            testCase.log(1, sprintf(['Rdot against the motion of R: %.3g 1/s with ', ...
+                'the sub-daily tides, %.3g without (%.3g and %.3g m/s at 7000 km)'], ...
+                worst(1), worst(2), worst(1) * TestRotation.OrbitRadius, ...
+                worst(2) * TestRotation.OrbitRadius));
+            testCase.verifyLessThan(worst, [3e-16, 3e-16], ...
+                'Rdot is not the derivative of R: a UT1 rate is missing.');
         end
 
         function rotationItrsToGcrs_reference_interpolantAcrossALeapSecondMatchesDirect(testCase)
@@ -1527,7 +1545,7 @@ classdef TestRotation < matlab.unittest.TestCase
             [direct, directDot] = referenceSystem.rotationItrsToGcrs(query, 'Eop', eop);
             [fitted, fittedDot, ~, info] = referenceSystem.rotationItrsToGcrs(query, ...
                 'Interpolant', interpolant);
-            testCase.verifyEqual(info.sampleSource, "panels");
+            testCase.verifyEqual(info.path, "interpolated");
             testCase.verifyEqual(fitted, direct, 'AbsTol', 5e-12);
             testCase.verifyEqual(fittedDot, directDot, 'AbsTol', ...
                 TestRotation.VelocityBudget / TestRotation.OrbitRadius);
@@ -1617,12 +1635,7 @@ classdef TestRotation < matlab.unittest.TestCase
                 'Correction', correction);
             [X, Y, s] = referenceSystem.cipCoordinates( ...
                 referenceSystem.convertTimeScale(query, "TT"), 'Eop', eopAt);
-            % SEVEN COLUMNS SINCE P19c, AND THE SEVENTH IS BUILT HERE THE
-            % SAME WAY AS THE OTHER SIX - by an independent path through
-            % interpolateEop, not by asking the interpolant. That is the whole
-            % point of the comment above: a reference rebuilt the same way as
-            % the thing under test asserts only determinism.
-            direct = [X, Y, s, eopAt.xp, eopAt.yp, eopAt.dut1, eopAt.lod];
+            direct = [X, Y, s, eopAt.xp, eopAt.yp, eopAt.dut1];
             testCase.assertSize(direct, [numel(queryMjd), ...
                 numel(interpolant.quantity)], ...
                 'The hand-built chain and the interpolant disagree on width.');
@@ -1664,9 +1677,6 @@ classdef TestRotation < matlab.unittest.TestCase
             testCase.verifyEqual(fitted(:, 1:5), direct(:, 1:5), 'AbsTol', ...
                 1e-3 * microarcsecond);
             testCase.verifyEqual(fitted(:, 6), direct(:, 6), 'AbsTol', 1e-10);
-            % Excess LOD is seconds per day of order 1e-3 and is fitted from
-            % the same daily table as dut1, so it carries dut1's bound.
-            testCase.verifyEqual(fitted(:, 7), direct(:, 7), 'AbsTol', 1e-10);
         end
 
     end
@@ -1780,7 +1790,7 @@ classdef TestRotation < matlab.unittest.TestCase
             query = referenceSystem.daySecondToEpoch([57755 3600], "UTC");
 
             testCase.verifyError(@() referenceSystem.rotationItrsToGcrs( ...
-                query, 'Eop', eop, 'Interpolant', bare), ...
+                query, 'Interpolant', bare), ...
                 'referenceSystem:rotationItrsToGcrs:tidalMismatch');
 
             % And an epoch past the end of the panels: a Chebyshev expansion
@@ -1789,12 +1799,21 @@ classdef TestRotation < matlab.unittest.TestCase
             full = referenceSystem.earthOrientationInterpolant(span, 'Eop', eop);
             outside = referenceSystem.daySecondToEpoch([57760 0], "UTC");
             testCase.verifyError(@() referenceSystem.rotationItrsToGcrs( ...
-                outside, 'Eop', eop, 'Interpolant', full), ...
+                outside, 'Interpolant', full), ...
                 'referenceSystem:rotationItrsToGcrs:outsideInterpolant');
 
             testCase.verifyError(@() referenceSystem.rotationItrsToGcrs( ...
-                query, 'Eop', eop, 'Interpolant', struct('degree', 20)), ...
+                query, 'Interpolant', struct('degree', 20)), ...
                 'referenceSystem:rotationItrsToGcrs:badInterpolant');
+
+            % A series or a method beside the panels would be silently unused,
+            % because the panels fixed both when they were built.
+            testCase.verifyError(@() referenceSystem.rotationItrsToGcrs( ...
+                query, 'Eop', eop, 'Interpolant', full), ...
+                'referenceSystem:rotationItrsToGcrs:conflictingEopSource');
+            testCase.verifyError(@() referenceSystem.rotationItrsToGcrs( ...
+                query, 'Interpolant', full, 'InterpolationMethod', "linear"), ...
+                'referenceSystem:rotationItrsToGcrs:conflictingEopSource');
         end
 
         function earthOrientationInterpolant_contract_refusesWhatItCannotUse(testCase)
@@ -1837,38 +1856,41 @@ classdef TestRotation < matlab.unittest.TestCase
         end
 
         function earthOrientationInterpolant_contract_toleranceGatesDut1AsAnAngle(testCase)
-            % TOLERANCE IS MICROARCSECONDS OF ROTATION FOR EVERY GATED CHANNEL,
-            % dut1 INCLUDED (rev. 1.225, H.11 item 8). Until then dut1's
-            % residual, in microseconds, was compared with the same number as
-            % if it were microseconds, so dut1 was held 15 times more loosely
-            % than the angles it turns into.
+            % TOLERANCE IS MICROARCSECONDS OF ROTATION FOR EVERY CHANNEL, dut1
+            % INCLUDED: a UT1 residual in microseconds turns the Earth by
+            % 15.04 uas per us, and comparing the raw microseconds with the
+            % tolerance would hold dut1 fifteen times more loosely than the
+            % angles it becomes.
             %
-            % A CONFIGURATION IN WHICH THE TWO READINGS DISAGREE, MEASURED
-            % rather than hoped for: two-day panels over MJD 57800-57805 put a
-            % daily-row kink inside each panel. The angles then reach 6.78 uas
-            % and dut1 2.13 us, which is 32 uas of rotation. A tolerance of
-            % 15 uas lies between the two readings with a margin of about two
-            % on each side: the old gate built this interpolant, the new one
-            % must refuse it. The second call proves the refusal is about dut1
-            % and not blanket, by admitting the same fit at 40 uas.
+            % A CONFIGURATION IN WHICH THE READINGS DISAGREE, MEASURED: four-day
+            % panels over MJD 57700-57708 without the sub-daily terms put three
+            % daily-row kinks inside each panel. The angles reach 2.96 uas and
+            % dut1 0.372 us, which is 5.59 uas of rotation. A tolerance of
+            % 4.2 uas lies between the angles and dut1-as-angle with a margin
+            % of 1.3 on each side and far above dut1 in microseconds: a gate
+            % reading microseconds builds this interpolant, the angle gate must
+            % refuse it. The second call admits the same fit at 6 uas, so the
+            % refusal is about dut1 and not blanket.
             eop = testCase.cookbookEop();
-            span = referenceSystem.daySecondToEpoch([57800 0; 57805 0], "UTC");
+            span = referenceSystem.daySecondToEpoch([57700 0; 57708 0], "UTC");
 
             testCase.verifyError(@() referenceSystem.earthOrientationInterpolant( ...
-                span, 'Eop', eop, 'PanelSpan', 2, 'Tolerance', 15), ...
+                span, 'Eop', eop, 'PanelSpan', 4, 'ApplyTidalCorrections', false, ...
+                'Tolerance', 4.2), ...
                 'referenceSystem:earthOrientationInterpolant:toleranceNotMet');
 
             admitted = referenceSystem.earthOrientationInterpolant(span, ...
-                'Eop', eop, 'PanelSpan', 2, 'Tolerance', 40);
+                'Eop', eop, 'PanelSpan', 4, 'ApplyTidalCorrections', false, ...
+                'Tolerance', 6);
             name = string(admitted.quantity);
             dut1 = admitted.meta.residual(name == "dut1");
-            angles = max(admitted.meta.residual(~ismember(name, ["dut1", "lod"])));
+            angles = max(admitted.meta.residual(name ~= "dut1"));
             testCase.log(1, sprintf('dut1 gate: angles %.3g uas, dut1 %.3g us', ...
                 angles, dut1));
-            % Both below 15 in their own units, so only the conversion can
+            % Both below 4.2 in their own units, so only the conversion can
             % have refused the first call.
-            testCase.verifyLessThan([angles, dut1], [15, 15], ...
-                'The configuration no longer separates the old gate from the new.');
+            testCase.verifyLessThan([angles, dut1], [4.2, 4.2], ...
+                'The configuration no longer separates the two gates.');
         end
 
         function earthOrientationInterpolant_contract_refusesANonIntegerPanelSpan(testCase)
@@ -1879,10 +1901,8 @@ classdef TestRotation < matlab.unittest.TestCase
             % nor the option. Both are asserted, below and above one day, and
             % the refusal must come before any EOP is evaluated - so the Eop
             % here is a real series and the span a valid one. PanelSpan 2 is
-            % the whole-day case that must still build; at degree 20 two days
-            % miss the default 0.5 uas (36.7 uas in dut1 on this span), so the
-            % tolerance is the 40 that toleranceGatesDut1AsAnAngle admits
-            % two-day panels at.
+            % the whole-day case that must still build; two-day panels miss
+            % the default 0.5 uas, so the tolerance is a generous 40.
             eop = testCase.cookbookEop();
             span = referenceSystem.daySecondToEpoch([57754 0; 57756 0], "UTC");
             for fraction = [0.5, 1.5]
@@ -1933,12 +1953,16 @@ classdef TestRotation < matlab.unittest.TestCase
             interpolant = referenceSystem.earthOrientationInterpolant(span, ...
                 'Eop', eop);
 
-            % SEVEN SINCE P19c. The order is the authority the C API strides
-            % by and the file format names, so it is asserted here in full
-            % rather than by count: a reordering that kept the length would
-            % be silent everywhere else.
+            % The order is the authority the C API strides by and the file
+            % format names, so it is asserted here in full rather than by
+            % count: a reordering that kept the length would be silent
+            % everywhere else. The length of day is not a channel: the
+            % rotation takes its rate from the UT1 panels.
             testCase.verifyEqual(interpolant.quantity, ...
-                ["X", "Y", "s", "xp", "yp", "dut1", "lod"]);
+                ["X", "Y", "s", "xp", "yp", "dut1"]);
+            testCase.verifyEqual([interpolant.meta.method, ...
+                interpolant.meta.zonalTides], ["lagrange", "restore"], ...
+                'The builder must record the interpolation it fitted through.');
             testCase.verifySize(interpolant.coefficient, ...
                 [interpolant.degree + 1, numel(interpolant.quantity), ...
                 numel(interpolant.panelStartMjd)]);
@@ -1979,8 +2003,7 @@ classdef TestRotation < matlab.unittest.TestCase
 
             % Warm up both paths: the first call of each pays for JIT.
             referenceSystem.rotationItrsToGcrs(arc, 'Eop', eop);
-            referenceSystem.rotationItrsToGcrs(arc, 'Eop', eop, ...
-                'Interpolant', interpolant);
+            referenceSystem.rotationItrsToGcrs(arc, 'Interpolant', interpolant);
 
             exactTime = zeros(5, 1);
             fastTime = zeros(5, 1);
@@ -1989,8 +2012,7 @@ classdef TestRotation < matlab.unittest.TestCase
                 referenceSystem.rotationItrsToGcrs(arc, 'Eop', eop);
                 exactTime(k) = toc(start);
                 start = tic;
-                referenceSystem.rotationItrsToGcrs(arc, 'Eop', eop, ...
-                    'Interpolant', interpolant);
+                referenceSystem.rotationItrsToGcrs(arc, 'Interpolant', interpolant);
                 fastTime(k) = toc(start);
             end
 
@@ -2266,7 +2288,7 @@ classdef TestRotation < matlab.unittest.TestCase
         function varargout = cookbookRotation(testCase, outputCount)
             %COOKBOOKROTATION The cookbook epoch driven through the full chain.
             %
-            %   The EOP are a synthetic three-row series carrying the
+            %   The EOP are a synthetic five-row series carrying the
             %   cookbook's own polar motion, Delta UT1 and pole offsets, so
             %   that the reference tests exercise the whole pipeline and not
             %   only the C core. No published IERS series in this repository
@@ -2297,24 +2319,36 @@ classdef TestRotation < matlab.unittest.TestCase
         end
 
         function eop = syntheticEop(~, centreDay)
-            %SYNTHETICEOP A three-day series holding the cookbook values.
+            %SYNTHETICEOP A five-day series holding the cookbook values.
+            %   interpolateEop restores the zonal tides at the epoch, so the
+            %   rows carry the cookbook UT1 - UTC less the tide at noon of the
+            %   centre day plus the tide at their own epoch: the regularised
+            %   series is then constant, and at noon of the centre day dut1 is
+            %   the cookbook value to roundoff under any stencil. Five rows,
+            %   because 4-point Lagrange needs four.
             scale = referenceSystem.iersConstants().arcsecondsToRadians;
-            mjd = (centreDay - 1:centreDay + 1)';
+            mjd = (centreDay - 2:centreDay + 2)';
+            rowCount = numel(mjd);
+            tide = @(epoch) referenceSystem.zonalTideEopCorrection( ...
+                referenceSystem.convertTimeScale(epoch, "TT")).dut1;
+            noon = tide(referenceSystem.daySecondToEpoch([centreDay 43200], "UTC"));
+            rowTide = tide(referenceSystem.daySecondToEpoch( ...
+                [mjd, zeros(rowCount, 1)], "UTC"));
             eop = struct( ...
                 'mjd', mjd, ...
-                'xp', repmat(TestRotation.CookbookPolarX * scale, 3, 1), ...
-                'yp', repmat(TestRotation.CookbookPolarY * scale, 3, 1), ...
-                'dut1', repmat(TestRotation.CookbookDeltaUt1, 3, 1), ...
-                'lod', zeros(3, 1), ...
-                'dX', repmat(TestRotation.CookbookDeltaX2006 * scale * 1e-3, 3, 1), ...
-                'dY', repmat(TestRotation.CookbookDeltaY2006 * scale * 1e-3, 3, 1), ...
+                'xp', repmat(TestRotation.CookbookPolarX * scale, rowCount, 1), ...
+                'yp', repmat(TestRotation.CookbookPolarY * scale, rowCount, 1), ...
+                'dut1', TestRotation.CookbookDeltaUt1 - noon + rowTide, ...
+                'lod', zeros(rowCount, 1), ...
+                'dX', repmat(TestRotation.CookbookDeltaX2006 * scale * 1e-3, rowCount, 1), ...
+                'dY', repmat(TestRotation.CookbookDeltaY2006 * scale * 1e-3, rowCount, 1), ...
                 'sigma', struct(), ...
                 'meta', struct('series', "synthetic", ...
                     'cipModel', "IAU2006/2000A", ...
                     'cipModelSource', "test fixture", ...
                     'poleOffsetType', "dXdY", ...
                     'samplingHour', 0, ...
-                    'nRows', 3, ...
+                    'nRows', rowCount, ...
                     'mjdRange', [mjd(1) mjd(end)]));
         end
 

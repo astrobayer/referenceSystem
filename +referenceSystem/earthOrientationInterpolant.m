@@ -2,10 +2,9 @@ function interpolant = earthOrientationInterpolant(epoch, options)
 %EARTHORIENTATIONINTERPOLANT Chebyshev panels for the ITRS to GCRS chain.
 %   interpolant = earthOrientationInterpolant(epoch, 'Eop', eop) fits the
 %   quantities the terrestrial-to-celestial rotation and its rate need - the
-%   CIP X and Y, the CIO locator s, the two pole coordinates, UT1 minus UTC
-%   and the excess length of day - over the span covered by epoch, and returns
-%   them as Chebyshev coefficients on consecutive panels, one channel per
-%   entry of .quantity.
+%   CIP X and Y, the CIO locator s, the two pole coordinates and UT1 minus
+%   UTC - over the span covered by epoch, and returns them as Chebyshev
+%   coefficients on consecutive panels, one channel per entry of .quantity.
 %
 %   The result is accepted by rotationItrsToGcrs through its 'Interpolant'
 %   option, and it is the same object the public C API evaluates, so an
@@ -48,12 +47,10 @@ function interpolant = earthOrientationInterpolant(epoch, options)
 %                                        samples the fit has NOT seen. A fit
 %                                        that misses it raises toleranceNotMet
 %                                        rather than returning quietly. The
-%                                        same number gates every channel but
-%                                        lod, as microarcseconds of rotation:
-%                                        dut1's residual is converted at the
-%                                        ERA rate, 15.04 uas per us. lod is
-%                                        reported, not gated, because it is
-%                                        not an angle.
+%                                        same number gates every channel, as
+%                                        microarcseconds of rotation: dut1's
+%                                        residual is converted at the ERA
+%                                        rate, 15.04 uas per us.
 %
 % OUTPUT ARGUMENTS
 %   Name              Size          Type     Units  Description
@@ -86,8 +83,7 @@ function interpolant = earthOrientationInterpolant(epoch, options)
 %                                                   entry of .quantity. Units
 %                                                   by name: radians for X, Y,
 %                                                   s, xp and yp; seconds for
-%                                                   dut1; seconds per day for
-%                                                   lod.
+%                                                   dut1.
 %   .meta             1x1           struct   -      Provenance. Fields below.
 %   .meta.residual    1xQ           double   mixed  Worst error against the
 %                                                   direct chain at samples the
@@ -95,12 +91,14 @@ function interpolant = earthOrientationInterpolant(epoch, options)
 %                                                   per entry of .quantity:
 %                                                   microarcseconds for the
 %                                                   five angles, microseconds
-%                                                   for dut1 and for lod.
-%   .meta.tolerance   1x1           double   uas    Tolerance that was met, by
-%                                                   every channel but lod (see
+%                                                   for dut1.
+%   .meta.tolerance   1x1           double   uas    Tolerance that was met (see
 %                                                   Tolerance).
 %   .meta.cipModel    1x1           string   -      Frame of the CIP offsets.
 %   .meta.eopFile     1x1           string   -      Series the fit was built on.
+%   .meta.method      1x1           string   -      interpolateEop Method used.
+%   .meta.zonalTides  1x1           string   -      interpolateEop ZonalTides
+%                                                   setting used.
 %   .meta.spanMjd     1x2           double   d      Span actually covered,
 %                                                   which is the requested span
 %                                                   rounded outward to whole
@@ -115,21 +113,23 @@ function interpolant = earthOrientationInterpolant(epoch, options)
 %   boundaries fall where the EOP series changes row. Inside a panel each
 %   quantity is a Chebyshev expansion on Gauss-Lobatto nodes.
 %
+%   THE FITTED CHAIN IS THE DIRECT PATH'S. Each node is evaluated exactly as
+%   rotationItrsToGcrs evaluates an epoch: interpolateEop with its defaults,
+%   the sub-daily corrections when requested, and cipCoordinates with the
+%   series' offsets. The length of day is not fitted; the rotation takes its
+%   rate from the UT1 panels.
+%
 %   THE FIT IS NOT PERFORMED HERE. The nodes, the fit and the evaluation are
 %   the C routines in mex/rsCheb.c, reached through the gateway. A second
 %   implementation in MATLAB would be a second authority for the same
 %   arithmetic, and the MATLAB path and the C API would then agree only by
 %   inspection. They now share one fit by construction.
 %
-%   DEGREE 20 OVER ONE DAY IS MEASURED, NOT PROPOSED. Handover section B.9.2
-%   records the sweep. The binding quantity is not the CIP, which reaches its
-%   double-precision floor at degree 8 over a day and does not improve after,
-%   but the sub-daily ocean tide and libration, whose semi-diurnal terms need
-%   degree 20 to reach 2.6e-7 uas. Degree 16 reaches 3.6e-4 uas and degree 12
-%   only 0.2 uas. Risk R5 proposed 300 s node spacing from rev. 1.0; degree 20
-%   over a day is an effective 4320 s and lands four orders below the tightest
-%   tolerance this interface offers, so the proposal was over-conservative by
-%   about fifteen and was aimed at the wrong quantity.
+%   DEGREE 20 OVER ONE DAY IS MEASURED. The binding quantity is not the CIP,
+%   which reaches its double-precision floor at degree 8 over a day, but the
+%   sub-daily ocean tide and libration, whose semi-diurnal terms need degree 20
+%   to reach 2.6e-7 uas. Degree 16 reaches 3.6e-4 uas and degree 12 only
+%   0.2 uas (handover section B.9.2).
 %
 %   THE RESIDUAL IS COMPUTED AT POINTS THE FIT HAS NOT SEEN. Evaluating at the
 %   nodes returns the node values to roundoff by construction and would report
@@ -143,35 +143,28 @@ function interpolant = earthOrientationInterpolant(epoch, options)
 %   longer PanelSpan with a leap second strictly inside a panel is refused
 %   with leapSecondInsidePanel. The panel that ENDS in a leap second takes its
 %   last node at 23:59:60, the instant its own linear time reaches, with
-%   UT1-UTC continued in that day's convention - which is what lets a span
-%   cross 2017-01-01 at all. Evaluation follows the MJD a caller hands in,
-%   and the one second 23:59:60 has no MJD of its own, so rotationItrsToGcrs
-%   refuses a sample inside it (insideLeapSecond) and the C API returns
-%   RS_API_OUT_OF_RANGE for a difference shoulder that lands in it. Across the
-%   boundary itself, measured on 2017-01-01 at twelve epochs from 0.9 d before
-%   to 0.9 d after, including two 86.4 s from it: R within 2.3e-16 and Rdot
-%   within 5.6e-19 1/s of the direct path.
+%   UT1-UTC continued in that day's convention, so a span may cross a leap
+%   second. The one second 23:59:60 has no MJD of its own, so
+%   rotationItrsToGcrs refuses a sample inside it (insideLeapSecond) and the
+%   C API returns RS_API_OUT_OF_RANGE for a difference shoulder that lands in
+%   it.
 %
 % ACCURACY
 %   With the default degree and panel span, against the direct chain:
 %     CIP X, Y, s              better than 1e-4 uas
 %     pole xp, yp              better than 1e-3 uas
 %     UT1 - UTC                better than 1e-4 us
-%     excess length of day     better than 1e-8 us (of seconds per day)
-%   Measured at rev. 1.219 on six spans of test/fixtures/eop20c04.txt between
-%   MJD 57655 and 57853: the worst readings were 6.8e-5 uas (Y), 4.9e-7 uas
-%   (xp), 3.2e-8 us (dut1) and 7.7e-10 us (lod). The lod figure enters only
-%   the Earth rotation rate, where 1e-8 us per day is below 1e-23 1/s.
+%   Measured on six spans of test/fixtures/eop20c04.txt between MJD 57655 and
+%   57853: the worst readings were 6.8e-5 uas (Y), 4.9e-7 uas (xp) and
+%   3.2e-8 us (dut1).
 %   These are fit errors only. They do not improve on the EOP series itself,
 %   whose own formal errors are tens of microarcseconds, and they are not a
 %   claim about the accuracy of the rotation - only that interpolating it costs
 %   nothing measurable against evaluating it directly.
 %
 %   The interpolant is C-infinity inside a panel and continuous but not
-%   differentiable across a panel boundary. That is still an improvement on the
-%   direct path, whose piecewise linear EOP interpolation puts a slope
-%   discontinuity at every midnight into a variable-step integrator's right
-%   hand side.
+%   differentiable across a panel boundary, where the interpolated EOP rows
+%   change slope - as they do on the direct path.
 %
 % ERRORS
 %   referenceSystem:earthOrientationInterpolant:missingEop
@@ -292,8 +285,8 @@ function interpolant = earthOrientationInterpolant(epoch, options)
         nodeMjd(:, k) = mexGateway('chebnodes', panelStartMjd(k), ...
             options.PanelSpan, options.Degree);
     end
-    [value, cipModel] = localEvaluateChain(nodeMjd(:), options.Eop, ...
-        options.ApplyTidalCorrections);
+    [value, cipModel, interpolation] = localEvaluateChain(nodeMjd(:), ...
+        options.Eop, options.ApplyTidalCorrections);
 
     % THE LAST NODE OF A PANEL THAT ENDS IN A LEAP SECOND IS TAKEN AT 23:59:60,
     % AS THE LEFT LIMIT OF ITS OWN PANEL (rev. 1.226). Until this revision it
@@ -347,31 +340,16 @@ function interpolant = earthOrientationInterpolant(epoch, options)
 
     residual = localResidual(interpolant, options.Eop, ...
         options.ApplyTidalCorrections);
-    % THE LENGTH-OF-DAY CHANNEL IS FITTED BUT NOT GATED, AND THE REASON IS
-    % DIMENSIONAL. Tolerance is stated in microarcseconds of ANGLE. Excess LOD
-    % does not enter the angle at all - it enters the ERA RATE - so bounding
-    % it in microarcseconds is a category error, not a strict or a lax choice.
-    % Its residual is reported in meta.residual alongside the others so it is
-    % visible, and the gate is applied to every other channel.
-    %
-    % DUT1 IS GATED AS THE ANGLE IT BECOMES (rev. 1.225, H.11 item 8). Its
-    % residual is in microseconds, and until this revision it was compared
-    % with the tolerance as if that number were microseconds too: at the
-    % default 0.5, dut1 was held to 7.5 uas of rotation while the angles were
-    % held to 0.5 - the category error the lod exclusion above avoids, made
-    % in the other direction. A UT1 error of dt turns the Earth by
-    % omega*dt, so the residual is scaled by the ERA rate (D63) into
-    % microarcseconds, 15.04 uas per us, before the comparison. meta.residual
-    % still reports microseconds.
+    % Every channel is gated as the angle it becomes: dut1's residual in
+    % microseconds turns the Earth by the ERA rate, 15.04 uas per us.
     name = string(interpolant.quantity);
     constants = referenceSystem.iersConstants();
     asAngle = residual;
     isUt1 = name == "dut1";
     asAngle(isUt1) = residual(isUt1) * ...
         referenceSystem.earthRotationAngleRate() / constants.arcsecondsToRadians;
-    gated = name ~= "lod";
-    if any(asAngle(gated) > options.Tolerance)
-        [worst, worstIndex] = max(asAngle .* gated);
+    if any(asAngle > options.Tolerance)
+        [worst, worstIndex] = max(asAngle);
         error('referenceSystem:earthOrientationInterpolant:toleranceNotMet', ...
             ['The fit reached %.4g uas of rotation in %s against a tolerance ', ...
             'of %.4g uas (dut1 counted at 15.04 uas per us). Raise Degree or ', ...
@@ -385,40 +363,29 @@ function interpolant = earthOrientationInterpolant(epoch, options)
         'tolerance', options.Tolerance, ...
         'cipModel', cipModel, ...
         'eopFile', options.Eop.meta.file, ...
+        'method', interpolation.method, ...
+        'zonalTides', interpolation.zonalTides, ...
         'spanMjd', [panelStartMjd(1), panelStartMjd(end) + options.PanelSpan], ...
         'tidalCorrections', options.ApplyTidalCorrections, ...
         'builtOn', versionInfo.generator);
 end
 
-function [value, cipModel] = localEvaluateChain(mjd, eop, applyTidal)
-%LOCALEVALUATECHAIN The seven quantities at a column of UTC MJD.
+function [value, cipModel, interpolation] = localEvaluateChain(mjd, eop, applyTidal)
+%LOCALEVALUATECHAIN The fitted quantities at a column of UTC MJD.
 %   One place, called by both the fit and the residual check, so that the
 %   thing being fitted and the thing it is compared against cannot drift
-%   apart. That is the whole reason this is a function and not two blocks -
-%   and rev. 1.91 shows it is not enough on its own, because when this
-%   function was wrong BOTH of them were wrong together and agreed.
-%
-%   THE SUB-DAILY CORRECTIONS ARE APPLIED HERE, and rev. 1.90 did not apply
-%   them. Without them xp, yp and dut1 are a piecewise LINEAR interpolation of
-%   daily table rows, which any degree above one reproduces exactly - so the
-%   residual sat at the CIP's double-precision floor, degree 12 measured the
-%   same as degree 20, and degree 4 passed a tolerance it should have failed
-%   by orders of magnitude. The tests said so and the diagnosis was not that
-%   the tests were badly chosen. It was that the interpolant did not contain
-%   the physics that decides its own degree: section B.9.2 measured the
-%   ocean tide and libration as the binding quantity, and this function was
-%   omitting exactly those terms.
+%   apart. The sub-daily corrections are applied here when requested: they
+%   are the physics that decides the degree.
 
     utc = referenceSystem.daySecondToEpoch( ...
         [floor(mjd), (mjd - floor(mjd)) * 86400], "UTC");
-    [value, cipModel] = localEvaluateEpochs(utc, eop, applyTidal);
+    [value, cipModel, interpolation] = localEvaluateEpochs(utc, eop, applyTidal);
 end
 
-function [value, cipModel] = localEvaluateEpochs(utc, eop, applyTidal)
-%LOCALEVALUATEEPOCHS The seven quantities at a UTC epoch struct.
-%   The body of localEvaluateChain, taking the epoch itself so that the one
-%   instant an MJD cannot name - 23:59:60 of a leap-second day - can still be
-%   evaluated by the same chain (rev. 1.226).
+function [value, cipModel, interpolation] = localEvaluateEpochs(utc, eop, applyTidal)
+%LOCALEVALUATEEPOCHS The fitted quantities at a UTC epoch struct.
+%   Takes the epoch itself so that the one instant an MJD cannot name,
+%   23:59:60 of a leap-second day, can be evaluated by the same chain.
 
     if applyTidal
         correction = referenceSystem.subdailyEopCorrection(utc);
@@ -430,15 +397,12 @@ function [value, cipModel] = localEvaluateEpochs(utc, eop, applyTidal)
     tt = referenceSystem.convertTimeScale(utc, "TT");
     [X, Y, s] = referenceSystem.cipCoordinates(tt, 'Eop', eopAt);
 
-    % SEVEN CHANNELS SINCE P19c, AND THE SEVENTH IS WHAT LETS THE ROTATION
-    % STOP INTERPOLATING THE SERIES. The excess length of day is the only
-    % quantity 'ApplyLengthOfDay' needs and the only reason the interpolated
-    % path still called interpolateEop; fitting it here costs one more
-    % Chebyshev expansion per panel and removes that call entirely.
-    value = [X, Y, s, eopAt.xp, eopAt.yp, eopAt.dut1, eopAt.lod];
+    value = [X, Y, s, eopAt.xp, eopAt.yp, eopAt.dut1];
     assert(size(value, 2) == numel(localQuantityNames()), ...
-        'localEvaluateChain and localQuantityNames disagree on the columns.');
+        'localEvaluateEpochs and localQuantityNames disagree on the columns.');
     cipModel = eopAt.meta.cipModel;
+    interpolation = struct('method', eopAt.meta.method, ...
+        'zonalTides', eopAt.meta.zonalTides);
 end
 
 function residual = localResidual(interpolant, eop, applyTidal)
@@ -476,13 +440,12 @@ function residual = localResidual(interpolant, eop, applyTidal)
     % dut1. The conversion is spelled out rather than taken from
     % iersConstants.arcsecondsToRadians inverted, because inverting a constant
     % named for the other direction is how a factor of pi goes missing.
-    % THE SCALE IS BUILT FROM THE QUANTITY NAMES, so a channel added without
-    % a matching entry here is a named error rather than a silent mis-scaling
-    % by 2e11. dut1 and lod are both seconds; the other five are angles.
+    % THE SCALE IS BUILT FROM THE QUANTITY NAMES: dut1 is seconds and the
+    % other five are angles.
     name = string(interpolant.quantity);
     radiansToMicroarcseconds = 648000 / pi * 1e6;
     scale = repmat(radiansToMicroarcseconds, 1, numel(name));
-    scale(ismember(name, ["dut1", "lod"])) = 1e6;
+    scale(name == "dut1") = 1e6;
     residual = max(difference, [], 1) .* scale;
 end
 
@@ -494,7 +457,7 @@ function name = localQuantityNames()
 %   means editing this list and localEvaluateChain, and an assertion there
 %   refuses the two to disagree.
 
-    name = ["X", "Y", "s", "xp", "yp", "dut1", "lod"];
+    name = ["X", "Y", "s", "xp", "yp", "dut1"];
 end
 
 function taiMinusUtc = localLeapSeconds(panelStartMjd)
