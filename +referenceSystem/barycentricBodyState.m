@@ -87,6 +87,10 @@ function [position, velocity, info] = barycentricBodyState(body, epoch, options)
 %       own error. Convert deliberately with convertTimeScale first.
 %   referenceSystem:barycentricBodyState:gatewayMissing
 %   referenceSystem:barycentricBodyState:providerNotAvailable
+%   referenceSystem:barycentricBodyState:staleEphemeris
+%       Source "mice": the SPICE pool does not hold exactly the kernels the
+%       Ephemeris struct names - a later readEphemeris replaced them, or other
+%       code loaded an SPK beside them. Call readEphemeris again.
 %   referenceSystem:ephemerisBodies:unknownSource
 %
 % WARNINGS

@@ -1,33 +1,37 @@
 function [rBcrs, vBcrs, info] = gcrsToBcrs(rGcrs, vGcrs, epoch, options)
 %GCRSTOBCRS Express a geocentric vector in barycentric (BCRS) coordinates.
 %
-%   rBcrs = gcrsToBcrs(rGcrs, epoch, Scale = "tdbCompatible")
-%   [rBcrs, info] = gcrsToBcrs(rGcrs, epoch, Name, Value)
+%   rBcrs = gcrsToBcrs(rGcrs, [], epoch, Scale = "tdbCompatible")
+%   [rBcrs, vBcrs] = gcrsToBcrs(rGcrs, vGcrs, epoch, Scale = "tdbCompatible")
+%   [rBcrs, vBcrs, info] = gcrsToBcrs(rGcrs, vGcrs, epoch, Name, Value)
 %
-%   Applies IERS Conventions (2010) Eq. (11.19), or Eq. (11.18) with
-%   Scale "none": the Lorentz contraction along the Earth's barycentric
-%   velocity, the scaling by the external gravitational potential, and - for
-%   "tdbCompatible" - the TT-to-TDB length scale L_C.
+%   Applies the spatial part of IAU 2000 Resolution B1.3 in the direction
+%   GCRS to BCRS: the Lorentz contraction along the Earth's barycentric
+%   velocity, the scaling by the external gravitational potential, the two
+%   acceleration terms and - for "tdbCompatible" - the TT-to-TDB length scale
+%   L_C. Without the acceleration terms this is IERS Conventions (2010)
+%   Eq. (11.19), or Eq. (11.18) with Scale "none". On request the velocity is
+%   transformed with the same resolution's time part.
 %
 %   IT RETURNS THE SAME SEPARATION VECTOR IN DIFFERENT COORDINATES, NOT A
-%   BARYCENTRIC POSITION. See METHOD; the distinction is four orders of
-%   magnitude wide and is the first thing to get right about this function.
+%   BARYCENTRIC POSITION. See METHOD.
 %
 % INPUT ARGUMENTS
 %   Name    Size   Type      Units  Description
 %   ----    ----   ----      -----  -----------
 %   rGcrs   3xN    double    m      Geocentric vector in the GCRS, one column
 %                                   per epoch, or one column for all epochs.
-%   vGcrs   3xN    double    m/s    Velocity per unit of the SOURCE frame's
-%                                   coordinate time. PASS [] FOR POSITION ONLY.
+%   vGcrs   3xN    double    m/s    Its rate per second of GCRS coordinate
+%                                   time, or [] for position only.
 %   epoch   1x1    struct    -      Epoch struct, N entries, any scale but UT1.
 %
 % OPTIONAL NAME-VALUE ARGUMENTS
 %   Name         Size   Type     Default     Description
 %   ----         ----   ----     -------     -----------
-%   Scale        1x1    string   NONE        Required. "tdbCompatible" applies
-%                                            Eq. (11.19); "none" applies
-%                                            Eq. (11.18). See ERRORS.
+%   Scale        1x1    string   NONE        Required. "tdbCompatible" (GCRS in
+%                                            TT-compatible and BCRS in
+%                                            TDB-compatible units) or "none"
+%                                            (TCG and TCB). See ERRORS.
 %   Source       1x1    string   "sofa"      Ephemeris provider for U and V.
 %   Ephemeris    1x1    struct   struct([])  Kernels, for Source "mice".
 %
@@ -35,6 +39,9 @@ function [rBcrs, vBcrs, info] = gcrsToBcrs(rGcrs, vGcrs, epoch, options)
 %   Name                   Size   Type     Units    Description
 %   ----                   ----   ----     -----    -----------
 %   rBcrs                  3xN    double   m        The vector in BCRS coordinates.
+%   vBcrs                  3xN    double   m/s      Its rate per second of BCRS
+%                                                   coordinate time, or [] when
+%                                                   vGcrs was [].
 %   info                   1x1    struct   -        Fields listed below.
 %   .scale                 1x1    string   -        The Scale actually applied.
 %   .scaleTerm             1x1    double   1        L_C, or 0 for "none".
@@ -47,95 +54,80 @@ function [rBcrs, vBcrs, info] = gcrsToBcrs(rGcrs, vGcrs, epoch, options)
 %   THIS IS A CHANGE OF COORDINATES FOR A VECTOR, NOT A CHANGE OF ORIGIN. The
 %   barycentric POSITION of the point is
 %
-%       xBcrs = barycentricBodyState("earth", epoch) + gcrsToBcrs(rGcrs, ...)
+%       xBcrs = barycentricBodyState("earth", epoch) + gcrsToBcrs(rGcrs, [], ...)
 %
-%   and that addition is deliberately left to the caller, because the two
-%   quantities have accuracies four orders apart and combining them silently
-%   would hide which one dominates. This function is good to the Conventions'
-%   stated 1 mm; the Earth's barycentric position from the bundled SOFA
-%   provider is good to 4.6 km. Adding them without noticing produces a number
-%   whose 1 mm claim is nonsense.
+%   and that addition is left to the caller, because the two quantities have
+%   accuracies four orders apart: this function is good to the Conventions'
+%   stated 1 mm, while the Earth's barycentric position from the bundled SOFA
+%   provider is good to 4.6 km.
 %
-%   THE TRANSFORMATION IS EXACTLY LINEAR AND THAT IS WHY THE INVERSE IS EXACT.
-%   Both equations have the form r_out = M r_in with M = alpha*I + beta*V*V',
-%   a rank-one update of a scaled identity, so bcrsToGcrs inverts it in closed
-%   form by Sherman-Morrison rather than by negating parameters (decision D68's
-%   rule, met here by an exact solution rather than by an accurate one).
+%   THE FORWARD MAP IS THE RESOLUTION'S, AND THIS DIRECTION INVERTS IT. The
+%   resolution gives the GCRS vector X in terms of the BCRS separation r,
 %
-%   U and V come from barycentricBodyState and geocentricBodyState, so P22a is
-%   a genuine dependency and not a convenience. They enter only at order 1/c^2,
-%   which is why the bundled provider suffices - see ACCURACY.
+%       X = r + (1/c^2)[ (1/2) V (V.r) + w r + r (A.r) - (1/2) A |r|^2 ]
+%
+%   with V and A the Earth's barycentric velocity and acceleration and w the
+%   external potential, plus L_C c^2 for "tdbCompatible". bcrsToGcrs applies it
+%   in closed form; this function solves it by fixed-point iteration, because
+%   the acceleration terms are quadratic in r. The correction is 1.5e-8 of r,
+%   so two iterations leave roundoff.
+%
+%   THE VELOCITY. Along a trajectory r(t), dX/dt follows from the map, and the
+%   GCRS rate is dX/dT = (dX/dt) / (dT/dt), with
+%
+%       dT/dt = 1 - (1/c^2)[ |V|^2/2 + w + A.r + V.rdot ]
+%
+%   from the time part of the same resolution. Rates carry no L_C: the length
+%   and the time scalings cancel in a velocity. Terms in dw/dt and dA/dt are
+%   dropped: 5.7e-28 m/s and 6.1e-13 m/s at GRACE altitude.
+%
+%   U and V come from barycentricBodyState and geocentricBodyState (Sun and
+%   Moon; the planets contribute at most 12 micrometres through U).
 %
 % ACCURACY
-%   The Conventions state their own uncertainty for Eq. (11.19) as BELOW 1 mm,
-%   and that is the accuracy of this function. Every quantity neglected inside
-%   it is smaller than that and is quantified in the private helper: the
-%   planets contribute at most 12 micrometres through U, the Moon 0.9
-%   micrometres, and the measured uncertainties of GM_sun and L_C are nine and
-%   six orders below the millimetre respectively.
+%   The Conventions state their own uncertainty for the position as below
+%   1 mm, and that is the accuracy of this function. The ephemeris barely
+%   matters: U and V enter only at order 1/c^2, so the bundled provider's
+%   2.8 mm/s on the Earth's velocity moves the result by 4.8e-9 m and its
+%   8.3 km on the solar distance by 3.5e-9 m.
 %
-%   THE EPHEMERIS IS ALMOST IRRELEVANT HERE, WHICH IS COUNTER-INTUITIVE AND
-%   WORTH STATING. U and V reach the answer only through 1/c^2 terms, so their
-%   errors are suppressed by 1e-8. Measured against the bundled SOFA provider's
-%   own budget: 2.8 mm/s on the Earth's velocity moves the result by 4.8e-9 m,
-%   and 8.3 km on the solar distance by 3.5e-9 m - six orders inside the 1 mm.
-%   Do not reach for MICE on account of this function.
-%
-%   TERM SIZES AT A MID-LATITUDE STATION (|r| = 6391 km), measured, so that the
-%   choice of Scale is a decision taken with the numbers in view:
+%   TERM SIZES AT A MID-LATITUDE STATION (|r| = 6391 km), measured:
 %
 %     L_C scale term          -0.0947 m   (present only for "tdbCompatible")
 %     U/c^2 potential term    -0.0631 m
 %     Lorentz term             +0.0322 m  (maximum, when r is along V)
-%     total, "tdbCompatible"  -0.1715 m
-%     total, "none"           -0.0769 m
 %
-%   THE VELOCITY IS NOW PROVIDED, FROM IAU 2000 RESOLUTION B1.3, AND THE TERM
-%   THAT COULD NOT BE PINNED DOWN AT REV. 1.132 IS ITS dT/dt FACTOR:
-%   1 - (v_E^2/2 + w_ext + a_E.r + v_E.v)/c^2, which is 1.5e-8 - on 31 km/s
-%   that is 4.7e-4 m/s, four thousand times the 1e-7 m/s a KBR reduction works
-%   at. Refusing to guess it was right. Validated by central difference at six
-%   step sizes: the residual falls by exactly four at each halving, order 2.00
-%   throughout, so it is the difference's own truncation and not a formula
-%   error. Superseded note follows.
-%
-%   NO VELOCITY TRANSFORMATION IS PROVIDED AND THAT IS NOT AN OVERSIGHT. The
-%   IERS Conventions (2010) give Eqs. (11.18) and (11.19) for POSITION and
-%   state no transformation for velocity anywhere in Chapters 10 or 11.
-%   Differentiating (11.18) would need the Earth's barycentric acceleration and
-%   dU/dt, which are available, but also the rate relation between the two
-%   frames' time arguments, which is a convention question rather than an
-%   arithmetic one and whose size - d(TDB-TT)/dt is about 3.3e-10, i.e. 2.5e-6
-%   m/s at 7.5 km/s - is twenty-five times the 1e-7 m/s tier a KBR or LRI
-%   reduction works at. Supplying a velocity derived from a rule this document
-%   does not state would produce something smooth, self-consistent and wrong at
-%   exactly the level the function exists to reach.
+%   THE VELOCITY is held to a difference of the position map over the
+%   resolution's own time transformation; see the ACCURACY of bcrsToGcrs:
+%   1.9e-10 m/s, where leaving out the time factor misses by 1.3e-4 m/s under
+%   "none" and 2.0e-5 m/s under "tdbCompatible".
 %
 % ERRORS
 %   referenceSystem:gcrsToBcrs:scaleRequired
 %       Scale has no default. The two settings differ by 9.5 cm at the Earth's
 %       surface, ninety-five times the formula's own uncertainty, and neither
-%       is visible in the result - decision D67's rule, applied again.
+%       is visible in the result.
 %   referenceSystem:gcrsToBcrs:unknownScale
 %   referenceSystem:gcrsToBcrs:sizeMismatch
 %   referenceSystem:barycentricBodyState:wrongScale
 %
 % REFERENCES
+%   Soffel, M. et al., 2003, AJ 126, 2687, Appendix A (IAU 2000 Resolution
+%       B1.3, space and time parts).
 %   IERS Conventions (2010), IERS Technical Note 36, G. Petit and B. Luzum
 %       (eds.), Eq. (11.18) and Eq. (11.19), Section 11.2; Table 1.1.
 %   IAU 2000 Resolutions B1.3 and B1.5 (the BCRS, GCRS and L_C).
-%   Klioner, S. A. et al., 2010, Proc. IAU Symp. 261.
 %
 % EXAMPLE
 %   t = referenceSystem.datetimeToEpoch(datetime(2023, 3, 1), "TT");
 %   station = [4517590; 837897; 4442892];
-%   rBcrs = referenceSystem.gcrsToBcrs(station, t, Scale = "tdbCompatible");
+%   rBcrs = referenceSystem.gcrsToBcrs(station, [], t, Scale = "tdbCompatible");
 %   fprintf('length changes by %.4f m\n', norm(rBcrs) - norm(station));
 %
 % KEYWORDS
 %   BCRS, GCRS, barycentric, Lorentz, L_C, TT-compatible, TDB-compatible, scale
 %
-% See also BCRSTOGCRS, BARYCENTRICBODYSTATE, GEOCENTRICBODYSTATE, ITERSCONSTANTS.
+% See also BCRSTOGCRS, BARYCENTRICBODYSTATE, GEOCENTRICBODYSTATE, IERSCONSTANTS.
 %
 % -------------------------------------------------------------------------
 % referenceSystem v2.1

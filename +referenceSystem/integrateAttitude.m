@@ -122,13 +122,8 @@ function [q, info, convention] = integrateAttitude(initialQuaternion, omega, ...
 %   factor of two rather than the factor of hundreds the term deserves.
 %
 %   THAT IS ALSO WHY THE TWO METHODS AGREE. They differ by less than 1e-11 rad
-%   here - which is what the suite asserts and all it can see; the figure of
-%   5e-11 carried here until rev. 1.119 was FALSIFIED by run 38, because the
-%   test now bounds the separation at 1e-11 and passes. That figure never came
-%   from a run: until rev. 1.118 the metric it would have been measured with
-%   returned exactly zero below 2e-08 rad. An independent mirror puts the
-%   separation at 5e-14, and that number is attributed rather than adopted -
-%   two mirrors have now disagreed about it by three orders (O20). The methods
+%   here, which is what the suite asserts; an independent mirror puts the
+%   separation at 5e-14, a figure attributed rather than adopted. The methods
 %   differ by far less than either differs from the truth, not
 %   because the integrators are equivalent but because neither is what limits
 %   the answer: both reconstruct omega from the same two samples per interval.

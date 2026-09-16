@@ -28,8 +28,8 @@ function [position, velocity] = applyBcrsToGcrs(ingredient, position, velocity)
 %
 % METHOD
 %   IAU 2000 Resolution B1.3, spatial part, as printed in Soffel et al. 2003
-%   Appendix A1. See bcrsTransform, which assembles the ingredients and states
-%   the equation, the term sizes and the finite-difference validation in full.
+%   Appendix A1, and for the velocity its time part. See bcrsTransform, which
+%   assembles the ingredients and states the equations and the term sizes.
 %
 % ACCURACY
 %   The resolution's own. Every neglected term is quantified in bcrsTransform;
@@ -72,12 +72,17 @@ function [position, velocity] = applyBcrsToGcrs(ingredient, position, velocity)
     aDotR = sum(a.*position, 1);
 
     if ~isempty(velocity)
+        % dX/dt, then divided by dT/dt = 1 - rateOfTime/c^2. The potential
+        % enters without the L_C scale term: TT and TDB rescale lengths and
+        % times alike, so a velocity carries no L_C.
+        potential = ingredient.externalPotential;
         vDotRdot = sum(v.*velocity, 1);
         aDotRdot = sum(a.*velocity, 1);
         rDotRdot = sum(position.*velocity, 1);
+        rateOfTime = 0.5*sum(v.^2, 1) + potential + aDotR + vDotRdot;
         velocity = velocity + (0.5*a.*vDotR + 0.5*v.*(aDotR + vDotRdot) + ...
-            w.*velocity + velocity.*aDotR + position.*aDotRdot - ...
-            a.*rDotRdot)/cSquared;
+            potential.*velocity + velocity.*aDotR + position.*aDotRdot - ...
+            a.*rDotRdot + velocity.*rateOfTime)/cSquared;
     end
 
     position = position + (0.5*v.*vDotR + w.*position + position.*aDotR - ...

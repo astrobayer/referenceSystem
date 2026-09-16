@@ -1,24 +1,25 @@
 function [rGcrs, vGcrs, info] = bcrsToGcrs(rBcrs, vBcrs, epoch, options)
 %BCRSTOGCRS Express a barycentric-coordinate vector in the GCRS.
 %
-%   rGcrs = bcrsToGcrs(rBcrs, epoch, Scale = "tdbCompatible")
-%   [rGcrs, info] = bcrsToGcrs(rBcrs, epoch, Name, Value)
+%   rGcrs = bcrsToGcrs(rBcrs, [], epoch, Scale = "tdbCompatible")
+%   [rGcrs, vGcrs] = bcrsToGcrs(rBcrs, vBcrs, epoch, Scale = "tdbCompatible")
+%   [rGcrs, vGcrs, info] = bcrsToGcrs(rBcrs, vBcrs, epoch, Name, Value)
 %
-%   The exact inverse of gcrsToBcrs: IERS Conventions (2010) Eq. (11.19), or
-%   Eq. (11.18) with Scale "none", solved rather than approximated.
+%   The spatial part of IAU 2000 Resolution B1.3, in the direction it is
+%   written, and the inverse of gcrsToBcrs; on request the velocity, with the
+%   resolution's time part.
 %
 %   THE INPUT IS A SEPARATION VECTOR FROM THE GEOCENTRE EXPRESSED IN BCRS
 %   COORDINATES, NOT A BARYCENTRIC POSITION. Subtract the Earth's barycentric
-%   position first; see METHOD in gcrsToBcrs, where the distinction is four
-%   orders of magnitude wide.
+%   position first; see METHOD in gcrsToBcrs.
 %
 % INPUT ARGUMENTS
 %   Name    Size   Type      Units  Description
 %   ----    ----   ----      -----  -----------
 %   rBcrs   3xN    double    m      Geocentric vector in BCRS coordinates, one
 %                                   column per epoch, or one column for all.
-%   vBcrs   3xN    double    m/s    Velocity per unit of the SOURCE frame's
-%                                   coordinate time. PASS [] FOR POSITION ONLY.
+%   vBcrs   3xN    double    m/s    Its rate per second of BCRS coordinate
+%                                   time, or [] for position only.
 %   epoch   1x1    struct    -      Epoch struct, N entries, any scale but UT1.
 %
 % OPTIONAL NAME-VALUE ARGUMENTS
@@ -32,53 +33,50 @@ function [rGcrs, vGcrs, info] = bcrsToGcrs(rBcrs, vBcrs, epoch, options)
 %   Name    Size   Type     Units  Description
 %   ----    ----   ----     -----  -----------
 %   rGcrs   3xN    double   m      The vector in GCRS coordinates.
+%   vGcrs   3xN    double   m/s    Its rate per second of GCRS coordinate
+%                                  time, or [] when vBcrs was [].
 %   info    1x1    struct   -      As gcrsToBcrs.
 %
 % METHOD
-%   THE INVERSE IS EXACT, NOT ACCURATE, AND THAT IS THE POINT OF THIS FILE.
-%   Both Conventions equations are linear in the geocentric vector,
-%   r_out = M r_in with M = alpha*I + beta*V*V', a rank-one update of a scaled
-%   identity. Sherman-Morrison gives
-%
-%       M^-1 = (1/alpha) [ I - beta V V' / (alpha + beta |V|^2) ]
-%
-%   in closed form. Cross-checked in numpy against a dense inverse: both leave
-%   ||M M^-1 - I|| at 1.11e-16, so nothing is bought by forming the matrix.
-%
-%   Decision D68 requires every inverse in this toolbox to be SOLVED and never
-%   obtained by negating the forward parameters. Negation would in fact be
-%   accurate here - the correction is 1.5e-8, so its square is 2e-16 relative,
-%   a nanometre at the Earth's surface - but an exact solution that costs the
-%   same removes the argument entirely, and a rule that is followed only where
-%   it is cheap is not a rule.
+%   The map is applied in closed form, X = r + (1/c^2)[ ... ] as gcrsToBcrs
+%   writes it, and the velocity is dX/dt divided by dT/dt, with dT/dt from the
+%   resolution's time part; see gcrsToBcrs for both equations.
 %
 % ACCURACY
 %   The Conventions' own stated uncertainty, below 1 mm, exactly as gcrsToBcrs.
 %   The round trip through both functions closes to 9.3e-10 m at a
-%   mid-latitude station, which is roundoff at the 6.4e6 m scale and not a
-%   property of the formula.
+%   mid-latitude station, which is roundoff at the 6.4e6 m scale.
 %
-%   THE VELOCITY IS PROVIDED; see gcrsToBcrs for its source and validation.
+%   THE VELOCITY IS HELD TO THE RESOLUTION ITSELF: a straight BCRS trajectory
+%   is mapped at t - h and t + h, and the difference of the two GCRS vectors
+%   is divided by the GCRS time elapsed between the two events, formed from
+%   the time part of Resolution B1.3 - 2h less the integral of
+%   |V|^2/2 + w and the change in V.r, over c^2. Measured on a 7.6 km/s
+%   trajectory at h = 50 s: 1.8e-10 m/s under "none" and 1.9e-10 m/s under
+%   "tdbCompatible". Without the dT/dt factor the velocity missed the same
+%   oracle by 1.3e-4 m/s and 2.0e-5 m/s.
 %
 % ERRORS
 %   referenceSystem:bcrsToGcrs:scaleRequired
 %   referenceSystem:bcrsToGcrs:unknownScale
 %   referenceSystem:bcrsToGcrs:sizeMismatch
+%   referenceSystem:barycentricBodyState:wrongScale
 %
 % REFERENCES
+%   Soffel, M. et al., 2003, AJ 126, 2687, Appendix A (IAU 2000 Resolution
+%       B1.3, space and time parts).
 %   IERS Conventions (2010), IERS Technical Note 36, Eq. (11.18) and (11.19),
 %       Section 11.2; Table 1.1.
-%   Sherman, J. and Morrison, W. J., 1950, Ann. Math. Statist. 21(1), 124.
 %
 % EXAMPLE
 %   t = referenceSystem.datetimeToEpoch(datetime(2023, 3, 1), "TT");
 %   station = [4517590; 837897; 4442892];
-%   b = referenceSystem.gcrsToBcrs(station, t, Scale = "tdbCompatible");
-%   back = referenceSystem.bcrsToGcrs(b, t, Scale = "tdbCompatible");
+%   b = referenceSystem.gcrsToBcrs(station, [], t, Scale = "tdbCompatible");
+%   back = referenceSystem.bcrsToGcrs(b, [], t, Scale = "tdbCompatible");
 %   fprintf('round trip %.3e m\n', norm(back - station));
 %
 % KEYWORDS
-%   BCRS, GCRS, barycentric, Lorentz, L_C, inverse, Sherman-Morrison
+%   BCRS, GCRS, barycentric, Lorentz, L_C, velocity, Resolution B1.3
 %
 % See also GCRSTOBCRS, BARYCENTRICBODYSTATE, GEOCENTRICBODYSTATE, IERSCONSTANTS.
 %

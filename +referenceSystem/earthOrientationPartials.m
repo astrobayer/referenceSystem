@@ -56,15 +56,13 @@ function [partialXp, partialYp, partialDeltaUt1, info] = ...
 %
 %   xp ROTATES ABOUT MINUS Y AND yp ABOUT MINUS X, not the other way round.
 %   iauPom00 builds W as R3(-s')*R2(xp)*R1(yp), so xp enters through the
-%   SECOND-axis factor and yp through the first. Revision 1.107 had them
-%   transposed - the natural reading of "the x pole coordinate" is a rotation
-%   about x, and it is wrong. The finite-difference test caught it on the first
-%   run, which is the only reason this comment can be written in the past
-%   tense.
+%   SECOND-axis factor and yp through the first. The natural reading of "the x
+%   pole coordinate" is a rotation about x, and it is wrong; the
+%   finite-difference test holds the assignment.
 %
 %   THE SIGNS WERE MEASURED, NOT DERIVED FROM THE FACTOR ORDER OF iauPom00.
-%   Handover revision 1.106 records the experiment: the generators were
-%   finite-differenced against rsRotationItrsToGcrs itself, so the code being
+%   The generators were finite-differenced against rsRotationItrsToGcrs
+%   itself, so the code being
 %   differentiated is the authority for its own derivative. Differentiating a
 %   remembered factor order is the one place in this function where a sign error
 %   is likely, and a sign error in a partial does not announce itself - it slows
@@ -92,7 +90,7 @@ function [partialXp, partialYp, partialDeltaUt1, info] = ...
 %
 % REFERENCES
 %   IERS Conventions (2010), IERS Technical Note 36, chapter 5.
-%   Handover revision 1.106 for the measured generators.
+%   Handover section H.10 (P20) for the measured generators.
 %
 % EXAMPLE
 %   eop = referenceSystem.readEop('eop20c04.txt');

@@ -191,6 +191,11 @@ function [eop, info] = readEop(file, options)
 %   referenceSystem:readEop:implausibleValue
 %   referenceSystem:readEop:unsupportedBulletin
 %
+% WARNINGS
+%   referenceSystem:readEop:samplingGap   One per call. The series has rows
+%       further apart than its sampling step; interpolating across a gap is an
+%       extrapolation in all but name.
+%
 % REFERENCES
 %   IERS Conventions (2010), IERS Technical Note 36, Ch. 5.
 %   Capitaine, N. and Wallace, P. T., 2006, Astron. Astrophys. 450, 855.

@@ -260,8 +260,8 @@ Revised: 2026-08-09 10:15 (CEST, UTC+02:00)
   downloadKernels each carried a private localDefaultCache that composed
   data/ from their own mfilename, so the toolbox held two answers to one
   question and neither could be moved. Both now resolve through this
-  function, which is rev. 1.53's rule applied to a path: where a value has
-  more than one definition, delete the copies rather than keep them equal.
+  function: where a value has more than one definition, the copies are
+  deleted rather than kept equal.
 
   THE MECHANISM IS setpref AND IT MATCHES shAnalysis DELIBERATELY. The same
   author maintains both toolboxes and calls shLowLevel.dataFolder with the
@@ -297,7 +297,7 @@ Revised: 2026-08-09 10:15 (CEST, UTC+02:00)
       The folder does not exist and could not be created; the message
       carries the reason the file system gave.</pre>
 <h4>REFERENCES</h4>
-<pre>Handover decision D119 (rev. 1.207) and section C.10. The sibling
+<pre>Handover decision D119 and section C.10. The sibling
   implementation is shLowLevel.dataFolder in the shAnalysis toolbox.</pre>
 <h4>EXAMPLE</h4>
 <pre>% Where does installed data go, and how do I move it off the system disk?
@@ -982,7 +982,8 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
                                                    the given scale. Negative
                                                    values precede it.
   scale              1x1    string | char   -      Time scale, any case, one
-                                                   of the names in timeScale.</pre>
+                                                   of the names in timeScale
+                                                   except UTC and GLONASS.</pre>
 <h4>OUTPUT ARGUMENTS</h4>
 <pre>Name       Size   Type      Units  Description
   ----       ----   ----      -----  -----------
@@ -1002,9 +1003,10 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
   may well be counting TAI or GPS seconds from that instant, and assuming TT
   would be a silent 32.184 s error.
 
-  For a UTC input the count is UTC seconds and therefore not proper time
-  across a leap second; normalizeEpoch will refuse an offset larger than a
-  day for that scale. Count in TAI or TT if the arc spans a leap second.</pre>
+  A LEAP-BEARING SCALE IS REFUSED. Seconds counted in UTC or GLONASS since
+  J2000.0 are not a time: 22 leap seconds lie between J2000.0 and 2017, and
+  a count of labelled seconds does not say which of them it skipped. Count in
+  TAI, TT or GPS and convert the epoch with convertTimeScale.</pre>
 <h4>ACCURACY</h4>
 <pre>Exact to the resolution of the input. For an arc of one day the seconds
   field stays below 1e5, where one unit in the last place is 1.5e-11 s, so
@@ -1012,7 +1014,8 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
   reaches 3e9 s, where one unit in the last place is 4.8e-7 s, and that
   limitation belongs to the caller's representation, not to this function.</pre>
 <h4>ERRORS</h4>
-<pre>referenceSystem:timeScale:unknownScale</pre>
+<pre>referenceSystem:j2000SecondsToEpoch:leapBearingScale
+  referenceSystem:timeScale:unknownScale</pre>
 <h4>REFERENCES</h4>
 <pre>IAU 1994 Resolution C7 and IERS Conventions (2010), TN36 Ch. 1 (J2000.0).</pre>
 <h4>EXAMPLE</h4>
@@ -1278,27 +1281,23 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
   is about 83000 iauDat evaluations in one vectorised call, takes a few
   milliseconds and is cached in a persistent variable for the session.
 
-  The coverage end date is discovered the same way: iauDat flags a year more
-  than five years beyond its own release with status +1, and validThrough is
-  the day before the first such day. It is not a literal here either.
+  The coverage end date of the SOFA table is discovered the same way: iauDat
+  flags a year more than five years beyond its own release with status +1,
+  and validThrough is the day before the first such day. It is not a literal
+  here either.
 
   EACH COVERAGE BOUND IS PUBLISHED TWICE, AS A DATE AND AS A DAY NUMBER, and
   the second form is not a convenience. Consumers compare a bound against
   epoch.day, which is an MJD, so a date-only bound forces every one of them to
-  write days(bound - datetime(1858, 11, 17)) - and that is the MJD epoch,
-  copied out of this file into theirs. Four such copies had accumulated by
-  rev. 1.215, one of them in package code, which is the same shape as finding
-  M-2 one layer down: a constant with no single owner, free to diverge, and
-  invisible to the contract test that greps for leap-second dates because
-  1858-11-17 is not one. The day numbers cost nothing to hand back - both are
-  already cached, one by localScanSofaTable and one by localColumnsOf - and
-  they are what removes the copies.
+  write days(bound - datetime(1858, 11, 17)) - a copy of the MJD epoch in
+  each of them, free to diverge. The day numbers cost nothing to hand back:
+  both are cached with the active table.
 
-  THE TWO BOUNDS ARE NOT SYMMETRIC UNDER AN OVERRIDE AND THAT IS DELIBERATE.
-  validFrom follows the ACTIVE table, so leapSecondTable("load", file) moves
-  it and every consumer that trims to it. validThrough reports where SOFA
-  stops being willing to answer, which is a property of the bundled iauDat
-  rather than of the step list, so an override does not move it.
+  AN OVERRIDE MOVES BOTH BOUNDS WHERE IT STATES THEM. validFrom follows the
+  active table's first row. validThrough is the day before the expiry a
+  leap-seconds.list states on its "#@" line, because that is how far its
+  publisher vouches for it; a two-column table states no expiry and keeps
+  the coverage of the bundled SOFA release. "reset" restores both.
 
   TRAP, measured against SOFA 20231011 and the reason this function
   range-checks rather than trusting the status. iauDat answers a pre-1960
@@ -1319,15 +1318,11 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
   SOFA table. Install the override inside the parfor body, or pass the table
   in as sliced data. leapSecondTable("state") reports which table answered.
 
-  THE COLUMNS "deltaAT" READS ARE DERIVED ONCE, NOT PER CALL (prompt P28b,
-  rev. 1.122). The step days, the offsets, the discretize edges, the date of
-  the first row and the coverage end AS A DAY NUMBER are all fixed for the
-  life of the active table, and are computed when that table is installed:
-  after the SOFA scan, after "load" and after "reset". A profiled single-epoch
-  rotation reached this function six times, four of them on "deltaAT", and
-  each of those four built a datetime for 1858-11-17, subtracted it, called
-  days and floored the result to recover a number the scan already knew, then
-  indexed the timetable three times for columns that had not changed.
+  THE COLUMNS "deltaAT" READS ARE DERIVED ONCE, NOT PER CALL (prompt P28b).
+  The step days, the offsets, the discretize edges, the date of the first
+  row and the coverage end are all fixed for the life of the active table,
+  and are computed when that table is installed: after the SOFA scan, after
+  "load" and after "reset".
 
   The cache is not an optimisation of the lookup: the lookup was already one
   discretize on integer day numbers. It removes work that was never a function
@@ -1351,9 +1346,10 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
   MATLAB:validators:mustBeMember</pre>
 <h4>WARNINGS</h4>
 <pre>referenceSystem:leapSecondTable:dubiousYear   One per call, however large N is.
-      Raised from 2029-01-01 on the bundled SOFA release, because iauDat
-      flags any year more than five beyond its own IYV. It is SOFA's
-      reminder that leap seconds cannot be predicted, not a defect.</pre>
+      Raised beyond validThrough: from 2029-01-01 on the bundled SOFA
+      release, because iauDat flags any year more than five beyond its own
+      IYV, or beyond the expiry of a loaded leap-seconds.list. Loading a
+      newer leap-seconds.list moves it.</pre>
 <h4>REFERENCES</h4>
 <pre>IAU SOFA release 20231011, iauDat (mex/sofa/dat.c).
   ITU-R TF.460-6, Standard-frequency and time-signal emissions.
@@ -1509,14 +1505,10 @@ Created: 2026-07-24 19:40 (CEST, UTC+02:00)
   referenceSystem:convertTimeScale:unrepresentableLeapSecond
   referenceSystem:convertTimeScale:gatewayMissing
   referenceSystem:convertTimeScale:beforeUtcEpoch
-      Raised HERE, by this function, when a TAI epoch maps to a UTC day
-      before the leap-second table begins. It was named
-      referenceSystem:leapSecondTable:beforeUtcEpoch until revision 1.52,
-      which contradicted the binding section C.2 rule that an identifier
-      names the function that raised it - the same correction revision 1.36
-      made to the epoch scale check. leapSecondTable raises an identifier of
-      its own name for its own range check; the two are distinct conditions
-      in distinct functions and must be catchable separately.
+      Raised by this function when a TAI epoch maps to a UTC day before the
+      leap-second table begins. leapSecondTable raises an identifier of its
+      own name for its own range check; the two are distinct conditions in
+      distinct functions and are catchable separately.
   referenceSystem:timeScale:unknownScale</pre>
 <h4>WARNINGS</h4>
 <pre>referenceSystem:convertTimeScale:deltaUt1Defaulted   Raised once per call
@@ -1524,7 +1516,7 @@ Created: 2026-07-24 19:40 (CEST, UTC+02:00)
       The conversion proceeds with zero, and the caller is told what that
       costs. An EXPLICIT 'DeltaUt1', 0 is a decision and does not warn -
       decision D67's rule that a consequential physical choice is never
-      silently defaulted, applied here (decision D113, rev. 1.184).
+      silently defaulted, applied here (decision D113).
   referenceSystem:leapSecondTable:dubiousYear   Raised once per call by
       leapSecondTable when an epoch lies beyond the table's coverage.</pre>
 <h4>REFERENCES</h4>
@@ -1910,6 +1902,10 @@ Created: 2026-07-24 20:10 (CEST, UTC+02:00)
   referenceSystem:readEop:notMonotonic
   referenceSystem:readEop:implausibleValue
   referenceSystem:readEop:unsupportedBulletin</pre>
+<h4>WARNINGS</h4>
+<pre>referenceSystem:readEop:samplingGap   One per call. The series has rows
+      further apart than its sampling step; interpolating across a gap is an
+      extrapolation in all but name.</pre>
 <h4>REFERENCES</h4>
 <pre>IERS Conventions (2010), IERS Technical Note 36, Ch. 5.
   Capitaine, N. and Wallace, P. T., 2006, Astron. Astrophys. 450, 855.
@@ -1936,41 +1932,57 @@ Created: 2026-07-25 11:20 (CEST, UTC+02:00)
 <h4>SYNTAX</h4>
 <pre>eopAtEpoch = interpolateEop(eop, epoch)
   eopAtEpoch = interpolateEop(eop, epoch, 'Correction', correction)
-  eopAtEpoch = interpolateEop(eop, epoch, 'Method', "spline")
+  eopAtEpoch = interpolateEop(eop, epoch, 'Method', "linear")
 
   Interpolates the series returned by readEop to the UTC epochs given, once
   for the whole arc, and returns the values in SI with the metadata of the
-  source series intact. UT1 is interpolated in a leap-second-safe way and
-  tagged corrections are applied here rather than by the caller.</pre>
+  source series intact. UT1 is interpolated across leap seconds without a
+  step, the zonal tides are removed before interpolating and restored
+  afterwards, and tagged corrections are applied here rather than by the
+  caller.</pre>
 <h4>INPUT ARGUMENTS</h4>
 <pre>Name    Size   Type     Units  Description
   ----    ----   ----     -----  -----------
   eop     1x1    struct   -      Series from readEop, meta included.
   epoch   1x1    struct   -      Epoch struct, N entries, scale UTC.</pre>
 <h4>OPTIONAL NAME-VALUE ARGUMENTS</h4>
-<pre>Name                 Size  Type      Default   Description
-  ----                 ----  ----      -------   -----------
-  Method               1x1   string    "linear"  "linear" or "spline".
-  ExtrapolationPolicy  1x1   string    "error"   "error", "hold" or "nan".
-  Sigma                1x1   logical   false     Also interpolate the formal
-                                                 errors, for error propagation.
-  Correction           1xK   struct    none      Tagged correction structs
-                                                 from subdailyEopCorrection
-                                                 or zonalTideEopCorrection.
-  Regularize           1x1   logical   false     Permit a correction whose
-                                                 sense is "regularization".
-                                                 See METHOD before setting it.</pre>
+<pre>Name                 Size  Type      Default     Description
+  ----                 ----  ----      -------     -----------
+  Method               1x1   string    "lagrange"  "lagrange" (4-point, as
+                                                   IERS interp.f), "linear"
+                                                   or "spline".
+  ZonalTides           1x1   string    "restore"   "restore" removes the
+                                                   RG_ZONT2 zonal tides from
+                                                   dut1 and lod before
+                                                   interpolating and adds
+                                                   them back at the epoch;
+                                                   "interpolate" interpolates
+                                                   the series as published.
+  ExtrapolationPolicy  1x1   string    "error"     "error", "hold" or "nan".
+  Sigma                1x1   logical   false       Also interpolate the formal
+                                                   errors, for error
+                                                   propagation.
+  Correction           1xK   struct    none        Tagged correction structs
+                                                   from subdailyEopCorrection
+                                                   or zonalTideEopCorrection.
+  Regularize           1x1   logical   false       Permit a correction whose
+                                                   sense is "regularization".
+                                                   See METHOD before setting
+                                                   it.</pre>
 <h4>OUTPUT ARGUMENTS</h4>
 <pre>Name                  Size   Type     Units  Description
   ----                  ----   ----     -----  -----------
   eopAtEpoch            1x1    struct   -      Values at the epochs.
   .xp, .yp              Nx1    double   rad    Polar motion.
   .dut1                 Nx1    double   s      UT1 - UTC.
-  .lod                  Nx1    double   s      Excess length of day.
+  .lod                  Nx1    double   s      Excess length of day. NaN
+                                               where the series publishes
+                                               none; see METHOD.
   .dX, .dY              Nx1    double   rad    CIP offsets.
   .sigma                1x1    struct   -      Present only with Sigma=true.
   .meta                 1x1    struct   -      eop.meta, plus the fields below.
   .meta.method          1x1    string   -      Interpolation method used.
+  .meta.zonalTides      1x1    string   -      The ZonalTides setting used.
   .meta.extrapolationPolicy
                         1x1    string   -      Policy in force.
   .meta.nExtrapolated   1x1    double   -      Epochs outside the table.
@@ -1984,130 +1996,87 @@ Created: 2026-07-25 11:20 (CEST, UTC+02:00)
                                                correction was applied, so
                                                dut1 is UT1R - UTC.</pre>
 <h4>METHOD</h4>
-<pre>The whole arc is interpolated in one call. Interpolating per epoch is a
-  defect, not a style choice: it turns one sorted lookup into N of them.
+<pre>The whole arc is interpolated in one call. "lagrange" and "linear" are
+  local stencils, so only the table rows they touch are converted and
+  corrected, and the cost does not grow with the length of the series.
+  "spline" is interp1's global not-a-knot fit over the whole table.
 
-  LEAP-SECOND-SAFE UT1, which is handover approximation #4 and the single
-  most likely defect in this layer. UT1 - UTC steps by one second at a leap
-  second, so interpolating it directly smears a fraction of that second
-  across the surrounding days. UT1 - TAI is smooth across the step, so the
-  integer TAI - UTC is removed from the tabulated values before
-  interpolation and the value at the query epoch is added back. This is what
-  the IERS interp.f utility does. v1 did it too, and did it with a hardcoded
-  leap table of its own, frozen at 2017 (finding M-2); the table here is
-  leapSecondTable, which is the only leap-second authority in the toolbox, and
-  the lookup is vectorised rather than an arrayfun per row.
+  FOUR-POINT LAGRANGE IS THE DEFAULT, as in the IERS interpolation utility
+  interp.f: for an epoch between rows k and k+1 the cubic through rows k-1
+  to k+2 is evaluated, the stencil being shifted inwards at the first and
+  last interval. It needs at least four usable rows.
 
-  THE COUNT ADDED BACK IS THE ONE ON THE EPOCH'S OWN UTC DAY. Through the
-  leap second 23:59:60, and in the last 0.3 us before it, the value
-  therefore stays in the old day's convention, and UT1 = UTC + dut1 is
-  continuous. Until rev. 1.235 the count was read at day + sec/86400, which
-  lands on the next day there, so UT1 ran one second ahead: 15 arcseconds
-  of rotation.
+  LEAP-SECOND-SAFE UT1. UT1 - UTC steps by one second at a leap second,
+  while UT1 - TAI is smooth. The integer TAI - UTC of each row's own UTC day
+  is removed before interpolation and the TAI - UTC of the epoch's own UTC
+  day is added back, so UT1 = UTC + dut1 is continuous through 23:59:60,
+  where the epoch keeps its day number.
 
-  THE SERIES IS RESTRICTED TO THE MODERN UTC ERA BEFORE ANYTHING IS
-  INTERPOLATED, which is the leap-second argument above taken one step
-  further back. From 1972-01-01 TAI - UTC is an integer, so removing it is a
-  shift and the reconstruction is exact. Before that date UTC ran at its own
-  rate with a fractional offset, which this toolbox does not model, and such
-  rows cannot enter the stencil at all: the published EOP 20 C04 series steps
-  by 0.107873 s of UT1 - UTC between MJD 41316 and 41317 - the last
-  fractional step, not a leap second - and no removal of an integer TAI - UTC
-  makes that continuous.
+  ZONAL TIDES ARE REMOVED, INTERPOLATED ACROSS AND RESTORED (default). A
+  daily series of UT1 carries the fortnightly and monthly zonal tides,
+  whose curvature over one day is what dominates the interpolation error.
+  With ZonalTides "restore" the RG_ZONT2 effect on UT1 and on the length of
+  day is subtracted at the rows, the regularised residual is interpolated,
+  and the effect is added back at the epoch, evaluated on TT. The output is
+  still UT1 - UTC and the excess length of day, not UT1R: this is an
+  interpolation technique, not a correction, and meta.regularized stays
+  false. Polar motion and the CIP offsets are unaffected.
 
-  WHAT THOSE ROWS COST WAS MEASURED, NOT ASSUMED, over the 111-row fixture
-  that straddles the date. Under "linear" they are invisible away from the
-  boundary - the difference is exactly zero, a linear stencil being two nodes
-  wide - and the whole 0.1079 s, about 50 m at the equator, is smeared only
-  into 1971-12-31 itself. Under "spline" they are never invisible: interp1's
-  spline is a global not-a-knot fit, so fifty pre-1972 rows move dut1 by up
-  to 2.1e-4 s, some 99 mm at the equator, at EVERY epoch of the series, and
-  xp by 0.4 uas. That second case is what decides the design: restricting
-  only the leap-second conversion to a window, and leaving the fit alone,
-  would have left it in place and silent.
+  THE SERIES IS RESTRICTED TO THE MODERN UTC ERA before anything is
+  interpolated. From 1972-01-01 TAI - UTC is an integer; before it UTC ran at
+  its own rate with a fractional offset that this toolbox does not model, and
+  EOP 20 C04 steps by 0.107873 s of UT1 - UTC between MJD 41316 and 41317.
+  Such rows are dropped with one mask for every channel, announced with
+  preUtcRowsIgnored and counted in meta.nPreUtcRowsIgnored. The boundary is
+  leapSecondTable("validFromDay"), so an override moves it. A query epoch
+  before it is refused under every ExtrapolationPolicy with beforeUtcEpoch:
+  the policy governs epochs outside the table, and this one is outside the
+  model.
 
-  Those rows are therefore dropped once, with one mask for every channel so
-  that dut1 and xp are interpolated from the same table, and the drop is
-  announced with preUtcRowsIgnored and counted in meta.nPreUtcRowsIgnored.
-  The boundary is not a literal here: it is leapSecondTable("validFromDay"),
-  so an override installed with leapSecondTable("load", file) moves it. A
-  series that already begins in the modern era loses no row and its result is
-  bit-identical to what it was before this rule existed.
+  MISSING VALUES ARE REFUSED WHERE THEY WOULD REACH A FRAME. A published
+  series can leave fields blank - finals2000A's predictions carry no dX and
+  dY beyond a few weeks and no length of day at all. An interpolated xp, yp,
+  dut1, dX or dY that is not finite at an epoch inside the table is refused
+  with missingValue, naming the channel and the last row that publishes it.
+  lod and the formal errors are returned as NaN where the series has none,
+  because nothing in the toolbox computes with them.
 
-  A QUERY epoch before that boundary is refused under every
-  ExtrapolationPolicy, with beforeUtcEpoch. The policy governs epochs outside
-  the TABLE, which is a property of the file the caller supplied; this one is
-  outside the MODEL, and no option can relax that. Until this rule existed
-  the whole call failed inside leapSecondTable instead, naming rows the query
-  never used, which is how an epoch in 2020 came to be reported as preceding
-  1972 whenever the series shipped with this toolbox was passed whole.
-
-  THE CORRECTION SENSE CONTRACT, decision D30. Two corrections exist and they
-  are not interchangeable:
+  THE CORRECTION SENSE CONTRACT. Two corrections exist and they are not
+  interchangeable:
 
     subdailyEopCorrection    sense "additive"        applied by default
     zonalTideEopCorrection   sense "regularization"  refused by default
 
-  The first supplies signal that a daily series does not contain: the diurnal
-  and semidiurnal ocean tide and libration terms, sampled out by a series
-  tabulated once a day. Adding it is what makes the series usable at
-  sub-daily resolution, which is why it is accepted without ceremony.
-
-  The second is the opposite. A C04 series already contains the zonal tide
-  signal, as observed, so the zonal correction is not missing signal to add
-  but existing signal to remove, and only for a user who specifically wants
-  regularised UT1R. Applying it as though it were additive is a large error
-  in the wrong direction, and it is invisible: the result is a
-  plausible-looking rotation.
-
-  Documentation is not sufficient protection against that, so the correction
-  carries a sense tag that travels with the numbers and cannot be lost the way
-  a comment can, and this function refuses a "regularization" correction
-  unless 'Regularize' is true. The sign, stated because getting it backwards
-  is the whole hazard: with Regularize true the correction is SUBTRACTED, so
-  that dut1 becomes UT1R - UTC, and meta.regularized records that it happened.</pre>
+  The first supplies the diurnal and semidiurnal signal a daily series does
+  not contain and is added. The second removes signal the series does
+  contain, turning UT1 into UT1R; it is refused unless 'Regularize' is true,
+  and then it is SUBTRACTED and meta.regularized is set.</pre>
 <h4>ACCURACY</h4>
-<pre>Linear interpolation of a daily-tabulated series is the IERS-recommended
-  treatment and is the default here. Its error is the curvature of the
-  underlying signal over one day: about 0.1 mas peak in polar motion, which is
-  3 mm at the Earth's surface, and a few microseconds in UT1. Spline
-  interpolation reduces the curvature error but overshoots near gaps and
-  series edges, which is why it is offered and not defaulted.
+<pre>Interpolation error on UT1, measured on the RG_ZONT2 signal itself over
+  2020 from daily rows against hourly evaluations: linear 35.7 us (16.6 mm
+  at the equator), 4-point Lagrange 1.95 us, and zero with ZonalTides
+  "restore", which removes that signal before any stencil sees it. What
+  remains is the curvature of the regularised series over one day.
 
-  That figure is the error of the interpolation, not of the series. The
-  sub-daily signal that a daily series cannot carry at all is larger, up to
-  about 0.5 mas in polar motion and 50 microseconds in UT1, and is supplied by
-  subdailyEopCorrection rather than by any choice of interpolation method.
+  The sub-daily ocean tide and libration signal, up to about 0.5 mas in
+  polar motion and 50 us in UT1, is not an interpolation error; it is
+  supplied by subdailyEopCorrection.
 
-  The leap-second treatment is exact, not approximate: TAI - UTC is an integer
-  number of seconds from 1972 onward and removing it is a shift, so UT1 - TAI
-  is interpolated with no step and the reconstruction adds back an integer.
+  The leap-second treatment is exact: TAI - UTC is an integer from 1972 on,
+  so removing and restoring it is a shift.
 
-  That exactness is what the 1972-01-01 restriction protects. UT1 - UTC steps
-  across that date by an amount that is not an integer, so no removal of
-  TAI - UTC makes it continuous, and the rows before it are dropped rather
-  than interpolated through; METHOD carries the measured size of what they
-  would otherwise contribute under each method. Dropping them costs nothing
-  at any epoch this toolbox can work with, because UT1 - UTC there is not
-  representable in the first place.
-
-  Applying zonalTideEopCorrection to an unregularised series, or applying it
-  with the wrong sign, costs up to 168 ms of UT1 for the full 62-term model
-  and about 2.1 ms for its short-period part alone. Both measured in session
-  S2 over one 18.6-year nodal period. At the equator 1 ms of UT1 is 0.465 m of
-  surface displacement, so these are metre-level and tens-of-metre-level
-  errors, not the millimetre-level ones the handover previously stated. This
-  is why the flag exists.
+  Applying zonalTideEopCorrection as a correction to an unregularised series
+  without meaning to costs up to 168 ms of UT1 for the full 62-term model,
+  78 m at the equator; this is why 'Regularize' exists.
 
   Extrapolation is not performed under any policy. "hold" clamps to the edge
-  value, which is a statement that nothing is known beyond the table rather
-  than a prediction; "nan" marks the epochs; "error" refuses. Polynomial
-  extrapolation of an EOP series is never appropriate and is not offered.</pre>
+  value, "nan" marks the epochs and "error" refuses.</pre>
 <h4>ERRORS</h4>
 <pre>referenceSystem:interpolateEop:wrongScale
   referenceSystem:interpolateEop:outOfRange
   referenceSystem:interpolateEop:beforeUtcEpoch
   referenceSystem:interpolateEop:tooFewUsableRows
+  referenceSystem:interpolateEop:missingValue
   referenceSystem:interpolateEop:wrongCorrectionSense
   referenceSystem:interpolateEop:missingMeta
   referenceSystem:interpolateEop:sizeMismatch</pre>
@@ -2119,15 +2088,16 @@ Created: 2026-07-25 11:20 (CEST, UTC+02:00)
       when the series reaches back before the first row of leapSecondTable,
       naming how many rows were dropped and what remains. See METHOD.</pre>
 <h4>REFERENCES</h4>
-<pre>IERS Conventions (2010), IERS Technical Note 36, Ch. 5.5.
-  IERS EOP Product Centre, interp.f, the reference interpolation utility.</pre>
+<pre>IERS Conventions (2010), IERS Technical Note 36, Ch. 5.5 and Ch. 8.1.
+  IERS EOP Product Centre, interp.f (LAGINT), the reference interpolation
+    utility.</pre>
 <h4>EXAMPLE</h4>
 <pre>eop = referenceSystem.readEop("eopc04_20.1962-now");
   utc = referenceSystem.daySecondToEpoch([57754*ones(86400,1) (0:86399)'], "UTC");
   subdaily = referenceSystem.subdailyEopCorrection(utc);
   e = referenceSystem.interpolateEop(eop, utc, 'Correction', subdaily);</pre>
 <h4>KEYWORDS</h4>
-<pre>EOP, interpolation, UT1, leap second, polar motion, regularization
+<pre>EOP, interpolation, Lagrange, UT1, leap second, zonal tides, polar motion
 
 See also READEOP, SUBDAILYEOPCORRECTION, ZONALTIDEEOPCORRECTION, LEAPSECONDTABLE.
 
@@ -2339,11 +2309,6 @@ Created: 2026-07-25 12:15 (CEST, UTC+02:00)
   under the conventional 35-day boundary. At the equator one millisecond of
   UT1 is 0.465 m of surface displacement.
 
-  Handover approximation #6 previously quoted 30 microseconds and 14 mm for
-  this quantity. Both are wrong by three to four orders of magnitude, in the
-  direction that makes D30 more necessary rather than less. Corrected in
-  revision 1.40 on the measurement above.
-
   The model's own accuracy is that of IERS Conventions (2010) Chapter 8; the
   coefficients are tabulated to four decimals in units of 1e-4 s, so the
   representation floor is about 10 ns in UT1.</pre>
@@ -2499,10 +2464,7 @@ Created: 2026-07-25 12:45 (CEST, UTC+02:00)
                                                      "IAU2006/2000A" or
                                                      "IAU2000A". Required
                                                      whenever an offset is
-                                                     non-zero.
-  Interpolant   1x1         struct          none     Reserved. Supplying it
-                                                     raises notImplemented;
-                                                     see METHOD.</pre>
+                                                     non-zero.</pre>
 <h4>OUTPUT ARGUMENTS</h4>
 <pre>Name   Size   Type     Units  Description
   ----   ----   ----     -----  -----------
@@ -2543,11 +2505,10 @@ Created: 2026-07-25 12:45 (CEST, UTC+02:00)
   round trips per single-epoch rotation.
 
   The model is evaluated DIRECTLY at every epoch, through SOFA iauXys06a.
-  There is no interpolated path in v2.0 (decisions D17 and D24): interpolation
-  belongs to earthOrientationInterpolant, which interpolates X, Y and s
-  alongside the EOP quantities, and two mechanisms for one job would mean two
-  error budgets and two code paths. 'Interpolant' is declared here so that the
-  signature is final now and P19 changes no call site later.
+  Interpolated X, Y and s, with the offsets already applied, are the panels
+  of earthOrientationInterpolant: evaluateInterpolant reads them by channel
+  name, and rotationItrsToGcrs assembles the rotation from them. There is no
+  second interpolated path here.
 
   The vocabulary is direct and interpolated at every level of this toolbox,
   never exact and interp.</pre>
@@ -2581,7 +2542,6 @@ Created: 2026-07-25 12:45 (CEST, UTC+02:00)
   referenceSystem:cipCoordinates:cipModelRequired
   referenceSystem:cipCoordinates:sizeMismatch
   referenceSystem:cipCoordinates:conflictingOffsets
-  referenceSystem:cipCoordinates:notImplemented
   referenceSystem:cipCoordinates:gatewayMissing</pre>
 <h4>REFERENCES</h4>
 <pre>IERS Conventions (2010), IERS Technical Note 36, Ch. 5.4 to 5.5.
@@ -2596,7 +2556,8 @@ Created: 2026-07-25 12:45 (CEST, UTC+02:00)
 <h4>KEYWORDS</h4>
 <pre>CIP, CIO, celestial intermediate pole, precession, nutation, dX, dY, SOFA
 
-See also ROTATIONGCRSTOCIRS, ROTATIONITRSTOGCRS, INTERPOLATEEOP, READEOP.
+See also ROTATIONGCRSTOCIRS, ROTATIONITRSTOGCRS, INTERPOLATEEOP, READEOP,
+  EVALUATEINTERPOLANT.
 
 -------------------------------------------------------------------------
 referenceSystem v2.1
@@ -2611,10 +2572,9 @@ Created: 2026-07-25 21:40 (CEST, UTC+02:00)
 <h4>SYNTAX</h4>
 <pre>interpolant = earthOrientationInterpolant(epoch, 'Eop', eop) fits the
   quantities the terrestrial-to-celestial rotation and its rate need - the
-  CIP X and Y, the CIO locator s, the two pole coordinates, UT1 minus UTC
-  and the excess length of day - over the span covered by epoch, and returns
-  them as Chebyshev coefficients on consecutive panels, one channel per
-  entry of .quantity.
+  CIP X and Y, the CIO locator s, the two pole coordinates and UT1 minus
+  UTC - over the span covered by epoch, and returns them as Chebyshev
+  coefficients on consecutive panels, one channel per entry of .quantity.
 
   The result is accepted by rotationItrsToGcrs through its 'Interpolant'
   option, and it is the same object the public C API evaluates, so an
@@ -2655,12 +2615,10 @@ Created: 2026-07-25 21:40 (CEST, UTC+02:00)
                                        samples the fit has NOT seen. A fit
                                        that misses it raises toleranceNotMet
                                        rather than returning quietly. The
-                                       same number gates every channel but
-                                       lod, as microarcseconds of rotation:
-                                       dut1's residual is converted at the
-                                       ERA rate, 15.04 uas per us. lod is
-                                       reported, not gated, because it is
-                                       not an angle.</pre>
+                                       same number gates every channel, as
+                                       microarcseconds of rotation: dut1's
+                                       residual is converted at the ERA
+                                       rate, 15.04 uas per us.</pre>
 <h4>OUTPUT ARGUMENTS</h4>
 <pre>Name              Size          Type     Units  Description
   ----              ----          ----     -----  -----------
@@ -2692,8 +2650,7 @@ Created: 2026-07-25 21:40 (CEST, UTC+02:00)
                                                   entry of .quantity. Units
                                                   by name: radians for X, Y,
                                                   s, xp and yp; seconds for
-                                                  dut1; seconds per day for
-                                                  lod.
+                                                  dut1.
   .meta             1x1           struct   -      Provenance. Fields below.
   .meta.residual    1xQ           double   mixed  Worst error against the
                                                   direct chain at samples the
@@ -2701,12 +2658,14 @@ Created: 2026-07-25 21:40 (CEST, UTC+02:00)
                                                   per entry of .quantity:
                                                   microarcseconds for the
                                                   five angles, microseconds
-                                                  for dut1 and for lod.
-  .meta.tolerance   1x1           double   uas    Tolerance that was met, by
-                                                  every channel but lod (see
+                                                  for dut1.
+  .meta.tolerance   1x1           double   uas    Tolerance that was met (see
                                                   Tolerance).
   .meta.cipModel    1x1           string   -      Frame of the CIP offsets.
   .meta.eopFile     1x1           string   -      Series the fit was built on.
+  .meta.method      1x1           string   -      interpolateEop Method used.
+  .meta.zonalTides  1x1           string   -      interpolateEop ZonalTides
+                                                  setting used.
   .meta.spanMjd     1x2           double   d      Span actually covered,
                                                   which is the requested span
                                                   rounded outward to whole
@@ -2720,21 +2679,23 @@ Created: 2026-07-25 21:40 (CEST, UTC+02:00)
   boundaries fall where the EOP series changes row. Inside a panel each
   quantity is a Chebyshev expansion on Gauss-Lobatto nodes.
 
+  THE FITTED CHAIN IS THE DIRECT PATH'S. Each node is evaluated exactly as
+  rotationItrsToGcrs evaluates an epoch: interpolateEop with its defaults,
+  the sub-daily corrections when requested, and cipCoordinates with the
+  series' offsets. The length of day is not fitted; the rotation takes its
+  rate from the UT1 panels.
+
   THE FIT IS NOT PERFORMED HERE. The nodes, the fit and the evaluation are
   the C routines in mex/rsCheb.c, reached through the gateway. A second
   implementation in MATLAB would be a second authority for the same
   arithmetic, and the MATLAB path and the C API would then agree only by
   inspection. They now share one fit by construction.
 
-  DEGREE 20 OVER ONE DAY IS MEASURED, NOT PROPOSED. Handover section B.9.2
-  records the sweep. The binding quantity is not the CIP, which reaches its
-  double-precision floor at degree 8 over a day and does not improve after,
-  but the sub-daily ocean tide and libration, whose semi-diurnal terms need
-  degree 20 to reach 2.6e-7 uas. Degree 16 reaches 3.6e-4 uas and degree 12
-  only 0.2 uas. Risk R5 proposed 300 s node spacing from rev. 1.0; degree 20
-  over a day is an effective 4320 s and lands four orders below the tightest
-  tolerance this interface offers, so the proposal was over-conservative by
-  about fifteen and was aimed at the wrong quantity.
+  DEGREE 20 OVER ONE DAY IS MEASURED. The binding quantity is not the CIP,
+  which reaches its double-precision floor at degree 8 over a day, but the
+  sub-daily ocean tide and libration, whose semi-diurnal terms need degree 20
+  to reach 2.6e-7 uas. Degree 16 reaches 3.6e-4 uas and degree 12 only
+  0.2 uas (handover section B.9.2).
 
   THE RESIDUAL IS COMPUTED AT POINTS THE FIT HAS NOT SEEN. Evaluating at the
   nodes returns the node values to roundoff by construction and would report
@@ -2748,34 +2709,27 @@ Created: 2026-07-25 21:40 (CEST, UTC+02:00)
   longer PanelSpan with a leap second strictly inside a panel is refused
   with leapSecondInsidePanel. The panel that ENDS in a leap second takes its
   last node at 23:59:60, the instant its own linear time reaches, with
-  UT1-UTC continued in that day's convention - which is what lets a span
-  cross 2017-01-01 at all. Evaluation follows the MJD a caller hands in,
-  and the one second 23:59:60 has no MJD of its own, so rotationItrsToGcrs
-  refuses a sample inside it (insideLeapSecond) and the C API returns
-  RS_API_OUT_OF_RANGE for a difference shoulder that lands in it. Across the
-  boundary itself, measured on 2017-01-01 at twelve epochs from 0.9 d before
-  to 0.9 d after, including two 86.4 s from it: R within 2.3e-16 and Rdot
-  within 5.6e-19 1/s of the direct path.</pre>
+  UT1-UTC continued in that day's convention, so a span may cross a leap
+  second. The one second 23:59:60 has no MJD of its own, so
+  rotationItrsToGcrs refuses a sample inside it (insideLeapSecond) and the
+  C API returns RS_API_OUT_OF_RANGE for a difference shoulder that lands in
+  it.</pre>
 <h4>ACCURACY</h4>
 <pre>With the default degree and panel span, against the direct chain:
     CIP X, Y, s              better than 1e-4 uas
     pole xp, yp              better than 1e-3 uas
     UT1 - UTC                better than 1e-4 us
-    excess length of day     better than 1e-8 us (of seconds per day)
-  Measured at rev. 1.219 on six spans of test/fixtures/eop20c04.txt between
-  MJD 57655 and 57853: the worst readings were 6.8e-5 uas (Y), 4.9e-7 uas
-  (xp), 3.2e-8 us (dut1) and 7.7e-10 us (lod). The lod figure enters only
-  the Earth rotation rate, where 1e-8 us per day is below 1e-23 1/s.
+  Measured on six spans of test/fixtures/eop20c04.txt between MJD 57655 and
+  57853: the worst readings were 6.8e-5 uas (Y), 4.9e-7 uas (xp) and
+  3.2e-8 us (dut1).
   These are fit errors only. They do not improve on the EOP series itself,
   whose own formal errors are tens of microarcseconds, and they are not a
   claim about the accuracy of the rotation - only that interpolating it costs
   nothing measurable against evaluating it directly.
 
   The interpolant is C-infinity inside a panel and continuous but not
-  differentiable across a panel boundary. That is still an improvement on the
-  direct path, whose piecewise linear EOP interpolation puts a slope
-  discontinuity at every midnight into a variable-step integrator's right
-  hand side.</pre>
+  differentiable across a panel boundary, where the interpolated EOP rows
+  change slope - as they do on the direct path.</pre>
 <h4>ERRORS</h4>
 <pre>referenceSystem:earthOrientationInterpolant:missingEop
   referenceSystem:earthOrientationInterpolant:nonIntegerPanelSpan
@@ -2860,15 +2814,13 @@ Created: 2026-07-27 10:20 (CEST, UTC+02:00)
 
   xp ROTATES ABOUT MINUS Y AND yp ABOUT MINUS X, not the other way round.
   iauPom00 builds W as R3(-s')*R2(xp)*R1(yp), so xp enters through the
-  SECOND-axis factor and yp through the first. Revision 1.107 had them
-  transposed - the natural reading of "the x pole coordinate" is a rotation
-  about x, and it is wrong. The finite-difference test caught it on the first
-  run, which is the only reason this comment can be written in the past
-  tense.
+  SECOND-axis factor and yp through the first. The natural reading of "the x
+  pole coordinate" is a rotation about x, and it is wrong; the
+  finite-difference test holds the assignment.
 
   THE SIGNS WERE MEASURED, NOT DERIVED FROM THE FACTOR ORDER OF iauPom00.
-  Handover revision 1.106 records the experiment: the generators were
-  finite-differenced against rsRotationItrsToGcrs itself, so the code being
+  The generators were finite-differenced against rsRotationItrsToGcrs
+  itself, so the code being
   differentiated is the authority for its own derivative. Differentiating a
   remembered factor order is the one place in this function where a sign error
   is likely, and a sign error in a partial does not announce itself - it slows
@@ -2893,7 +2845,7 @@ Created: 2026-07-27 10:20 (CEST, UTC+02:00)
 <pre>referenceSystem:earthOrientationPartials:sizeMismatch</pre>
 <h4>REFERENCES</h4>
 <pre>IERS Conventions (2010), IERS Technical Note 36, chapter 5.
-  Handover revision 1.106 for the measured generators.</pre>
+  Handover section H.10 (P20) for the measured generators.</pre>
 <h4>EXAMPLE</h4>
 <pre>eop = referenceSystem.readEop('eop20c04.txt');
   utc = referenceSystem.daySecondToEpoch([57754 0], "UTC");
@@ -3014,11 +2966,7 @@ Created: 2026-07-27 20:10 (CEST, UTC+02:00)
   half-offset, samples at t-h and t+h, divisor 2h - and the default 200 s is
   that function's measured default, so with the defaults the rate partial is
   the partial of the Rdot the rotation actually returns (decision D112).
-  Until rev. 1.184 this function read DifferenceStep as the FULL span,
-  sampling at t-h/2 with a default of 600 s; the same option name carried
-  two meanings in two sibling functions, which is the class of silent
-  defect O28 exists for, and the same-step claim above was false as
-  written. The other order - differentiating the already-differenced Rdot -
+  The other order - differentiating the already-differenced Rdot -
   would agree only to the differencing error and would drift from Rdot as
   the step changed. info.rateConstruction records which was done, because
   the two are not interchangeable and a reader cannot tell from the numbers.</pre>
@@ -3172,8 +3120,9 @@ Created: 2026-07-27 10:40 (CEST, UTC+02:00)
 
   The tidal setting is written because A READER MUST BE ABLE TO REFUSE A
   MISMATCH: an interpolant built without the sub-daily terms differs by tens
-  of microarcseconds and the resulting rotation gives no sign of it (rev.
-  1.91).</pre>
+  of microarcseconds and the resulting rotation gives no sign of it. The
+  interpolation method and zonal-tide treatment the panels were fitted
+  through are written as provenance when the interpolant carries them.</pre>
 <h4>ACCURACY</h4>
 <pre>Exact. Every coefficient survives the round trip bit for bit, and the test
   asserts it with AbsTol 0 rather than a tolerance.</pre>
@@ -3215,8 +3164,9 @@ Created: 2026-07-27 21:10 (CEST, UTC+02:00)
   ----          ----   ----     -----  -----------
   interpolant   1x1    struct   -      As earthOrientationInterpolant returns
                                        it, except that .meta carries only
-                                       what the file holds: cipModel and
-                                       tidalCorrections.</pre>
+                                       what the file holds: cipModel,
+                                       tidalCorrections and, where written,
+                                       method and zonalTides.</pre>
 <h4>METHOD</h4>
 <pre>Header keys are read BY NAME, not by position, so a field added to the
   writer does not shift everything after it.
@@ -3302,9 +3252,7 @@ Created: 2026-07-27 21:10 (CEST, UTC+02:00)
   defining value 7.292115146706979e-5 (iersConstants.eraRatePerUt1Second): a
   difference of 6.8e-19 rad/s, the rounding of two angles of order unity
   divided by the 1000 s interval, and 4.7 picometres per second at 7000 km.
-  The reference test logs the reading on every host and holds it to 1e-17.
-  Until rev. 1.227 this block quoted 7.292115146705669e-5 and "1.3e-18"; that
-  number is 1.31e-17 from exact, fails the test, and was a transcription.</pre>
+  The reference test logs the reading on every host and holds it to 1e-17.</pre>
 <h4>ERRORS</h4>
 <pre>referenceSystem:earthRotationAngleRate:gatewayMissing</pre>
 <h4>REFERENCES</h4>
@@ -3724,8 +3672,7 @@ Created: 2026-07-25 22:10 (CEST, UTC+02:00)
   4.7e-06 at the pole rates of 2007, which is 30 metres at the surface: large
   enough to be obvious in a residual and small enough to survive every
   orthogonality and round-trip check, since a transpose is still a rotation.
-  Revisions 1.0 to 1.72 of the handover printed equation 5.3 here unchanged
-  and the code has always returned iauPom00; the code was right.
+  The code returns iauPom00.
 
   RADIANS, NOT ARCSECONDS. The IERS publishes xp and yp in arcseconds and
   every EOP file carries them that way; readEop converts on the way in and
@@ -3791,6 +3738,7 @@ Created: 2026-07-25 22:15 (CEST, UTC+02:00)
 <pre>R = rotationItrsToGcrs(epoch, 'Eop', eop)
   [R, Rdot] = rotationItrsToGcrs(epoch, 'Eop', eop)
   [R, Rdot, Rddot, info] = rotationItrsToGcrs(epoch, 'EopFile', file)
+  [R, Rdot] = rotationItrsToGcrs(epoch, 'Interpolant', interpolant)
 
   Returns the rotation from the International Terrestrial Reference System to
   the Geocentric Celestial Reference System, and on request its first two
@@ -3811,20 +3759,29 @@ Created: 2026-07-25 22:15 (CEST, UTC+02:00)
 <pre>Name                   Size  Type      Default        Description
   ----                   ----  ----      -------        -----------
   Eop                    1x1   struct    none           Series from readEop.
-                                                        One of Eop or EopFile
-                                                        is required.
   EopFile                1x1   string    none           File to read instead.
   EopFormat              1x1   string    auto           Format name for
                                                         EopFile.
+  InterpolationMethod    1x1   string    "lagrange"     Passed to
+                                                        interpolateEop as
+                                                        Method.
+  Interpolant            1x1   struct    none           Panels from
+                                                        earthOrientationInterpolant,
+                                                        instead of a series.
+                                                        Exactly one of Eop,
+                                                        EopFile and
+                                                        Interpolant is
+                                                        required.
   ApplyTidalCorrections  1x1   logical   true           Add the diurnal and
                                                         semidiurnal ocean
                                                         tide and libration
-                                                        terms.
-  ApplyLengthOfDay       1x1   logical   true           Correct the ERA rate
-                                                        by the observed LOD.
-  CipModel               1x1   string    from eop.meta  Frame of the pole
+                                                        terms. Must match
+                                                        an Interpolant's.
+  CipModel               1x1   string    from the data  Frame of the pole
                                                         offsets. Overrides
-                                                        the series metadata.
+                                                        the series metadata;
+                                                        must match an
+                                                        Interpolant's.
   Layout                 1x1   string    "pages"        "pages" for 3x3xN,
                                                         "rows" for the legacy
                                                         Nx9 form.
@@ -3836,13 +3793,7 @@ Created: 2026-07-25 22:15 (CEST, UTC+02:00)
   DifferenceStep         1x1   double    200            Central-difference
                                                         step in seconds. The
                                                         default is measured;
-                                                        see ACCURACY.
-  InterpolationMethod    1x1   string    "linear"       Passed to
-                                                        interpolateEop.
-  Interpolant            1x1   struct    none           Panels from
-                                                        earthOrientationInterpolant.
-                                                        Its tidal setting must
-                                                        match this call's.</pre>
+                                                        see ACCURACY.</pre>
 <h4>OUTPUT ARGUMENTS</h4>
 <pre>Name    Size            Type     Units    Description
   ----    ----            ----     -----    -----------
@@ -3852,145 +3803,84 @@ Created: 2026-07-25 22:15 (CEST, UTC+02:00)
   Rddot   3x3xN | Nx9     double   1/s^2    Second time derivative. EMPTY if
                                             'Derivatives' suppressed it.
   info    1x1             struct   -        Diagnostics, fields below.
-  .path              1x1  string   -        "direct" or "interpolated".
-  .sampleSource      1x1  string   -        "series" (direct), "panels"
-                                            (format-2 interpolant) or
-                                            "panels+series" (format-1
-                                            interpolant, LOD from series).
+  .path              1x1  string   -        "direct" (series) or
+                                            "interpolated" (panels).
   .derivativeMethod  1x1  string   -        "none" or "centralDifference".
   .differenceStep    1x1  double   s        Step actually used, NaN if none.
   .interpolantResidual
                      1x1  double   uas      Fit residual of the interpolant,
                                             NaN on the direct path and for
-                                            an interpolant read from a file,
-                                            which carries no residual.
-  .cipModel          1x1  string   -        Frame the offsets were read in.
+                                            an interpolant read from a file.
+  .cipModel          1x1  string   -        Frame the offsets are referred
+                                            to, as used.
   .tidalCorrections  1x1  logical  -        Whether they were applied.
-  .lengthOfDayApplied
-                     1x1  logical  -        Whether the ERA rate was corrected.
   .leapSecondSource  1x1  string   -        From leapSecondTable("state").
   .epochCount        1x1  double   -        N.
   .dubiousEpochCount 1x1  double   -        Epochs beyond the leap-second
                                             table's coverage.</pre>
 <h4>METHOD</h4>
-<pre>ONE ROTATION, NO DIRECTION FLAG (decision D23). This function returns the
-  ITRS to GCRS rotation, full stop. The inverse is the transpose, exactly,
+<pre>ONE ROTATION, NO DIRECTION FLAG. The inverse is the transpose, exactly,
   because R is a product of orthogonal factors: use invertRotation for the
-  matrices or applyRotation(..., 'Inverse', true) to apply it without forming
-  them. There is no 'Direction' option and no partner function to keep in
-  step.
+  matrices or applyRotation(..., 'Inverse', true) to apply it.
 
-  THE SIGNATURE IS [R, Rdot, Rddot, info] (decision D25). Earlier revisions
-  of the design put the fundamental arguments in output slot 2, which made
-  [R, Rdot] silently bind a struct to a variable named Rdot and fail three
-  functions later inside pagemtimes. The fundamental arguments come from
-  referenceSystem.fundamentalArguments, which is public and needed in its own
-  right; taking the same epoch struct is what guarantees they are consistent
-  with the rotation.
+  OUTPUTS ARE GATED BY NARGOUT, and the gating reaches the arithmetic. With
+  one output the CIP is evaluated once per epoch; with two or three it is
+  evaluated at t-h, t and t+h, and those three evaluations yield both
+  derivatives. A tilde is not a discard: [R, ~, ~, info] reports nargout 4,
+  so 'Derivatives', 0 exists to get the diagnostics for the price of R.
 
-  OUTPUTS ARE GATED BY NARGOUT and the gating reaches the arithmetic, not
-  just the return statement. A TILDE IS NOT A DISCARD as far as MATLAB is
-  concerned: [R, ~, ~, info] reports nargout = 4, so the derivatives are
-  computed and info honestly reports centralDifference. Requesting the
-  diagnostics would therefore always cost two derivatives, which is about
-  three times the dominant term for a struct of metadata. 'Derivatives'
-  exists for exactly that call: [R, ~, ~, info] = f(..., 'Derivatives', 0)
-  returns the rotation and the diagnostics for the price of one CIP
-  evaluation. With one output the CIP series is evaluated once
-  per epoch; with two or three it is evaluated three times, at t-h, t and
-  t+h, and those same three evaluations yield both derivatives. Requesting
-  Rdot therefore roughly triples the cost of the dominant term and requesting
-  Rddot adds nothing further.
+  RDOT AND RDDOT ARE THE TIME DERIVATIVES OF THE R RETURNED:
 
-  ALL THREE DERIVATIVE TERMS ARE INCLUDED (decision D20):
-
-      Rdot' = Wdot R3 Q + W R3dot Q + W R3 Qdot
-
-  Measured magnitudes, as a ratio to the Earth rotation rate and as the
-  velocity error at a 7000 km orbit radius if the term were dropped:
-
-      precession-nutation Qdot            9.3e-8    47 um/s
-      length-of-day correction to omega   2.5e-8    12.5 um/s
-      polar motion Wdot                   2.6e-9    1.3 um/s
-
-  Precession-nutation is the LARGEST of the three, not the smallest. All
-  three are computed and the length-of-day correction defaults on.
-
-  R3(ERA) IS DIFFERENTIATED ANALYTICALLY, not numerically: ERA is linear in
-  UT1 by definition, so dR3/dt = omega dR3/dtheta in closed form, and that
-  closed form is what the precision test compares the assembled Rdot against.
-  Q and W are differentiated by central differences on the matrix elements
-  at t-h, t and t+h. Analytic differentiation of the nutation series would be
-  faster and was rejected: it requires a second copy of SOFA's coefficient
-  tables, which is the two-sources-of-truth pattern this toolbox refuses
-  everywhere else.
-
-  Rddot keeps every second-order term of the product except one:
-
+      Rdot'  = Wdot R3 Q + W R3dot Q + W R3 Qdot
       Rddot' = Wddot R3 Q + W R3ddot Q + W R3 Qddot
                + 2(Wdot R3dot Q + Wdot R3 Qdot + W R3dot Qdot)
 
-  with R3ddot = omega^2 d2R3/dtheta2. THE NEGLECTED TERM IS omegadot dR3/dt,
-  the change in the Earth rotation rate itself. From the observed day-to-day
-  change in length of day it is of order 1e-17 rad/s^2 against omega^2 of
-  5.3e-9, nine orders down, and worth 7e-11 m/s^2 at 7000 km. Everything else
-  is kept, including Qddot, which measures 2.0e-17 s^-2 and reaches
-  1.4e-10 m/s^2 - at the GRACE accelerometer noise floor and therefore not
-  negligible.
+  Q and W are differenced on their matrix elements at t-h, t and t+h. R3 is
+  differentiated in closed form, R3dot = omega dR3/dtheta and
+  R3ddot = omega^2 d2R3/dtheta2 + omegadot dR3/dtheta, where the Earth
+  rotation rate is the ERA slope times 1 + d(UT1 - TAI)/dt and omegadot the
+  slope times d2(UT1 - TAI)/dt2, both differenced from the UT1 - TAI of the
+  same three samples. The rate therefore carries the length of day, the
+  zonal tides and the sub-daily tides exactly as the interpolated UT1 does,
+  and nothing from the series' LOD column. Analytic differentiation of the
+  nutation series was rejected because it would need a second copy of
+  SOFA's coefficient tables.
 
-  THE EOP PIPELINE. The series is interpolated once for the whole arc, at
-  three sample times per epoch when a derivative is wanted, so that Wdot is
-  the derivative of the polar motion actually used and not of a frozen value.
-  With ApplyTidalCorrections true the diurnal and semidiurnal terms from
-  subdailyEopCorrection are added at the same three times. The zonal tide
-  correction is NOT applied and cannot be applied here: it regularises UT1
-  rather than supplying missing signal, and interpolateEop refuses it without
-  an explicit 'Regularize' (decision D30).
+  Term sizes at a 7000 km orbit radius, as a ratio to the Earth rotation
+  rate: precession-nutation Qdot 9.3e-8 (47 um/s); the UT1 rate, excess
+  length of day plus tides, about 2.5e-8 (12.5 um/s), of which the
+  sub-daily tides reach 3.6e-9 (1.8 um/s); polar motion Wdot 2.6e-9
+  (1.3 um/s). In Rddot the sub-daily tides make omegadot reach 3.5e-17
+  rad/s^2, 2.5e-10 m/s^2, and Qddot reaches 1.4e-10 m/s^2 - both at the
+  GRACE accelerometer noise floor, so both are kept.
 
-  ONE WARNING PER CALL, NAMING THIS FUNCTION (decision D62). Epochs beyond
-  the coverage of the leap-second table are dubious, and leapSecondTable
-  raises its own warning when a UTC conversion crosses them. That warning
-  names leapSecondTable, which is not the function the user called, and it
-  fires once per internal conversion rather than once per call. The condition
-  is therefore determined here, once, from leapSecondTable("validThroughDay")
-  and its matching date,
-  the inner warning is suppressed for the duration of the internal
-  conversions and restored afterwards, and one aggregated warning is raised
-  naming this function and the epoch range. The count is also in
-  info.dubiousEpochCount, so a caller who suppresses the warning can still
-  see it. Note that the bundled SOFA table flags every epoch from 2029 onward
-  as dubious.
+  THE EOP PIPELINE. On the direct path the series is interpolated once for
+  the whole arc by interpolateEop, at the three sample times per epoch, with
+  its defaults: 4-point Lagrange and the zonal tides removed and restored.
+  With ApplyTidalCorrections true the sub-daily terms from
+  subdailyEopCorrection are added at the same times. On the interpolated
+  path the CIP, the pole and UT1 - UTC come from the Chebyshev panels, which
+  were fitted to that same chain, and no series is read; a series or an
+  interpolation method passed beside an Interpolant is refused.
 
-  TWO MODES, DIRECT AND INTERPOLATED (decisions D17, D24; delivered by P19).
-  On the direct path the precession-nutation series is evaluated at every
-  epoch and the EOP come from the series. With 'Interpolant' the CIP and the
-  pole come from Chebyshev panels instead, and info.path reads
-  "interpolated". A panel is C-infinity inside itself, which removes the
-  midnight slope discontinuity that piecewise linear EOP interpolation puts
-  into a variable-step integrator's right-hand side. A format-2 interpolant
-  also carries the excess length of day, so no series is read at all (P19c);
-  info.sampleSource records which of the three cases ran. Panels are indexed
-  by UTC MJD, which the second 23:59:60 of a leap-second day does not have,
-  so on the interpolated path a sample inside a leap second - the epoch or
-  either difference shoulder - is refused with insideLeapSecond; the direct
-  path takes it as it takes any other epoch (rev. 1.226). Until rev. 1.235
-  both paths turned the Earth one second ahead through that second, and in
-  the last 0.3 us before it, where day + sec/86400 rounds up to the next
-  day: 7.2e-5 rad. interpolateEop took UT1 - UTC in the next day's
-  convention there, and the interpolated path read the next day's panel.
+  LEAP SECONDS. TAI - UTC is taken on each sample's own UTC day, so UT1 - TAI
+  has no step across a leap second and neither does the rate. Panels are
+  indexed by UTC MJD, which the second 23:59:60 does not have, so on the
+  interpolated path a sample inside a leap second - the epoch or either
+  difference shoulder - is refused with insideLeapSecond; the direct path
+  takes it as any other epoch.
+
+  ONE WARNING PER CALL, NAMING THIS FUNCTION. Epochs beyond the coverage of
+  the leap-second table are counted once, the inner leapSecondTable warning
+  is suppressed for the internal conversions, and one aggregated dubiousYear
+  warning is raised. The count is also in info.dubiousEpochCount.
 
   SINGLE-EPOCH PATH. With N = 1 the outputs are 3x3, because MATLAB drops a
-  trailing singleton dimension, and no interpolation object, temporary array
-  or vectorised setup is built. This is a branch inside one function and not
-  a separate scalar entry point; section B.9 explains why separate
-  scalar and vector functions were rejected.</pre>
+  trailing singleton dimension, and no vectorised setup is built.</pre>
 <h4>ACCURACY</h4>
-<pre>THE DIFFERENCE STEP IS MEASURED, NOT ASSUMED (decision D28). Earlier
-  revisions of the design asserted h = 60 s giving 1e-7 relative on Qdot,
-  a figure that had never been established. The h-refinement study run for
-  this session, over twelve epochs spanning 1990 to 2050 against a Romberg
-  reference that was itself validated against a second reference of different
-  base step, gives:
+<pre>THE DIFFERENCE STEP IS MEASURED. An h-refinement study over twelve epochs
+  from 1990 to 2050 against a validated Romberg reference gives, for the CIP
+  derivatives and the velocity and acceleration they cause at 7000 km:
 
       h [s]   dX/dt error    d2X/dt2 error   worst velocity   worst accel
       3000    1.9e-16        4.4e-22         1.3e-09 m/s      5.2e-15 m/s^2
@@ -4000,51 +3890,46 @@ Created: 2026-07-25 22:15 (CEST, UTC+02:00)
         10    7.5e-20        6.5e-20         7.4e-11 m/s      1.5e-11 m/s^2
          1    9.8e-19        4.5e-18         5.3e-10 m/s      1.6e-09 m/s^2
 
-  The O(h^2) region runs from 3000 s down to about 200 s and the roundoff
-  plateau begins below about 150 s, set by the intrinsic evaluation noise of
-  the CIP series, which is 4.5e-18 rad rms in X and 5.2e-17 in Y.
+  The O(h^2) region runs from 3000 s to about 200 s and the roundoff plateau
+  of the CIP series (4.5e-18 rad rms in X, 5.2e-17 in Y) begins below 150 s.
+  THE DEFAULT IS h = 200 s, the minimum of the combined error against 1 nm/s
+  and 1e-10 m/s^2; every step from 1 s to 1800 s meets both budgets.
 
-  THE DEFAULT IS h = 200 s, the minimum of the combined error normalised
-  against a budget of 1 nm/s in velocity and 1e-10 m/s^2 in acceleration,
-  the latter being the GRACE accelerometer noise floor. At that step the
-  normalised error is 6.0e-3, a margin of 167.
-
-  The wider result is worth more than the number: EVERY STEP FROM 1 s TO
-  1800 s MEETS BOTH BUDGETS, and only 3000 s fails, by a factor 1.3. The
-  choice of h is therefore not critical, which is the opposite of what the
-  unmeasured 60 s figure implied.
+  Rdot against the motion of R itself, logm(R(t-h)' R(t+h))/2h at
+  h = 200 s, at hourly epochs over a day and clear of midnight: 1.1e-16 1/s
+  (7.7e-10 m/s at 7000 km) with the sub-daily tides and 1.05e-16 without,
+  which is that oracle's own floor. Near midnight, within h of a table row,
+  the interpolated pole and UT1 change slope, and the 200 s difference
+  averages across it.
 
   Reproduction of the SOFA cookbook worked example of 2007-04-05
-  (sofa_pn_c.pdf section 5.5), worst matrix element: 2.6e-15, that is
-  5e-4 microarcseconds of rotation.
+  (sofa_pn_c.pdf section 5.5), worst matrix element: 2.6e-15.
 
-  Invariants, measured and independent of h:
+  Invariants, independent of h:
       max |R'R - I|                  1.1e-16
       max |Rdot' R + R' Rdot|        4.2e-19 rad/s
-  The second is the one that catches a sign or transposition error in Rdot,
-  which no magnitude comparison would.
 
-  Equinox-versus-CIO agreement (risk R13b): 4.4e-16 rad worst element, that
-  is 9.1e-5 microarcseconds, over twelve epochs from 1990 to 2050.
+  Equinox-versus-CIO agreement: 4.4e-16 rad worst element over twelve epochs
+  from 1990 to 2050.
 
-  ABSOLUTE ACCURACY IS SET BY THE EOP AND NOT BY ANY OF THE ABOVE. A C04
-  series carries formal errors of about 30 microarcseconds in polar motion
-  and 10 us in Delta UT1, which is 0.9 to 1.5 mm at the Earth's surface. Every
-  algorithmic figure quoted here is five or more orders below that. The
-  tolerances in TestRotation bound algorithmic quantities and are never
-  justified by EOP magnitudes (design principle 15).</pre>
+  ABSOLUTE ACCURACY IS SET BY THE EOP. A C04 series carries formal errors of
+  about 30 uas in polar motion and 10 us in Delta UT1, 0.9 to 1.5 mm at the
+  Earth's surface; every algorithmic figure above is far below that.</pre>
 <h4>ERRORS</h4>
 <pre>referenceSystem:rotationItrsToGcrs:eopRequired
   referenceSystem:rotationItrsToGcrs:conflictingEopSource
   referenceSystem:rotationItrsToGcrs:unknownCipModel
   referenceSystem:rotationItrsToGcrs:badInterpolant
+  referenceSystem:rotationItrsToGcrs:cipModelMismatch
   referenceSystem:rotationItrsToGcrs:tidalMismatch
   referenceSystem:rotationItrsToGcrs:outsideInterpolant
   referenceSystem:rotationItrsToGcrs:insideLeapSecond
   referenceSystem:rotationItrsToGcrs:badDifferenceStep
-  referenceSystem:rotationItrsToGcrs:gatewayMissing</pre>
+  referenceSystem:rotationItrsToGcrs:gatewayMissing
+  referenceSystem:interpolateEop:missingValue</pre>
 <h4>WARNINGS</h4>
-<pre>referenceSystem:rotationItrsToGcrs:dubiousYear</pre>
+<pre>referenceSystem:rotationItrsToGcrs:dubiousYear   One per call, when epochs
+      lie beyond the coverage of the leap-second table.</pre>
 <h4>REFERENCES</h4>
 <pre>IERS Conventions (2010), IERS Technical Note 36, Ch. 5.
   IAU SOFA release 20231011, iauXys06a, iauC2ixys, iauEra00, iauSp00,
@@ -4062,7 +3947,7 @@ Created: 2026-07-25 22:15 (CEST, UTC+02:00)
   derivative, orbit integration, SOFA
 
 See also CIPCOORDINATES, APPLYROTATION, INVERTROTATION, EARTHROTATIONANGLE,
-  INTERPOLATEEOP, READEOP.
+  INTERPOLATEEOP, READEOP, EARTHORIENTATIONINTERPOLANT.
 
 -------------------------------------------------------------------------
 referenceSystem v2.1
@@ -5639,14 +5524,12 @@ Created: 2026-07-26 05:28 (CEST, UTC+02:00) - session S4, prompt P12
         6 deg             2.2e-05 m      1.75e-04 m
        20 deg             8.8e-05 m      2.27e-04 m
 
-  THE TWO COLUMNS ARE DIFFERENT ERRORS AND THE FIRST MEASUREMENT OF THIS
-  MISSED ONE OF THEM. The easting error is the transverse part and grows with
+  THE TWO COLUMNS ARE DIFFERENT ERRORS. The easting error is the transverse
+  part and grows with
   the offset from the central meridian, which is the behaviour one expects and
   looks for. The northing error is the MERIDIAN ARC series and is essentially
   independent of the offset - it is 1.71e-04 m even ON the central meridian,
-  where the easting error is exactly zero. Revision 1.52 of the handover
-  recorded 6.3e-05 m for this truncation; that figure was the easting alone,
-  and the dominant term is three times larger. Corrected in revision 1.53.
+  where the easting error is exactly zero, so it is the dominant term.
 
   Both are still well inside a millimetre, so the verdict is unchanged and n^6
   would buy nothing a UTM coordinate can use. The figures also show that the
@@ -6004,8 +5887,7 @@ Created: 2026-07-26 07:25 (CEST, UTC+02:00) - session S4, prompt P13
 <pre>h = H + N, the exact inverse of ellipsoidalToOrthometric. Two named
   functions rather than one with a direction flag: the direction belongs in
   the name (section C.7 rule 2), and a sign flag on a one-line function is
-  pure risk with no benefit. Revision 1.0 of the design merged the pair into a
-  single heightConvert with a direction argument; decision D6 reversed that.
+  pure risk with no benefit (decision D6).
 
   THE ARGUMENT IS NAMED undulation AND NOT geoidUndulation, which reads worse
   and is nevertheless right: geoidUndulation is a sibling function in this
@@ -8113,13 +7995,8 @@ Created: 2026-07-26 22:20 (CEST, UTC+02:00) - session S5, prompt P26
   factor of two rather than the factor of hundreds the term deserves.
 
   THAT IS ALSO WHY THE TWO METHODS AGREE. They differ by less than 1e-11 rad
-  here - which is what the suite asserts and all it can see; the figure of
-  5e-11 carried here until rev. 1.119 was FALSIFIED by run 38, because the
-  test now bounds the separation at 1e-11 and passes. That figure never came
-  from a run: until rev. 1.118 the metric it would have been measured with
-  returned exactly zero below 2e-08 rad. An independent mirror puts the
-  separation at 5e-14, and that number is attributed rather than adopted -
-  two mirrors have now disagreed about it by three orders (O20). The methods
+  here, which is what the suite asserts; an independent mirror puts the
+  separation at 5e-14, a figure attributed rather than adopted. The methods
   differ by far less than either differs from the truth, not
   because the integrators are equivalent but because neither is what limits
   the answer: both reconstruct omega from the same two samples per interval.
@@ -9121,6 +8998,10 @@ Created: 2026-07-28 10:05 (CEST, UTC+02:00)
       own error. Convert deliberately with convertTimeScale first.
   referenceSystem:barycentricBodyState:gatewayMissing
   referenceSystem:barycentricBodyState:providerNotAvailable
+  referenceSystem:barycentricBodyState:staleEphemeris
+      Source "mice": the SPICE pool does not hold exactly the kernels the
+      Ephemeris struct names - a later readEphemeris replaced them, or other
+      code loaded an SPK beside them. Call readEphemeris again.
   referenceSystem:ephemerisBodies:unknownSource</pre>
 <h4>WARNINGS</h4>
 <pre>referenceSystem:barycentricBodyState:outsideModelRange
@@ -9217,7 +9098,11 @@ Created: 2026-07-28 10:25 (CEST, UTC+02:00)
 <pre>referenceSystem:geocentricBodyState:unknownBody
   referenceSystem:geocentricBodyState:wrongScale
   referenceSystem:geocentricBodyState:gatewayMissing
-  referenceSystem:geocentricBodyState:providerNotAvailable</pre>
+  referenceSystem:geocentricBodyState:providerNotAvailable
+  referenceSystem:geocentricBodyState:staleEphemeris
+      Source "mice": the SPICE pool does not hold exactly the kernels the
+      Ephemeris struct names - a later readEphemeris replaced them, or other
+      code loaded an SPK beside them. Call readEphemeris again.</pre>
 <h4>WARNINGS</h4>
 <pre>referenceSystem:geocentricBodyState:outsideModelRange
   referenceSystem:geocentricBodyState:seriesNotConverged</pre>
@@ -9248,10 +9133,10 @@ Created: 2026-07-28 10:50 (CEST, UTC+02:00)
 <pre>ephemeris = readEphemeris(kernelFile)
   ephemeris = readEphemeris(kernelFile, Name, Value)
 
-  The only cspice_furnsh wrapper the toolbox permits (decision D26). It loads
-  the kernels, reads each one's comment area, records identity rather than
-  content, and refuses combinations that would be wrong in ways nothing
-  downstream could notice.</pre>
+  The only cspice_furnsh wrapper the toolbox permits (decision D26). It reads
+  each kernel's comment area, records identity rather than content, refuses
+  combinations that would be wrong in ways nothing downstream could notice,
+  and only then loads the set - in place of the set it loaded before.</pre>
 <h4>INPUT ARGUMENTS</h4>
 <pre>Name         Size   Type              Units  Description
   ----         ----   ----              -----  -----------
@@ -9307,8 +9192,8 @@ Created: 2026-07-28 10:50 (CEST, UTC+02:00)
   the same rule mexSourceDigest applies to the C sources.
 
   THE KERNEL PAIRING IS MEASURED, NOT DECLARED (decision D15, and D110 for
-  what happens when it disagrees: a warning, never a refusal), mechanism added
-  rev. 1.127). SB441-N16 pairs with DE440/441 and SB431-N16 with DE430; mixing
+  what happens when it disagrees: a warning, never a refusal). SB441-N16
+  pairs with DE440/441 and SB431-N16 with DE430; mixing
   generations shifts the barycentre by of order 100 km, and nothing downstream
   would report it. Each SPK names the planetary ephemeris it expects in its
   own comment area, which cspice_dafec reads, so the pairing is checked
@@ -9321,6 +9206,17 @@ Created: 2026-07-28 10:50 (CEST, UTC+02:00)
   place, and a silent one, because the two agree until the day a
   leapSecondTable("load") override is installed and SPICE does not see it.
   Seam contract S1 item 2 exists to make that impossible by construction.
+
+  ONE FURNISHED SET IS LIVE AT A TIME. SPICE keeps one kernel pool per
+  process and answers from whatever is loaded, whatever struct a caller
+  passes. So every check runs before anything is loaded - a refused set
+  leaves the pool as it was - and loading unloads the set this function
+  loaded last. The MICE consumers (barycentricBodyState, geocentricBodyState,
+  bodyRotationElements, rotationIcrfToBodyFixed) refuse a struct whose
+  kernels are not exactly the loaded SPK and binary PCK files with
+  staleEphemeris, so an older result cannot quietly read a newer set. To
+  compare two generations, furnish them together in one call. Inside a
+  parfor worker the pool is the worker's own: call this function there.
 
   THE TOOLKIT VERSION IS A CHECKED PRECONDITION AND NOT AN ASSUMPTION, because
   pck00011.tpc's Mars system data used with Toolkit N0066 or earlier may cause
@@ -9337,10 +9233,9 @@ Created: 2026-07-28 10:50 (CEST, UTC+02:00)
   referenceSystem:readEphemeris:fileNotFound
   referenceSystem:readEphemeris:leapSecondKernelRefused
   referenceSystem:readEphemeris:mismatchedGeneration
-  referenceSystem:readEphemeris:toolkitTooOld
-
-  WARNINGS
-  referenceSystem:readEphemeris:mixedGenerations
+  referenceSystem:readEphemeris:toolkitTooOld</pre>
+<h4>WARNINGS</h4>
+<pre>referenceSystem:readEphemeris:mixedGenerations
       The furnished kernels name more than one planetary ephemeris. A
       WARNING and not an error since decision D110: the choice of models and
       of their combination belongs to the caller, and comparing two
@@ -9451,11 +9346,9 @@ Created: 2026-07-28 11:10 (CEST, UTC+02:00)
                    sixteen D15 perturbing asteroids matter. "smallBodies"
                    is accepted as a synonym.
 
-  "all" MEANS ALL (decision D99). Rev. 1.134 gave it the meaning "everything
-  except the biggest file", wrote that into the help and added a test
-  asserting it - documenting and enforcing a name that lied. The size was a
-  real concern and that was a bad answer to it; the protection is that Mode
-  defaults to "list", which shows the bill before anything moves.
+  "all" MEANS ALL (decision D99). The size is a real concern, and the
+  protection is that Mode defaults to "list", which shows the bill before
+  anything moves.
 
   Span says WHICH ISSUE of the planetary ephemeris:
 
@@ -9467,9 +9360,9 @@ Created: 2026-07-28 11:10 (CEST, UTC+02:00)
 
   THE TWO FILES ARE THE SAME INTEGRATION - de440s.bsp is a time-restricted
   issue of de440.bsp - so in the overlap they answer identically and SPICE
-  resolves an overlapping body from whichever was furnished last. Until
-  rev. 1.191 that was taken as a reason to REFUSE both, and it is not one.
-  D110 already settled the principle one level up, for whole generations:
+  resolves an overlapping body from whichever was furnished last. That is
+  not a reason to refuse both. D110 settles the principle one level up, for
+  whole generations:
   this toolbox prevents an UNKNOWING mixture, not a deliberate choice.
   Holding the small file for routine work and the long one for the
   occasional deep-time epoch is ordinary, and readEphemeris reports the
@@ -9497,9 +9390,8 @@ Created: 2026-07-28 11:10 (CEST, UTC+02:00)
 
   EVERY ENTRY IS ATTEMPTED AND EVERY FAILURE IS RECORDED BEFORE ANYTHING IS
   RAISED. A failure on the third of five files must not discard the two that
-  succeeded - that is precisely what run 44 got wrong with the HORIZONS
-  fetcher (rev. 1.130), and the manifest carries "FAILED | reason" rows for
-  the same reason runTestSuite writes its report before reporting failure.
+  succeeded, so the manifest carries "FAILED | reason" rows, for the same
+  reason runTestSuite writes its report before reporting failure.
 
   NO LEAPSECONDS KERNEL APPEARS IN THIS CATALOGUE AND NONE MAY BE ADDED.
   Decision D89: a .tls would install a second leap-second authority beside
@@ -9511,7 +9403,7 @@ Created: 2026-07-28 11:10 (CEST, UTC+02:00)
   Identity is recorded and bulk is not: each fetched file gets a SHA-256 in
   the manifest, which is what a result should carry (data/README.md).
 
-  A CALLER'S CATALOGUE (rev. 1.233). Catalogue replaces the built-in table,
+  A CALLER'S CATALOGUE. Catalogue replaces the built-in table,
   so a user with a private kernel mirror can point every Url at it, and a
   test can point one at a host that cannot resolve and observe a failed
   transfer on any machine - which is what made the D98 test deterministic.
@@ -9529,7 +9421,11 @@ Created: 2026-07-28 11:10 (CEST, UTC+02:00)
   referenceSystem:downloadKernels:unknownMode
   referenceSystem:downloadKernels:cacheNotWritable
   referenceSystem:downloadKernels:badCatalogue
-  referenceSystem:downloadKernels:leapSecondKernelInCatalogue</pre>
+  referenceSystem:downloadKernels:leapSecondKernelInCatalogue
+  referenceSystem:downloadKernels:notReachable
+      Raised for one catalogue entry in Mode "verify" when the server does
+      not answer OK, and caught: that row's Status reads "FAILED | " and the
+      message, and incompleteFetch is warned. It never leaves the function.</pre>
 <h4>WARNINGS</h4>
 <pre>referenceSystem:downloadKernels:incompleteFetch
       At least one entry failed. THIS IS A WARNING AND NOT AN ERROR because
@@ -9564,37 +9460,44 @@ Created: 2026-07-29 09:15 (CEST, UTC+02:00)
 <h3>referenceSystem.gcrsToBcrs</h3>
 <p class="h1">Express a geocentric vector in barycentric (BCRS) coordinates.</p>
 <h4>SYNTAX</h4>
-<pre>rBcrs = gcrsToBcrs(rGcrs, epoch, Scale = "tdbCompatible")
-  [rBcrs, info] = gcrsToBcrs(rGcrs, epoch, Name, Value)
+<pre>rBcrs = gcrsToBcrs(rGcrs, [], epoch, Scale = "tdbCompatible")
+  [rBcrs, vBcrs] = gcrsToBcrs(rGcrs, vGcrs, epoch, Scale = "tdbCompatible")
+  [rBcrs, vBcrs, info] = gcrsToBcrs(rGcrs, vGcrs, epoch, Name, Value)
 
-  Applies IERS Conventions (2010) Eq. (11.19), or Eq. (11.18) with
-  Scale "none": the Lorentz contraction along the Earth's barycentric
-  velocity, the scaling by the external gravitational potential, and - for
-  "tdbCompatible" - the TT-to-TDB length scale L_C.
+  Applies the spatial part of IAU 2000 Resolution B1.3 in the direction
+  GCRS to BCRS: the Lorentz contraction along the Earth's barycentric
+  velocity, the scaling by the external gravitational potential, the two
+  acceleration terms and - for "tdbCompatible" - the TT-to-TDB length scale
+  L_C. Without the acceleration terms this is IERS Conventions (2010)
+  Eq. (11.19), or Eq. (11.18) with Scale "none". On request the velocity is
+  transformed with the same resolution's time part.
 
   IT RETURNS THE SAME SEPARATION VECTOR IN DIFFERENT COORDINATES, NOT A
-  BARYCENTRIC POSITION. See METHOD; the distinction is four orders of
-  magnitude wide and is the first thing to get right about this function.</pre>
+  BARYCENTRIC POSITION. See METHOD.</pre>
 <h4>INPUT ARGUMENTS</h4>
 <pre>Name    Size   Type      Units  Description
   ----    ----   ----      -----  -----------
   rGcrs   3xN    double    m      Geocentric vector in the GCRS, one column
                                   per epoch, or one column for all epochs.
-  vGcrs   3xN    double    m/s    Velocity per unit of the SOURCE frame's
-                                  coordinate time. PASS [] FOR POSITION ONLY.
+  vGcrs   3xN    double    m/s    Its rate per second of GCRS coordinate
+                                  time, or [] for position only.
   epoch   1x1    struct    -      Epoch struct, N entries, any scale but UT1.</pre>
 <h4>OPTIONAL NAME-VALUE ARGUMENTS</h4>
 <pre>Name         Size   Type     Default     Description
   ----         ----   ----     -------     -----------
-  Scale        1x1    string   NONE        Required. "tdbCompatible" applies
-                                           Eq. (11.19); "none" applies
-                                           Eq. (11.18). See ERRORS.
+  Scale        1x1    string   NONE        Required. "tdbCompatible" (GCRS in
+                                           TT-compatible and BCRS in
+                                           TDB-compatible units) or "none"
+                                           (TCG and TCB). See ERRORS.
   Source       1x1    string   "sofa"      Ephemeris provider for U and V.
   Ephemeris    1x1    struct   struct([])  Kernels, for Source "mice".</pre>
 <h4>OUTPUT ARGUMENTS</h4>
 <pre>Name                   Size   Type     Units    Description
   ----                   ----   ----     -----    -----------
   rBcrs                  3xN    double   m        The vector in BCRS coordinates.
+  vBcrs                  3xN    double   m/s      Its rate per second of BCRS
+                                                  coordinate time, or [] when
+                                                  vGcrs was [].
   info                   1x1    struct   -        Fields listed below.
   .scale                 1x1    string   -        The Scale actually applied.
   .scaleTerm             1x1    double   1        L_C, or 0 for "none".
@@ -9606,90 +9509,75 @@ Created: 2026-07-29 09:15 (CEST, UTC+02:00)
 <pre>THIS IS A CHANGE OF COORDINATES FOR A VECTOR, NOT A CHANGE OF ORIGIN. The
   barycentric POSITION of the point is
 
-      xBcrs = barycentricBodyState("earth", epoch) + gcrsToBcrs(rGcrs, ...)
+      xBcrs = barycentricBodyState("earth", epoch) + gcrsToBcrs(rGcrs, [], ...)
 
-  and that addition is deliberately left to the caller, because the two
-  quantities have accuracies four orders apart and combining them silently
-  would hide which one dominates. This function is good to the Conventions'
-  stated 1 mm; the Earth's barycentric position from the bundled SOFA
-  provider is good to 4.6 km. Adding them without noticing produces a number
-  whose 1 mm claim is nonsense.
+  and that addition is left to the caller, because the two quantities have
+  accuracies four orders apart: this function is good to the Conventions'
+  stated 1 mm, while the Earth's barycentric position from the bundled SOFA
+  provider is good to 4.6 km.
 
-  THE TRANSFORMATION IS EXACTLY LINEAR AND THAT IS WHY THE INVERSE IS EXACT.
-  Both equations have the form r_out = M r_in with M = alpha*I + beta*V*V',
-  a rank-one update of a scaled identity, so bcrsToGcrs inverts it in closed
-  form by Sherman-Morrison rather than by negating parameters (decision D68's
-  rule, met here by an exact solution rather than by an accurate one).
+  THE FORWARD MAP IS THE RESOLUTION'S, AND THIS DIRECTION INVERTS IT. The
+  resolution gives the GCRS vector X in terms of the BCRS separation r,
 
-  U and V come from barycentricBodyState and geocentricBodyState, so P22a is
-  a genuine dependency and not a convenience. They enter only at order 1/c^2,
-  which is why the bundled provider suffices - see ACCURACY.</pre>
+      X = r + (1/c^2)[ (1/2) V (V.r) + w r + r (A.r) - (1/2) A |r|^2 ]
+
+  with V and A the Earth's barycentric velocity and acceleration and w the
+  external potential, plus L_C c^2 for "tdbCompatible". bcrsToGcrs applies it
+  in closed form; this function solves it by fixed-point iteration, because
+  the acceleration terms are quadratic in r. The correction is 1.5e-8 of r,
+  so two iterations leave roundoff.
+
+  THE VELOCITY. Along a trajectory r(t), dX/dt follows from the map, and the
+  GCRS rate is dX/dT = (dX/dt) / (dT/dt), with
+
+      dT/dt = 1 - (1/c^2)[ |V|^2/2 + w + A.r + V.rdot ]
+
+  from the time part of the same resolution. Rates carry no L_C: the length
+  and the time scalings cancel in a velocity. Terms in dw/dt and dA/dt are
+  dropped: 5.7e-28 m/s and 6.1e-13 m/s at GRACE altitude.
+
+  U and V come from barycentricBodyState and geocentricBodyState (Sun and
+  Moon; the planets contribute at most 12 micrometres through U).</pre>
 <h4>ACCURACY</h4>
-<pre>The Conventions state their own uncertainty for Eq. (11.19) as BELOW 1 mm,
-  and that is the accuracy of this function. Every quantity neglected inside
-  it is smaller than that and is quantified in the private helper: the
-  planets contribute at most 12 micrometres through U, the Moon 0.9
-  micrometres, and the measured uncertainties of GM_sun and L_C are nine and
-  six orders below the millimetre respectively.
+<pre>The Conventions state their own uncertainty for the position as below
+  1 mm, and that is the accuracy of this function. The ephemeris barely
+  matters: U and V enter only at order 1/c^2, so the bundled provider's
+  2.8 mm/s on the Earth's velocity moves the result by 4.8e-9 m and its
+  8.3 km on the solar distance by 3.5e-9 m.
 
-  THE EPHEMERIS IS ALMOST IRRELEVANT HERE, WHICH IS COUNTER-INTUITIVE AND
-  WORTH STATING. U and V reach the answer only through 1/c^2 terms, so their
-  errors are suppressed by 1e-8. Measured against the bundled SOFA provider's
-  own budget: 2.8 mm/s on the Earth's velocity moves the result by 4.8e-9 m,
-  and 8.3 km on the solar distance by 3.5e-9 m - six orders inside the 1 mm.
-  Do not reach for MICE on account of this function.
-
-  TERM SIZES AT A MID-LATITUDE STATION (|r| = 6391 km), measured, so that the
-  choice of Scale is a decision taken with the numbers in view:
+  TERM SIZES AT A MID-LATITUDE STATION (|r| = 6391 km), measured:
 
     L_C scale term          -0.0947 m   (present only for "tdbCompatible")
     U/c^2 potential term    -0.0631 m
     Lorentz term             +0.0322 m  (maximum, when r is along V)
-    total, "tdbCompatible"  -0.1715 m
-    total, "none"           -0.0769 m
 
-  THE VELOCITY IS NOW PROVIDED, FROM IAU 2000 RESOLUTION B1.3, AND THE TERM
-  THAT COULD NOT BE PINNED DOWN AT REV. 1.132 IS ITS dT/dt FACTOR:
-  1 - (v_E^2/2 + w_ext + a_E.r + v_E.v)/c^2, which is 1.5e-8 - on 31 km/s
-  that is 4.7e-4 m/s, four thousand times the 1e-7 m/s a KBR reduction works
-  at. Refusing to guess it was right. Validated by central difference at six
-  step sizes: the residual falls by exactly four at each halving, order 2.00
-  throughout, so it is the difference's own truncation and not a formula
-  error. Superseded note follows.
-
-  NO VELOCITY TRANSFORMATION IS PROVIDED AND THAT IS NOT AN OVERSIGHT. The
-  IERS Conventions (2010) give Eqs. (11.18) and (11.19) for POSITION and
-  state no transformation for velocity anywhere in Chapters 10 or 11.
-  Differentiating (11.18) would need the Earth's barycentric acceleration and
-  dU/dt, which are available, but also the rate relation between the two
-  frames' time arguments, which is a convention question rather than an
-  arithmetic one and whose size - d(TDB-TT)/dt is about 3.3e-10, i.e. 2.5e-6
-  m/s at 7.5 km/s - is twenty-five times the 1e-7 m/s tier a KBR or LRI
-  reduction works at. Supplying a velocity derived from a rule this document
-  does not state would produce something smooth, self-consistent and wrong at
-  exactly the level the function exists to reach.</pre>
+  THE VELOCITY is held to a difference of the position map over the
+  resolution's own time transformation; see the ACCURACY of bcrsToGcrs:
+  1.9e-10 m/s, where leaving out the time factor misses by 1.3e-4 m/s under
+  "none" and 2.0e-5 m/s under "tdbCompatible".</pre>
 <h4>ERRORS</h4>
 <pre>referenceSystem:gcrsToBcrs:scaleRequired
       Scale has no default. The two settings differ by 9.5 cm at the Earth's
       surface, ninety-five times the formula's own uncertainty, and neither
-      is visible in the result - decision D67's rule, applied again.
+      is visible in the result.
   referenceSystem:gcrsToBcrs:unknownScale
   referenceSystem:gcrsToBcrs:sizeMismatch
   referenceSystem:barycentricBodyState:wrongScale</pre>
 <h4>REFERENCES</h4>
-<pre>IERS Conventions (2010), IERS Technical Note 36, G. Petit and B. Luzum
+<pre>Soffel, M. et al., 2003, AJ 126, 2687, Appendix A (IAU 2000 Resolution
+      B1.3, space and time parts).
+  IERS Conventions (2010), IERS Technical Note 36, G. Petit and B. Luzum
       (eds.), Eq. (11.18) and Eq. (11.19), Section 11.2; Table 1.1.
-  IAU 2000 Resolutions B1.3 and B1.5 (the BCRS, GCRS and L_C).
-  Klioner, S. A. et al., 2010, Proc. IAU Symp. 261.</pre>
+  IAU 2000 Resolutions B1.3 and B1.5 (the BCRS, GCRS and L_C).</pre>
 <h4>EXAMPLE</h4>
 <pre>t = referenceSystem.datetimeToEpoch(datetime(2023, 3, 1), "TT");
   station = [4517590; 837897; 4442892];
-  rBcrs = referenceSystem.gcrsToBcrs(station, t, Scale = "tdbCompatible");
+  rBcrs = referenceSystem.gcrsToBcrs(station, [], t, Scale = "tdbCompatible");
   fprintf('length changes by %.4f m\n', norm(rBcrs) - norm(station));</pre>
 <h4>KEYWORDS</h4>
 <pre>BCRS, GCRS, barycentric, Lorentz, L_C, TT-compatible, TDB-compatible, scale
 
-See also BCRSTOGCRS, BARYCENTRICBODYSTATE, GEOCENTRICBODYSTATE, ITERSCONSTANTS.
+See also BCRSTOGCRS, BARYCENTRICBODYSTATE, GEOCENTRICBODYSTATE, IERSCONSTANTS.
 
 -------------------------------------------------------------------------
 referenceSystem v2.1
@@ -9702,23 +9590,24 @@ Created: 2026-07-28 15:35 (CEST, UTC+02:00)
 <h3>referenceSystem.bcrsToGcrs</h3>
 <p class="h1">Express a barycentric-coordinate vector in the GCRS.</p>
 <h4>SYNTAX</h4>
-<pre>rGcrs = bcrsToGcrs(rBcrs, epoch, Scale = "tdbCompatible")
-  [rGcrs, info] = bcrsToGcrs(rBcrs, epoch, Name, Value)
+<pre>rGcrs = bcrsToGcrs(rBcrs, [], epoch, Scale = "tdbCompatible")
+  [rGcrs, vGcrs] = bcrsToGcrs(rBcrs, vBcrs, epoch, Scale = "tdbCompatible")
+  [rGcrs, vGcrs, info] = bcrsToGcrs(rBcrs, vBcrs, epoch, Name, Value)
 
-  The exact inverse of gcrsToBcrs: IERS Conventions (2010) Eq. (11.19), or
-  Eq. (11.18) with Scale "none", solved rather than approximated.
+  The spatial part of IAU 2000 Resolution B1.3, in the direction it is
+  written, and the inverse of gcrsToBcrs; on request the velocity, with the
+  resolution's time part.
 
   THE INPUT IS A SEPARATION VECTOR FROM THE GEOCENTRE EXPRESSED IN BCRS
   COORDINATES, NOT A BARYCENTRIC POSITION. Subtract the Earth's barycentric
-  position first; see METHOD in gcrsToBcrs, where the distinction is four
-  orders of magnitude wide.</pre>
+  position first; see METHOD in gcrsToBcrs.</pre>
 <h4>INPUT ARGUMENTS</h4>
 <pre>Name    Size   Type      Units  Description
   ----    ----   ----      -----  -----------
   rBcrs   3xN    double    m      Geocentric vector in BCRS coordinates, one
                                   column per epoch, or one column for all.
-  vBcrs   3xN    double    m/s    Velocity per unit of the SOURCE frame's
-                                  coordinate time. PASS [] FOR POSITION ONLY.
+  vBcrs   3xN    double    m/s    Its rate per second of BCRS coordinate
+                                  time, or [] for position only.
   epoch   1x1    struct    -      Epoch struct, N entries, any scale but UT1.</pre>
 <h4>OPTIONAL NAME-VALUE ARGUMENTS</h4>
 <pre>Name         Size   Type     Default     Description
@@ -9730,47 +9619,44 @@ Created: 2026-07-28 15:35 (CEST, UTC+02:00)
 <pre>Name    Size   Type     Units  Description
   ----    ----   ----     -----  -----------
   rGcrs   3xN    double   m      The vector in GCRS coordinates.
+  vGcrs   3xN    double   m/s    Its rate per second of GCRS coordinate
+                                 time, or [] when vBcrs was [].
   info    1x1    struct   -      As gcrsToBcrs.</pre>
 <h4>METHOD</h4>
-<pre>THE INVERSE IS EXACT, NOT ACCURATE, AND THAT IS THE POINT OF THIS FILE.
-  Both Conventions equations are linear in the geocentric vector,
-  r_out = M r_in with M = alpha*I + beta*V*V', a rank-one update of a scaled
-  identity. Sherman-Morrison gives
-
-      M^-1 = (1/alpha) [ I - beta V V' / (alpha + beta |V|^2) ]
-
-  in closed form. Cross-checked in numpy against a dense inverse: both leave
-  ||M M^-1 - I|| at 1.11e-16, so nothing is bought by forming the matrix.
-
-  Decision D68 requires every inverse in this toolbox to be SOLVED and never
-  obtained by negating the forward parameters. Negation would in fact be
-  accurate here - the correction is 1.5e-8, so its square is 2e-16 relative,
-  a nanometre at the Earth's surface - but an exact solution that costs the
-  same removes the argument entirely, and a rule that is followed only where
-  it is cheap is not a rule.</pre>
+<pre>The map is applied in closed form, X = r + (1/c^2)[ ... ] as gcrsToBcrs
+  writes it, and the velocity is dX/dt divided by dT/dt, with dT/dt from the
+  resolution's time part; see gcrsToBcrs for both equations.</pre>
 <h4>ACCURACY</h4>
 <pre>The Conventions' own stated uncertainty, below 1 mm, exactly as gcrsToBcrs.
   The round trip through both functions closes to 9.3e-10 m at a
-  mid-latitude station, which is roundoff at the 6.4e6 m scale and not a
-  property of the formula.
+  mid-latitude station, which is roundoff at the 6.4e6 m scale.
 
-  THE VELOCITY IS PROVIDED; see gcrsToBcrs for its source and validation.</pre>
+  THE VELOCITY IS HELD TO THE RESOLUTION ITSELF: a straight BCRS trajectory
+  is mapped at t - h and t + h, and the difference of the two GCRS vectors
+  is divided by the GCRS time elapsed between the two events, formed from
+  the time part of Resolution B1.3 - 2h less the integral of
+  |V|^2/2 + w and the change in V.r, over c^2. Measured on a 7.6 km/s
+  trajectory at h = 50 s: 1.8e-10 m/s under "none" and 1.9e-10 m/s under
+  "tdbCompatible". Without the dT/dt factor the velocity missed the same
+  oracle by 1.3e-4 m/s and 2.0e-5 m/s.</pre>
 <h4>ERRORS</h4>
 <pre>referenceSystem:bcrsToGcrs:scaleRequired
   referenceSystem:bcrsToGcrs:unknownScale
-  referenceSystem:bcrsToGcrs:sizeMismatch</pre>
+  referenceSystem:bcrsToGcrs:sizeMismatch
+  referenceSystem:barycentricBodyState:wrongScale</pre>
 <h4>REFERENCES</h4>
-<pre>IERS Conventions (2010), IERS Technical Note 36, Eq. (11.18) and (11.19),
-      Section 11.2; Table 1.1.
-  Sherman, J. and Morrison, W. J., 1950, Ann. Math. Statist. 21(1), 124.</pre>
+<pre>Soffel, M. et al., 2003, AJ 126, 2687, Appendix A (IAU 2000 Resolution
+      B1.3, space and time parts).
+  IERS Conventions (2010), IERS Technical Note 36, Eq. (11.18) and (11.19),
+      Section 11.2; Table 1.1.</pre>
 <h4>EXAMPLE</h4>
 <pre>t = referenceSystem.datetimeToEpoch(datetime(2023, 3, 1), "TT");
   station = [4517590; 837897; 4442892];
-  b = referenceSystem.gcrsToBcrs(station, t, Scale = "tdbCompatible");
-  back = referenceSystem.bcrsToGcrs(b, t, Scale = "tdbCompatible");
+  b = referenceSystem.gcrsToBcrs(station, [], t, Scale = "tdbCompatible");
+  back = referenceSystem.bcrsToGcrs(b, [], t, Scale = "tdbCompatible");
   fprintf('round trip %.3e m\n', norm(back - station));</pre>
 <h4>KEYWORDS</h4>
-<pre>BCRS, GCRS, barycentric, Lorentz, L_C, inverse, Sherman-Morrison
+<pre>BCRS, GCRS, barycentric, Lorentz, L_C, velocity, Resolution B1.3
 
 See also GCRSTOBCRS, BARYCENTRICBODYSTATE, GEOCENTRICBODYSTATE, IERSCONSTANTS.
 
@@ -9912,7 +9798,8 @@ Created: 2026-07-28 15:45 (CEST, UTC+02:00)
   and says so in section 5. The comparator was wrong, not the table - which
   is the kind of thing only a check against an outside quantity can tell you.</pre>
 <h4>ERRORS</h4>
-<pre>referenceSystem:bodyRotationElements:unknownBody
+<pre>referenceSystem:bodyRotationElements:unknownSource
+  referenceSystem:bodyRotationElements:unknownBody
   referenceSystem:bodyRotationElements:earthNotTabulated
       The 2015 report REMOVED the approximate expressions for the Earth
       (section 10, item 2) because their accuracy was poor and they failed
@@ -9924,7 +9811,11 @@ Created: 2026-07-28 15:45 (CEST, UTC+02:00)
       axis frame must come from a lunar ephemeris. This is decision D14's
       non-defaulting lunar frame arriving from the authority rather than from
       a scoping choice.
-  referenceSystem:bodyRotationElements:wrongScale</pre>
+  referenceSystem:bodyRotationElements:wrongScale
+  referenceSystem:bodyRotationElements:staleEphemeris
+      Source "pck": the SPICE pool does not hold exactly the kernels the
+      Ephemeris struct names - a later readEphemeris replaced them, or other
+      code loaded an SPK beside them. Call readEphemeris again.</pre>
 <h4>REFERENCES</h4>
 <pre>Archinal, B. A. et al., 2018, Celest. Mech. Dyn. Astron. 130, 22:
       "Report of the IAU Working Group on Cartographic Coordinates and
@@ -10037,7 +9928,11 @@ Created: 2026-07-30 20:15 (CEST, UTC+02:00)
   referenceSystem:bodyRotationElements:wrongScale
       All raised by bodyRotationElements, which resolves the body. The
       identifiers name that function because that is where the refusal is
-      decided; section C.2 binds an identifier to the deciding function.</pre>
+      decided; section C.2 binds an identifier to the deciding function.
+  referenceSystem:rotationIcrfToBodyFixed:staleEphemeris
+      Source "pck": the SPICE pool does not hold exactly the kernels the
+      Ephemeris struct names - a later readEphemeris replaced them, or other
+      code loaded an SPK beside them. Call readEphemeris again.</pre>
 <h4>REFERENCES</h4>
 <pre>Archinal, B. A. et al., 2018, Celest. Mech. Dyn. Astron. 130, 22,
       Section 2 and Figure 1.</pre>
@@ -10326,12 +10221,9 @@ Created: 2026-07-24 12:20 (CEST, UTC+02:00)
   Because they do not survive the way this toolbox is delivered. A ZIP entry
   stores naive local time with no time zone, so an archive built on a UTC
   machine and unpacked on a UTC+2 one produces sources that appear two hours
-  OLDER than they are. Revisions 1.93, 1.94 and 1.99 each changed a C source,
-  each shipped it, and none of them rebuilt: mex/rsApi.c arrived stamped
-  15:44 against a gateway built at 17:26, so max(datenum) was behind the
-  binary and the check reported current. Every time, the symptom was read as
-  an installation problem and once it was written into the log as an
-  obligation about stale caches. It was arithmetic on wall clocks.
+  OLDER than they are: a changed C source can arrive stamped earlier than
+  the gateway built from the old one, and a timestamp check then reports the
+  binary current.
 
   A content digest has no such failure mode. It is immune to the time zone,
   to clock skew between machines, to a git checkout that writes every file
@@ -10368,7 +10260,7 @@ Created: 2026-07-24 12:20 (CEST, UTC+02:00)
 <h4>ERRORS</h4>
 <pre>referenceSystem:mexSourceDigest:noSources</pre>
 <h4>REFERENCES</h4>
-<pre>Handover revision 1.100 and the failures recorded at 1.85, 1.95 and 1.99.</pre>
+<pre>Handover section C.4 (MEX rules) and C.10 (installation).</pre>
 <h4>EXAMPLE</h4>
 <pre>digest = referenceSystem.mexSourceDigest(pwd);</pre>
 <h4>KEYWORDS</h4>
@@ -10556,6 +10448,10 @@ Created: 2026-07-24 20:20 (CEST, UTC+02:00)
 <pre>referenceSystem:buildDocumentation:packageNotFound
   referenceSystem:buildDocumentation:docFolderNotFound
   referenceSystem:buildDocumentation:outputNotWritable</pre>
+<h4>WARNINGS</h4>
+<pre>referenceSystem:buildDocumentation:searchDatabaseFailed
+      builddocsearchdb failed. The pages are written and open normally;
+      only the Help browser search will not find them.</pre>
 <h4>REFERENCES</h4>
 <pre>Handover Part E and decision D33. MathWorks, "Display Custom
   Documentation", for info.xml, helptoc.xml and builddocsearchdb.</pre>
@@ -10638,14 +10534,6 @@ Created: 2026-07-27 09:40 (CEST, UTC+02:00)
   Benchmark and convergence rows are not produced by this function. A test
   that measures something logs one pipe-separated record through
   testCase.log, the framework records it, and this function parses those
-  A WARNINGS section lists every test that raised a MATLAB warning it did not
-  suppress. Warnings appear in no TestResult, so before revision 1.58 they
-  reached the console and nowhere else: a real gimbal-lock warning survived
-  four S4 runs unreported and was found by a reader watching the console. The
-  count in SUMMARY is of TESTS THAT WARNED, not of warnings - lastwarn keeps
-  only the most recent - and the section says so rather than implying a total
-  it does not have.
-
   records into the BENCHMARKS, CONVERGENCE and NOTES sections. The measuring test
   therefore owns its numbers and the runner owns only their layout. The record
   formats are built by TestPerformance.benchmarkRecord and
@@ -10656,13 +10544,17 @@ Created: 2026-07-27 09:40 (CEST, UTC+02:00)
   durations are given to three decimals; benchmark medians to six, because a
   single-epoch call is measured in microseconds.
 
+  A WARNINGS section lists every test that raised a MATLAB warning it did not
+  suppress. Warnings appear in no TestResult, so without it they would reach
+  the console and nowhere else. The count in SUMMARY is of TESTS THAT WARNED,
+  not of warnings - lastwarn keeps only the most recent - and the section says
+  so rather than implying a total it does not have.
+
   A TEST THAT IS MEANT TO FILTER SAYS SO. Two checks in this suite cannot run
   on a healthy machine - one needs a MATLAB release that still permits a
   namespace folder on the path, the other needs a transfer slow enough to time
-  out - and until revision 1.204 the report described them in the framework's
-  words, "assumption was not met" and "assumeTrue failed". Read as intended
-  that says nothing is wrong; read at a glance it says two things are, on
-  every run, for the life of the toolbox. The runner therefore carries an
+  out - and in the framework's words, "assumption was not met", they read at
+  a glance as two things wrong on every run. The runner therefore carries an
   allow-list of the tests whose assumption is EXPECTED to fail, with the
   standing reason for each. They are labelled SKIP, counted separately in the
   summary, and listed under INTENTIONALLY SKIPPED with the reason instead of
@@ -10693,14 +10585,25 @@ Created: 2026-07-27 09:40 (CEST, UTC+02:00)
   its resolution, typically a few microseconds, which is why the speed tests
   of section D.1 take a median over repetitions rather than a single timing.</pre>
 <h4>ERRORS</h4>
-<pre>referenceSystem:runTestSuite:testFolderMissing</pre>
-<h4>WARNINGS</h4>
-<pre>None raised by this function. It RECORDS the warnings raised by the tests
-  it runs, in the WARNINGS section of the report; see WarningRecordingPlugin.
+<pre>referenceSystem:runTestSuite:testFolderMissing
       The test folder is not where the package expects it, next to the
       package folder. Reinstall the toolbox as one distribution folder.
   referenceSystem:runTestSuite:cannotWriteReport
-      The report file could not be opened for writing.</pre>
+      The report file could not be opened for writing.
+  referenceSystem:runTestSuite:packageNotResolvable
+      The referenceSystem namespace does not resolve, so no test could
+      reach the toolbox; the suite is not run.
+  referenceSystem:runTestSuite:testClassExcluded
+      A test class contributed no tests. Raised after the report is
+      written, so the results that did run can still be read.</pre>
+<h4>WARNINGS</h4>
+<pre>referenceSystem:runTestSuite:missingReportLine
+      A report block produced a missing string; the line is marked and the
+      rest of the report is written.
+  referenceSystem:runTestSuite:controlCharacterInReport
+      A report line carried a control character; it is replaced by a space.
+  The warnings raised BY THE TESTS are recorded in the report's own WARNINGS
+  section, not raised again; see WarningRecordingPlugin.</pre>
 <h4>REFERENCES</h4>
 <pre>Handover section D.1 (test categories), D.2 (structure), D.3 (this report).</pre>
 <h4>EXAMPLE</h4>
@@ -10891,6 +10794,6 @@ Created: 2026-07-26 12:30 (CEST, UTC+02:00) - session S4, folder-lock report
 -------------------------------------------------------------------------</pre>
 <p class="top"><a href="#contents">back to contents</a></p>
 </div>
-<p class="foot">referenceSystem v2.1.237 &mdash; generated from the
+<p class="foot">referenceSystem v2.1.244 &mdash; generated from the
 package help blocks. See the handover document for the design.</p>
 </body></html>

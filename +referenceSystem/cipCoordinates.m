@@ -34,9 +34,6 @@ function [X, Y, s] = cipCoordinates(epoch, options)
 %                                                      "IAU2000A". Required
 %                                                      whenever an offset is
 %                                                      non-zero.
-%   Interpolant   1x1         struct          none     Reserved. Supplying it
-%                                                      raises notImplemented;
-%                                                      see METHOD.
 %
 % OUTPUT ARGUMENTS
 %   Name   Size   Type     Units  Description
@@ -79,11 +76,10 @@ function [X, Y, s] = cipCoordinates(epoch, options)
 %   round trips per single-epoch rotation.
 %
 %   The model is evaluated DIRECTLY at every epoch, through SOFA iauXys06a.
-%   There is no interpolated path in v2.0 (decisions D17 and D24): interpolation
-%   belongs to earthOrientationInterpolant, which interpolates X, Y and s
-%   alongside the EOP quantities, and two mechanisms for one job would mean two
-%   error budgets and two code paths. 'Interpolant' is declared here so that the
-%   signature is final now and P19 changes no call site later.
+%   Interpolated X, Y and s, with the offsets already applied, are the panels
+%   of earthOrientationInterpolant: evaluateInterpolant reads them by channel
+%   name, and rotationItrsToGcrs assembles the rotation from them. There is no
+%   second interpolated path here.
 %
 %   The vocabulary is direct and interpolated at every level of this toolbox,
 %   never exact and interp.
@@ -119,7 +115,6 @@ function [X, Y, s] = cipCoordinates(epoch, options)
 %   referenceSystem:cipCoordinates:cipModelRequired
 %   referenceSystem:cipCoordinates:sizeMismatch
 %   referenceSystem:cipCoordinates:conflictingOffsets
-%   referenceSystem:cipCoordinates:notImplemented
 %   referenceSystem:cipCoordinates:gatewayMissing
 %
 % REFERENCES
@@ -137,7 +132,8 @@ function [X, Y, s] = cipCoordinates(epoch, options)
 % KEYWORDS
 %   CIP, CIO, celestial intermediate pole, precession, nutation, dX, dY, SOFA
 %
-% See also ROTATIONGCRSTOCIRS, ROTATIONITRSTOGCRS, INTERPOLATEEOP, READEOP.
+% See also ROTATIONGCRSTOCIRS, ROTATIONITRSTOGCRS, INTERPOLATEEOP, READEOP,
+%   EVALUATEINTERPOLANT.
 %
 % -------------------------------------------------------------------------
 % referenceSystem v2.1
@@ -151,15 +147,6 @@ function [X, Y, s] = cipCoordinates(epoch, options)
         options.DeltaX (:,1) double = 0
         options.DeltaY (:,1) double = 0
         options.CipModel (1,1) string = ""
-        options.Interpolant = []
-    end
-
-    if ~isempty(options.Interpolant)
-        error('referenceSystem:cipCoordinates:notImplemented', ...
-            ['An interpolated CIP path is deferred to v2.1 (prompt P19). ', ...
-            'The name-value pair is declared now so that the signature is ', ...
-            'final and no call site changes when it arrives; until then the ', ...
-            'model is evaluated directly at every epoch.']);
     end
 
     epoch = referenceSystem.normalizeEpoch(epoch);

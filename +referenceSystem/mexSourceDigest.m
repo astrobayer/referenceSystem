@@ -10,12 +10,9 @@ function digest = mexSourceDigest(toolboxRoot)
 %   Because they do not survive the way this toolbox is delivered. A ZIP entry
 %   stores naive local time with no time zone, so an archive built on a UTC
 %   machine and unpacked on a UTC+2 one produces sources that appear two hours
-%   OLDER than they are. Revisions 1.93, 1.94 and 1.99 each changed a C source,
-%   each shipped it, and none of them rebuilt: mex/rsApi.c arrived stamped
-%   15:44 against a gateway built at 17:26, so max(datenum) was behind the
-%   binary and the check reported current. Every time, the symptom was read as
-%   an installation problem and once it was written into the log as an
-%   obligation about stale caches. It was arithmetic on wall clocks.
+%   OLDER than they are: a changed C source can arrive stamped earlier than
+%   the gateway built from the old one, and a timestamp check then reports the
+%   binary current.
 %
 %   A content digest has no such failure mode. It is immune to the time zone,
 %   to clock skew between machines, to a git checkout that writes every file
@@ -58,7 +55,7 @@ function digest = mexSourceDigest(toolboxRoot)
 %   referenceSystem:mexSourceDigest:noSources
 %
 % REFERENCES
-%   Handover revision 1.100 and the failures recorded at 1.85, 1.95 and 1.99.
+%   Handover section C.4 (MEX rules) and C.10 (installation).
 %
 % EXAMPLE
 %   digest = referenceSystem.mexSourceDigest(pwd);

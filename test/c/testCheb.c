@@ -289,7 +289,8 @@ static void testCipInjection(void)
      *
      * This is deliberately not an interpolation test. It isolates the wiring. */
     const int n = 4;
-    double ttDay[4], ttSec[4], ut1Day[4], ut1Sec[4], omega[4];
+    double ttDay[4], ttSec[4], ut1Day[4], ut1Sec[4];
+    double ut1MinusTai[12];
     double xp[12], yp[12], dX[12], dY[12];
     double cipX[12], cipY[12], cipS[12];
     double rModel[36], rInject[36];
@@ -303,12 +304,12 @@ static void testCipInjection(void)
         ttSec[k] = 43200.0 + 137.0 * (double)k;
         ut1Day[k] = ttDay[k];
         ut1Sec[k] = ttSec[k] - 69.184;
-        omega[k] = 7.292115e-5;
         for (j = 0; j < 3; j++) {
             xp[j * n + k] = 1.0e-7 * (double)(k + 1);
             yp[j * n + k] = 2.0e-7 * (double)(k + 1);
             dX[j * n + k] = 1.0e-10;
             dY[j * n + k] = -2.0e-10;
+            ut1MinusTai[j * n + k] = -37.0;
         }
     }
 
@@ -329,10 +330,10 @@ static void testCipInjection(void)
     }
 
     status = rsRotationItrsToGcrs(n, ttDay, ttSec, ut1Day, ut1Sec, xp, yp,
-        dX, dY, omega, 2006, 1, step, rModel, rdotModel, NULL);
+        dX, dY, ut1MinusTai, 2006, 1, step, rModel, rdotModel, NULL);
     check(status == 0, "the model path succeeds");
     status = rsRotationItrsToGcrsFromCip(n, ttDay, ttSec, ut1Day, ut1Sec, xp, yp,
-        dX, dY, omega, cipX, cipY, cipS, 2006, 1, step, rInject, rdotInject, NULL);
+        dX, dY, ut1MinusTai, cipX, cipY, cipS, 2006, 1, step, rInject, rdotInject, NULL);
     check(status == 0, "the injected path succeeds");
 
     for (i = 0; i < 9 * n; i++) {
@@ -348,10 +349,10 @@ static void testCipInjection(void)
     /* All three or none. Two is a half-converted caller and the failure would
      * otherwise be silent: X and Y from the panel, s from the model. */
     check(rsRotationItrsToGcrsFromCip(n, ttDay, ttSec, ut1Day, ut1Sec, xp, yp,
-        dX, dY, omega, cipX, cipY, NULL, 2006, 0, step, rInject, NULL, NULL) == -4,
+        dX, dY, ut1MinusTai, cipX, cipY, NULL, 2006, 0, step, rInject, NULL, NULL) == -4,
         "two of the three CIP arrays are refused");
     check(rsRotationItrsToGcrsFromCip(n, ttDay, ttSec, ut1Day, ut1Sec, xp, yp,
-        dX, dY, omega, cipX, cipY, cipS, 1999, 0, step, rInject, NULL, NULL) == -1,
+        dX, dY, ut1MinusTai, cipX, cipY, cipS, 1999, 0, step, rInject, NULL, NULL) == -1,
         "cipModel is validated even when it is unread");
 }
 

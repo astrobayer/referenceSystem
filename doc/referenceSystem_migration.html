@@ -177,7 +177,34 @@ spelling and will fail as undefined.</b> Search the
 the function does; the <code>KEYWORDS</code> block of every help text is there
 so that <code>lookfor</code> finds it.</p>
 
-<h2>6. Things that are now stricter, and why</h2>
+<h2>6. Changes within v2.1 that move numbers</h2>
+
+<table>
+<tr><th>Since</th><th>Change</th><th>What to do</th></tr>
+<tr><td>v2.1.239</td>
+    <td><code>interpolateEop</code> defaults to 4-point Lagrange and removes and
+        restores the zonal tides. UT1 moves by up to tens of microseconds between
+        rows; polar motion by microarcseconds.</td>
+    <td>Nothing, or pass <code>'Method', "linear", 'ZonalTides',
+        "interpolate"</code> to reproduce an older run.</td></tr>
+<tr><td>v2.1.239</td>
+    <td><code>rotationItrsToGcrs</code>: <code>Rdot</code> and <code>Rddot</code>
+        take the Earth rotation rate from the interpolated UT1.
+        <code>'ApplyLengthOfDay'</code>, <code>info.lengthOfDayApplied</code> and
+        <code>info.sampleSource</code> are gone; the interpolant has no
+        <code>lod</code> channel.</td>
+    <td>Delete <code>'ApplyLengthOfDay', ...</code> from calls. Use
+        <code>info.path</code>.</td></tr>
+<tr><td>v2.1.239</td>
+    <td>A series or <code>InterpolationMethod</code> passed beside an
+        <code>Interpolant</code> is refused; a missing x<sub>p</sub>, y<sub>p</sub>,
+        &Delta;UT1, dX or dY in the stencil is refused
+        (<code>interpolateEop:missingValue</code>).</td>
+    <td>Pass one source. For finals2000A predictions, keep the arc inside the
+        rows that publish every quantity.</td></tr>
+</table>
+
+<h2>7. Things that are now stricter, and why</h2>
 <table>
 <tr><th>Change</th><th>Reason</th></tr>
 <tr><td>The default ellipsoid is <b>GRS80</b>, not WGS84.</td>

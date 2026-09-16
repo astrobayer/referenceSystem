@@ -52,20 +52,23 @@ function [day, sec] = carryEpoch(day, sec, isLeapBearing)
 %   the day before carrying, and iterates at most twice, which is why the input
 %   range is restricted to one day either side.
 %
-%   THE FLAG IS DERIVED BY THE CALLER AND NEVER GUESSED HERE. normalizeEpoch
-%   takes it from the time-scale registry; convertTimeScale takes it from a
-%   comparison against the literal "UTC" at a site where the scale is a literal
-%   in the source. Passing it in rather than looking it up is the whole point:
+%   THE FLAG IS DERIVED BY THE CALLER AND NEVER GUESSED HERE. Both callers
+%   take it from a comparison of the canonical scale name against "UTC":
+%   normalizeEpoch after the registry lookup it already made, convertTimeScale
+%   at a site where the scale is a literal in the source. Passing it in rather than looking it up is the whole point:
 %   the registry lookup was 2.84 us of an 8.13 us normalizeEpoch call, made
 %   seventeen times per single-epoch rotation, and twelve of those seventeen
-%   were re-deriving what the caller already knew (prompt P28b, rev. 1.123).
+%   were re-deriving what the caller already knew (prompt P28b).
 %
 %   GLONASS is UTC advanced by three hours, so a leap second falls in the middle
 %   of a GLONASS day rather than at its end and has no distinct representation
 %   in the day-and-second form. GLONASS is therefore carried as a uniform scale
 %   and convertTimeScale refuses to produce a GLONASS epoch inside a leap
-%   second. Callers must pass isLeapBearing = false for it, which is what the
-%   registry's isLeapBearing field already says.
+%   second. Callers must pass isLeapBearing = false for it. That is NOT the
+%   registry's isLeapBearing field, which timeScale sets true for GLONASS
+%   because a GLONASS interval can span an inserted second (addSeconds
+%   refuses one): the flag here means "a UTC day may be 86401 s long", and
+%   only UTC has such days.
 %
 % ACCURACY
 %   Exact. No rounding is introduced beyond that already present in the inputs,

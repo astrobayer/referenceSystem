@@ -84,11 +84,6 @@ function correction = zonalTideEopCorrection(epoch)
 %   under the conventional 35-day boundary. At the equator one millisecond of
 %   UT1 is 0.465 m of surface displacement.
 %
-%   Handover approximation #6 previously quoted 30 microseconds and 14 mm for
-%   this quantity. Both are wrong by three to four orders of magnitude, in the
-%   direction that makes D30 more necessary rather than less. Corrected in
-%   revision 1.40 on the measurement above.
-%
 %   The model's own accuracy is that of IERS Conventions (2010) Chapter 8; the
 %   coefficients are tabulated to four decimals in units of 1e-4 s, so the
 %   representation floor is about 10 ns in UT1.

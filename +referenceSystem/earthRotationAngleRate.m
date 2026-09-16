@@ -52,8 +52,6 @@ function rate = earthRotationAngleRate()
 %   difference of 6.8e-19 rad/s, the rounding of two angles of order unity
 %   divided by the 1000 s interval, and 4.7 picometres per second at 7000 km.
 %   The reference test logs the reading on every host and holds it to 1e-17.
-%   Until rev. 1.227 this block quoted 7.292115146705669e-5 and "1.3e-18"; that
-%   number is 1.31e-17 from exact, fails the test, and was a transcription.
 %
 % ERRORS
 %   referenceSystem:earthRotationAngleRate:gatewayMissing

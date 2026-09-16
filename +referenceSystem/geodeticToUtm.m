@@ -60,14 +60,12 @@ function [eastingNorthing, zone, hemisphere, latitudeBand] = ...
 %         6 deg             2.2e-05 m      1.75e-04 m
 %        20 deg             8.8e-05 m      2.27e-04 m
 %
-%   THE TWO COLUMNS ARE DIFFERENT ERRORS AND THE FIRST MEASUREMENT OF THIS
-%   MISSED ONE OF THEM. The easting error is the transverse part and grows with
+%   THE TWO COLUMNS ARE DIFFERENT ERRORS. The easting error is the transverse
+%   part and grows with
 %   the offset from the central meridian, which is the behaviour one expects and
 %   looks for. The northing error is the MERIDIAN ARC series and is essentially
 %   independent of the offset - it is 1.71e-04 m even ON the central meridian,
-%   where the easting error is exactly zero. Revision 1.52 of the handover
-%   recorded 6.3e-05 m for this truncation; that figure was the easting alone,
-%   and the dominant term is three times larger. Corrected in revision 1.53.
+%   where the easting error is exactly zero, so it is the dominant term.
 %
 %   Both are still well inside a millimetre, so the verdict is unchanged and n^6
 %   would buy nothing a UTM coordinate can use. The figures also show that the

@@ -73,7 +73,7 @@ right below a microsecond &mdash; see <a href="#leap">leap seconds</a>.</td></tr
 &minus;1. An optimisation, never a requirement.</td></tr>
 </table>
 
-<h2 id="format">The interpolant file, and the seventh channel</h2>
+<h2 id="format">The interpolant file</h2>
 
 <p><code>writeInterpolant</code> emits a plain-text file that
 <code>rsApiReadInterpolant</code> reads. It exists in two formats and
@@ -84,8 +84,17 @@ right below a microsecond &mdash; see <a href="#leap">leap seconds</a>.</td></tr
 <tr><td>1</td><td>6 &mdash; X, Y, s, x<sub>p</sub>, y<sub>p</sub>, &Delta;UT1</td>
     <td>up to v2.1.178</td></tr>
 <tr><td>2</td><td>7 &mdash; the same, plus the excess length of day</td>
-    <td>v2.1.179 onward (prompt P19c)</td></tr>
+    <td>v2.1.179 to v2.1.238</td></tr>
+<tr><td>2</td><td>6 &mdash; as format 1, with <code>method</code> and
+    <code>zonalTides</code> provenance lines</td>
+    <td>v2.1.239 onward</td></tr>
 </table>
+
+<p>The rotation reads the six channels X, Y, s, x<sub>p</sub>, y<sub>p</sub> and
+&Delta;UT1. A seventh channel in an older file is read over and not used.
+<b>The header is read by key and value, not by line</b>, so a year of one-day
+panels, whose <code>taiMinusUtc</code> line runs past a thousand characters,
+reads whole; keys the reader does not know are skipped.</p>
 
 <p><b>The channel count is read from the file's own <code>quantity</code> line,
 never inferred from the version number.</b> A reader that trusted the version
@@ -101,19 +110,14 @@ refused it at its final check, so every file <code>writeInterpolant</code> had
 written since v2.1.179 came back <code>RS_API_BAD_FILE</code>. The C suite read
 only a format-1 file, which is why nothing noticed; it now reads one of each.</p>
 
-<p><b>The C side uses the seventh channel since v2.1.222.</b> The excess length
-of day enters only the Earth rotation <i>rate</i>, and it enters through omega,
-not through the central difference &mdash; see
-<a href="#derivative">below</a>. Until v2.1.222 the C side read six channels,
-and its rate differed from MATLAB's default by 5.8e-13&nbsp;1/s (4&nbsp;&micro;m/s
-at 7000&nbsp;km).</p>
 
 <div class="warn">
 <p><b>If you fill in an <code>rsApiInterpolant</code> yourself</b> &mdash; as the
 worked propagator below does &mdash; set the new
 <code>quantityCount</code> field. <b>Zero means six</b>, so code written before
 v2.1.179 keeps its meaning and needs no edit; new code should say what it
-means. This default is not a courtesy: adding the field without it silently
+means. Any other count than 0, 6 or 7 is <code>RS_API_BAD_INTERPOLANT</code>.
+This default is not a courtesy: adding the field without it silently
 changed the meaning of every hand-built interpolant, made the panel term in the
 coefficient offset vanish so that every panel read panel&nbsp;0, and moved the
 residual against the direct chain from <b>1.16e-16 to 6.53e-07</b> &mdash; small
@@ -158,21 +162,17 @@ variation to be slipped in here, because the two would then disagree at a level
 nobody had measured.</p>
 
 <div class="key">
-<p><b>The Earth rotation part of the rate is not differenced.</b> It is
-analytic in omega, so omega has to be MATLAB's or the two APIs disagree whatever
-the step. Since v2.1.222 <code>rsApiRotationRate</code> uses exactly what
-<code>rotationItrsToGcrs</code> uses by default:</p>
-<pre>omega = rsEarthRotationAngleRate() * (1 - lod / 86400)</pre>
-<p><code>rsEarthRotationAngleRate</code> is the ERA slope, derived from SOFA's
-<code>iauEra00</code> by the same arithmetic as
-<code>earthRotationAngleRate</code> (decision D63). It is <b>not</b> the nominal
-7.292115e-5&nbsp;rad/s, which is 1.47e-12&nbsp;rad/s away. <code>lod</code> is the
-excess length of day in seconds, read from the panels at the epoch. A format-1
-interpolant has no <code>lod</code> channel, so lod is 0 there, which is MATLAB's
-<code>'ApplyLengthOfDay', false</code>. On the P19c test arc the C and MATLAB
-rates now agree bit for bit. <code>test/c/testApi.c</code> holds them to a
-MATLAB-computed fixture, because a C-only truth would share whatever omega the C
-side used.</p>
+<p><b>The rate is the derivative of the rotation.</b> The Earth rotation angle
+is differentiated in closed form, and its rate is formed from the &Delta;UT1
+panels at the same three samples:</p>
+<pre>omega    = eraSlope * (1 + d(UT1 - TAI)/dt)
+omegadot = eraSlope * d2(UT1 - TAI)/dt2</pre>
+<p>with each sample's UT1&minus;TAI taken as its &Delta;UT1 less the
+TAI&minus;UTC of its own panel, so a shoulder across a leap second sees no step.
+<code>eraSlope</code> is <code>rsEarthRotationAngleRate()</code>, the ERA slope
+derived from SOFA's <code>iauEra00</code> (decision D63). The construction lives
+once, in <code>rsCore</code>, and <code>rotationItrsToGcrs</code> reaches the same
+code, so the C and MATLAB rates agree bit for bit on the committed fixtures.</p>
 </div>
 
 <h2 id="leap">Leap seconds, and what an MJD can resolve</h2>

@@ -832,14 +832,14 @@ int rsRotationItrsToGcrs(int n,
                          const double *ut1Day, const double *ut1Sec,
                          const double *xp, const double *yp,
                          const double *dX, const double *dY,
-                         const double *omega,
+                         const double *ut1MinusTai,
                          int cipModel, int derivativeOrder, double step,
                          double *r, double *rdot, double *rddot)
 {
     /* The model path is the precomputed path with no panel supplied. There is
      * one assembly and one set of tests behind both. */
     return rsRotationItrsToGcrsFromCip(n, ttDay, ttSec, ut1Day, ut1Sec,
-        xp, yp, dX, dY, omega, NULL, NULL, NULL,
+        xp, yp, dX, dY, ut1MinusTai, NULL, NULL, NULL,
         cipModel, derivativeOrder, step, r, rdot, rddot);
 }
 
@@ -848,12 +848,15 @@ int rsRotationItrsToGcrsFromCip(int n,
                          const double *ut1Day, const double *ut1Sec,
                          const double *xp, const double *yp,
                          const double *dX, const double *dY,
-                         const double *omega,
+                         const double *ut1MinusTai,
                          const double *cipX, const double *cipY,
                          const double *cipS,
                          int cipModel, int derivativeOrder, double step,
                          double *r, double *rdot, double *rddot)
 {
+    /* The ERA slope per second of UT1 (decision D63), the same for every
+     * epoch, so it is derived once here rather than per epoch. */
+    const double eraSlope = rsEarthRotationAngleRate();
     int k;
 
     /* cipModel is unread when a panel is supplied - the offsets are already in
@@ -931,6 +934,18 @@ int rsRotationItrsToGcrsFromCip(int n,
             double zdot[3][3];
             double term[3][3];
             double acc[3][3];
+            /* THE RATE OF THE UT1 ACTUALLY USED (decision D128). ERA is a
+             * function of UT1 and UT1 = TT - 32.184 s + (UT1 - TAI), so
+             * dERA/dt is the slope times 1 + d(UT1 - TAI)/dt, and its change
+             * is the slope times d2(UT1 - TAI)/dt2. Both are the central
+             * differences of the three samples Qdot and Wdot are formed from,
+             * which is what makes Rdot and Rddot the derivatives of R. */
+            const double before = ut1MinusTai[k];
+            const double here = ut1MinusTai[n + k];
+            const double after = ut1MinusTai[2 * n + k];
+            const double omega = eraSlope * (1.0 + (after - before) / (2.0 * step));
+            const double omegaDot = eraSlope * (after - 2.0 * here + before)
+                / (step * step);
             int i;
             int j;
 
@@ -957,7 +972,7 @@ int rsRotationItrsToGcrsFromCip(int n,
             rsRotationZFirstDerivative(theta, zdot);
             for (i = 0; i < 3; i++) {
                 for (j = 0; j < 3; j++) {
-                    zdot[i][j] *= omega[k];
+                    zdot[i][j] *= omega;
                 }
             }
 
@@ -978,6 +993,7 @@ int rsRotationItrsToGcrsFromCip(int n,
                 double qddot[3][3];
                 double wddot[3][3];
                 double zddot[3][3];
+                double zslope[3][3];
 
                 for (i = 0; i < 3; i++) {
                     for (j = 0; j < 3; j++) {
@@ -987,15 +1003,15 @@ int rsRotationItrsToGcrsFromCip(int n,
                             / (step * step);
                     }
                 }
-                /* R3ddot = omegadot * dR3/dtheta + omega^2 * d2R3/dtheta2, and
-                 * the first term is dropped: omegadot from the observed change
-                 * in length of day is of order 1e-17 rad/s^2 against
-                 * omega^2 = 5.3e-9, that is 9 orders down. Stated in the help
-                 * text of rotationItrsToGcrs rather than left implicit. */
+                /* R3ddot = omega^2 * d2R3/dtheta2 + omegadot * dR3/dtheta.
+                 * Both terms are kept: the sub-daily UT1 tides alone make
+                 * omegadot reach 3.5e-17 rad/s^2, 2.5e-10 m/s^2 at 7000 km. */
                 rsRotationZSecondDerivative(theta, zddot);
+                rsRotationZFirstDerivative(theta, zslope);
                 for (i = 0; i < 3; i++) {
                     for (j = 0; j < 3; j++) {
-                        zddot[i][j] *= omega[k] * omega[k];
+                        zddot[i][j] = zddot[i][j] * omega * omega
+                            + zslope[i][j] * omegaDot;
                     }
                 }
 

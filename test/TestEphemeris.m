@@ -300,6 +300,69 @@ classdef TestEphemeris < matlab.unittest.TestCase
 
     methods (Test, TestTags = {'contract'})
 
+        function readEphemeris_contract_onlyTheLiveSetAnswers(testCase)
+            % D130. SPICE answers from the loaded pool, not from the struct a
+            % caller passes, so a result of readEphemeris is usable only while
+            % its kernels are exactly the loaded SPK and binary PCK files. Three
+            % ways that stops being true are each refused with staleEphemeris,
+            % and the struct works again once the pool holds its set:
+            %   a later readEphemeris replaced the set,
+            %   other code loaded an SPK beside it, and
+            %   a set refused by readEphemeris must not have been loaded at all.
+            testCase.assumeTrue(exist('cspice_spkezr', 'file') == 2 || ...
+                exist('cspice_spkezr', 'file') == 3, ...
+                'MICE is not on the path; the kernel-backed tier is skipped.');
+            folder = referenceSystem.dataFolder();
+            planetary = string(fullfile(folder, 'de440s.bsp'));
+            other = dir(fullfile(folder, '*.bsp'));
+            other = string(fullfile({other.folder}, {other.name}));
+            other = other(~strcmpi(other, planetary));
+            testCase.assumeTrue(isfile(planetary) && ~isempty(other), ...
+                "de440s.bsp and a second SPK are needed in " + folder + ".");
+            consumeWarning = onCleanup(@() lastwarn('', ''));
+            epoch = referenceSystem.daySecondToEpoch([60000 0], "TDB");
+            moon = @(ephemeris) referenceSystem.geocentricBodyState("moon", ...
+                epoch, Source = "mice", Ephemeris = ephemeris);
+
+            live = referenceSystem.readEphemeris(planetary, 'Digest', false);
+            reference = moon(live);
+
+            replacement = referenceSystem.readEphemeris(other(1), 'Digest', false);
+            testCase.verifyError(@() moon(live), ...
+                'referenceSystem:geocentricBodyState:staleEphemeris', ...
+                'A replaced set still answered.');
+            testCase.verifyNotEmpty(replacement.meta.file);
+
+            live = referenceSystem.readEphemeris(planetary, 'Digest', false);
+            cspice_furnsh(char(other(1)));
+            unloadOther = onCleanup(@() cspice_unload(char(other(1))));
+            testCase.verifyError(@() moon(live), ...
+                'referenceSystem:geocentricBodyState:staleEphemeris', ...
+                'An SPK loaded beside the set went unnoticed.');
+            cspice_unload(char(other(1)));
+            testCase.verifyEqual(moon(live), reference, 'AbsTol', 0, ...
+                'The live set must answer as it did before.');
+
+            % A refusal leaves the pool as it was. Whether de440s.bsp names a
+            % generation decides whether DE430 is refused or merely unverified,
+            % so the assertion is made only when it is refused.
+            warningState = warning('off', ...
+                'referenceSystem:readEphemeris:generationNotVerified');
+            restoreWarning = onCleanup(@() warning(warningState));
+            refused = false;
+            try
+                referenceSystem.readEphemeris(other(1), 'Digest', false, ...
+                    'ExpectedEphemeris', "DE999");
+            catch exception
+                refused = exception.identifier == ...
+                    "referenceSystem:readEphemeris:mismatchedGeneration";
+            end
+            testCase.assumeTrue(refused, ...
+                'The second SPK names no generation, so nothing was refused.');
+            testCase.verifyEqual(moon(live), reference, 'AbsTol', 0, ...
+                'A refused set replaced the live one.');
+        end
+
         function readEphemeris_contract_warnsOnTwoGenerationsFurnishedTogether(testCase)
             % D15's COMBINATION BRANCH, UNDER D110's RULE: IT WARNS, IT DOES
             % NOT REFUSE. Mixing generations is not harmless - different fits
@@ -917,13 +980,14 @@ classdef TestEphemeris < matlab.unittest.TestCase
     methods (Test, TestTags = {'reference'})
 
         function gcrsToBcrs_reference_velocityIsTheDerivativeOfThePosition(testCase)
-            % P21b's ACTUAL VALIDATION, AND THE ORACLE SECTION H.7.7 PROMISED.
-            % The IERS Conventions state no velocity transformation at all;
-            % this one is differentiated from the spatial part of IAU 2000
-            % Resolution B1.3 and divided by dT/dt from its time part. Nothing
-            % in the toolbox can confirm that algebra - but a CENTRAL
-            % DIFFERENCE of the position transformation can, and it shares no
-            % line of code with it.
+            % THE SPATIAL DERIVATIVE, CHECKED BY CONVERGENCE. The velocity is
+            % differentiated from the spatial part of IAU 2000 Resolution B1.3
+            % and divided by dT/dt from its time part. A central difference of
+            % the position map at a fixed epoch argument checks the first half,
+            % dX/dt, and shares no line of code with it. It cannot see the time
+            % factor, which is about 1e-4 m/s here - two orders below the
+            % smallest truncation residual below, so the ratios stay four - and
+            % velocityFollowsTheResolutionsTimePart holds that half.
             %
             % The test is a convergence test, not a tolerance test (decision
             % D28). A correct derivative leaves a residual that falls as h^2; a
@@ -991,6 +1055,78 @@ classdef TestEphemeris < matlab.unittest.TestCase
                 sprintf('residuals %.3e %.3e %.3e m/s', residual));
             testCase.verifyEqual(residual(2)/residual(3), 4, 'RelTol', 0.15, ...
                 sprintf('residuals %.3e %.3e %.3e m/s', residual));
+        end
+
+        function bcrsToGcrs_reference_velocityFollowsTheResolutionsTimePart(testCase)
+            % THE VELOCITY AGAINST THE RESOLUTION ITSELF, TIME PART INCLUDED. A
+            % straight BCRS trajectory, 7.6 km/s partly along the Earth's
+            % barycentric velocity, is mapped to the GCRS at t - h, t and t + h.
+            % The oracle divides the change of the GCRS vector between the
+            % outer events by the GCRS coordinate time elapsed between them,
+            % formed in this test from the time part of Resolution B1.3:
+            %
+            %   T = t - (A(t) + V.r)/c^2,   dA/dt = |V|^2/2 + w
+            %
+            % so the elapsed GCRS time is 2h less the Simpson integral of
+            % |V|^2/2 + w and the change in V.r, over c^2, and under
+            % "tdbCompatible" 2h is TDB seconds, 2h/(1 - L_B) of TCB, and the
+            % result is rescaled by 1 - L_G to TT. The trajectory is straight,
+            % so the difference has no truncation of its own to speak of.
+            %
+            % BOUND 1e-8 m/s: the dropped dw/dt and dA/dt terms are 6.1e-13
+            % m/s, and the Earth's acceleration formed from the Sun and the
+            % Moon alone misses the planets' pull by about 3e-7 m/s^2, which
+            % reaches the velocity at about 7e-10 m/s. Measured: 1.8e-10 and
+            % 1.9e-10 m/s. The time factor itself is 1.3e-4 and 2.0e-5 m/s
+            % here, and more than 5e-6 m/s of it is required, so a velocity
+            % without it cannot pass: the construction without it missed by
+            % exactly those amounts.
+            testCase.requireGateway();
+            constants = referenceSystem.iersConstants();
+            cSquared = constants.speedOfLight^2;
+            h = 50;
+            epochs = referenceSystem.daySecondToEpoch( ...
+                [repmat(60000, 3, 1), 43200 + [-h; 0; h]], "TDB");
+            [~, earthVelocity] = referenceSystem.barycentricBodyState("earth", epochs);
+            sun = referenceSystem.geocentricBodyState("sun", epochs);
+            moon = referenceSystem.geocentricBodyState("moon", epochs);
+            potential = constants.gmSun ./ vecnorm(sun) + constants.gmMoon ./ vecnorm(moon);
+
+            along = earthVelocity(:, 2) / norm(earthVelocity(:, 2));
+            across = cross(along, [0; 0; 1]);
+            across = across / norm(across);
+            start = 6.8e6 * across;
+            rate = 7.6e3 * (cos(0.3) * along + sin(0.3) * cross(across, along));
+            place = start + rate * [-h, 0, h];
+
+            scale = ["none", "tdbCompatible"];
+            residual = zeros(1, 2);
+            factor = zeros(1, 2);
+            for k = 1:2
+                [gcrs, gcrsRate] = referenceSystem.bcrsToGcrs(place, ...
+                    repmat(rate, 1, 3), epochs, Scale = scale(k));
+                timeRate = 0.5 * sum(earthVelocity.^2, 1) + potential;
+                integral = (2 * h / 6) * (timeRate(1) + 4 * timeRate(2) + timeRate(3));
+                alongTrack = sum(earthVelocity .* place, 1);
+                coordinateTime = 2 * h;
+                if scale(k) == "tdbCompatible"
+                    coordinateTime = 2 * h / (1 - constants.lb);
+                end
+                elapsed = coordinateTime - (integral + alongTrack(3) - alongTrack(1)) / cSquared;
+                if scale(k) == "tdbCompatible"
+                    elapsed = elapsed * (1 - constants.lg);
+                end
+                oracle = (gcrs(:, 3) - gcrs(:, 1)) / elapsed;
+                residual(k) = norm(gcrsRate(:, 2) - oracle);
+                factor(k) = norm(oracle - (gcrs(:, 3) - gcrs(:, 1)) / (2 * h));
+            end
+            testCase.log(1, sprintf(['bcrsToGcrs velocity against the time part: ', ...
+                '%.3g m/s (none), %.3g m/s (tdbCompatible); the time factor is ', ...
+                '%.3g and %.3g m/s'], residual, factor));
+            testCase.verifyLessThan(residual, [1e-8, 1e-8], ...
+                'The velocity does not follow the resolution''s time transformation.');
+            testCase.verifyGreaterThan(factor, [5e-6, 5e-6], ...
+                'The trajectory does not exercise the time factor.');
         end
 
         function barycentricBodyState_reference_miceMatchesTheHorizonsFixture(testCase)

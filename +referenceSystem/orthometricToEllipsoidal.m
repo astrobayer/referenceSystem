@@ -23,8 +23,7 @@ function ellipsoidalHeight = orthometricToEllipsoidal(orthometricHeight, ...
 %   h = H + N, the exact inverse of ellipsoidalToOrthometric. Two named
 %   functions rather than one with a direction flag: the direction belongs in
 %   the name (section C.7 rule 2), and a sign flag on a one-line function is
-%   pure risk with no benefit. Revision 1.0 of the design merged the pair into a
-%   single heightConvert with a direction argument; decision D6 reversed that.
+%   pure risk with no benefit (decision D6).
 %
 %   THE ARGUMENT IS NAMED undulation AND NOT geoidUndulation, which reads worse
 %   and is nevertheless right: geoidUndulation is a sibling function in this

@@ -4,10 +4,10 @@ function ephemeris = readEphemeris(kernelFile, options)
 %   ephemeris = readEphemeris(kernelFile)
 %   ephemeris = readEphemeris(kernelFile, Name, Value)
 %
-%   The only cspice_furnsh wrapper the toolbox permits (decision D26). It loads
-%   the kernels, reads each one's comment area, records identity rather than
-%   content, and refuses combinations that would be wrong in ways nothing
-%   downstream could notice.
+%   The only cspice_furnsh wrapper the toolbox permits (decision D26). It reads
+%   each kernel's comment area, records identity rather than content, refuses
+%   combinations that would be wrong in ways nothing downstream could notice,
+%   and only then loads the set - in place of the set it loaded before.
 %
 % INPUT ARGUMENTS
 %   Name         Size   Type              Units  Description
@@ -67,8 +67,8 @@ function ephemeris = readEphemeris(kernelFile, options)
 %   the same rule mexSourceDigest applies to the C sources.
 %
 %   THE KERNEL PAIRING IS MEASURED, NOT DECLARED (decision D15, and D110 for
-%   what happens when it disagrees: a warning, never a refusal), mechanism added
-%   rev. 1.127). SB441-N16 pairs with DE440/441 and SB431-N16 with DE430; mixing
+%   what happens when it disagrees: a warning, never a refusal). SB441-N16
+%   pairs with DE440/441 and SB431-N16 with DE430; mixing
 %   generations shifts the barycentre by of order 100 km, and nothing downstream
 %   would report it. Each SPK names the planetary ephemeris it expects in its
 %   own comment area, which cspice_dafec reads, so the pairing is checked
@@ -81,6 +81,17 @@ function ephemeris = readEphemeris(kernelFile, options)
 %   place, and a silent one, because the two agree until the day a
 %   leapSecondTable("load") override is installed and SPICE does not see it.
 %   Seam contract S1 item 2 exists to make that impossible by construction.
+%
+%   ONE FURNISHED SET IS LIVE AT A TIME. SPICE keeps one kernel pool per
+%   process and answers from whatever is loaded, whatever struct a caller
+%   passes. So every check runs before anything is loaded - a refused set
+%   leaves the pool as it was - and loading unloads the set this function
+%   loaded last. The MICE consumers (barycentricBodyState, geocentricBodyState,
+%   bodyRotationElements, rotationIcrfToBodyFixed) refuse a struct whose
+%   kernels are not exactly the loaded SPK and binary PCK files with
+%   staleEphemeris, so an older result cannot quietly read a newer set. To
+%   compare two generations, furnish them together in one call. Inside a
+%   parfor worker the pool is the worker's own: call this function there.
 %
 %   THE TOOLKIT VERSION IS A CHECKED PRECONDITION AND NOT AN ASSUMPTION, because
 %   pck00011.tpc's Mars system data used with Toolkit N0066 or earlier may cause
@@ -101,7 +112,7 @@ function ephemeris = readEphemeris(kernelFile, options)
 %   referenceSystem:readEphemeris:mismatchedGeneration
 %   referenceSystem:readEphemeris:toolkitTooOld
 %
-%   WARNINGS
+% WARNINGS
 %   referenceSystem:readEphemeris:mixedGenerations
 %       The furnished kernels name more than one planetary ephemeris. A
 %       WARNING and not an error since decision D110: the choice of models and
@@ -166,7 +177,6 @@ function ephemeris = readEphemeris(kernelFile, options)
     for k = 1:numel(kernelFile)
         info = dir(kernelFile(k));
         absolutePath(k) = string(fullfile(info.folder, info.name));
-        cspice_furnsh(char(absolutePath(k)));
     end
 
     digest = strings(numel(kernelFile), 1);
@@ -179,6 +189,9 @@ function ephemeris = readEphemeris(kernelFile, options)
     [namedEphemeris, generationVerified, generations] = localCheckPairing( ...
         absolutePath, options.ExpectedEphemeris, options.AllowGenerations);
 
+    % Loaded last, after every refusal above, in place of the previous set.
+    localFurnish(absolutePath);
+
     ephemeris = struct('meta', struct( ...
         'file', absolutePath, ...
         'digest', digest, ...
@@ -190,6 +203,25 @@ function ephemeris = readEphemeris(kernelFile, options)
 end
 
 % =========================== local functions ===========================
+
+function localFurnish(absolutePath)
+%LOCALFURNISH Unload the set loaded last, then load this one.
+%   The record is this function's own: only readEphemeris furnishes kernels
+%   (decision D26), so only it can know what it loaded. Kernels loaded outside
+%   this toolbox are left alone.
+    persistent furnished
+    if isempty(furnished)
+        furnished = strings(0, 1);
+    end
+    for k = 1:numel(furnished)
+        cspice_unload(char(furnished(k)));
+    end
+    furnished = strings(0, 1);
+    for k = 1:numel(absolutePath)
+        cspice_furnsh(char(absolutePath(k)));
+        furnished(end + 1, 1) = absolutePath(k); %#ok<AGROW> a handful of kernels
+    end
+end
 
 function localRefuseLeapSecondKernel(kernelFile)
 %LOCALREFUSELEAPSECONDKERNEL Decision D89, enforced rather than documented.

@@ -1243,6 +1243,60 @@ classdef TestTime < matlab.unittest.TestCase
                 sofaValue, 'The derived columns did not follow the reset.');
         end
 
+        function leapSecondTable_contract_aListsExpirySetsTheCoverage(testCase)
+            % F12 of the review. dubiousYear told the caller to load a newer
+            % table, and loading one never moved the coverage it is judged
+            % against. A leap-seconds.list states its own expiry on the "#@"
+            % line; loading it must move validThrough to the day before that
+            % expiry and silence the warning for epochs it covers, and "reset"
+            % must bring the SOFA coverage and the warning back. A two-column
+            % table states no expiry and keeps the SOFA coverage.
+            testCase.assumeTrue(referenceSystem.mexInfo().built, ...
+                'The MEX gateway is not built.');
+            restore = onCleanup(@() referenceSystem.leapSecondTable("reset"));
+            consumeWarning = onCleanup(@() lastwarn('', ''));
+            sofaDay = referenceSystem.leapSecondTable("validThroughDay");
+            beyond = referenceSystem.daySecondToEpoch([sofaDay + 400, 0], "UTC");
+            testCase.verifyWarning(@() referenceSystem.leapSecondTable( ...
+                "deltaAT", beyond), 'referenceSystem:leapSecondTable:dubiousYear');
+
+            % NTP stamps: seconds from 1900-01-01, MJD 15020. The expiry is
+            % 2000 days past the SOFA coverage.
+            expiryDay = sofaDay + 2000;
+            listFile = fullfile(tempdir, "referenceSystem_leapSecondsList.txt");
+            removeFile = onCleanup(@() delete(listFile));
+            fileId = fopen(listFile, 'w');
+            fprintf(fileId, '#$ 3913697179\n#@ %d\n', (expiryDay - 15020) * 86400);
+            fprintf(fileId, '%d 10 # 1 Jan 1972\n', (41317 - 15020) * 86400);
+            fprintf(fileId, '%d 37 # 1 Jan 2017\n', (57754 - 15020) * 86400);
+            fclose(fileId);
+
+            referenceSystem.leapSecondTable("load", listFile);
+            testCase.verifyEqual(referenceSystem.leapSecondTable("validThroughDay"), ...
+                expiryDay - 1, 'The list''s expiry did not set the coverage.');
+            testCase.verifyEqual(referenceSystem.leapSecondTable("state").validThrough, ...
+                referenceSystem.leapSecondTable("validThrough"));
+            lastwarn('', '');
+            testCase.verifyEqual(referenceSystem.leapSecondTable("deltaAT", beyond), 37);
+            [~, raised] = lastwarn;
+            testCase.verifyNotEqual(string(raised), ...
+                "referenceSystem:leapSecondTable:dubiousYear", ...
+                'An epoch inside the loaded coverage still warned.');
+
+            tableFile = fullfile(tempdir, "referenceSystem_leapTwoColumn.txt");
+            removeTable = onCleanup(@() delete(tableFile));
+            writematrix([41317 10; 57754 37], tableFile, 'FileType', 'text', ...
+                'Delimiter', ' ');
+            referenceSystem.leapSecondTable("load", tableFile);
+            testCase.verifyEqual(referenceSystem.leapSecondTable("validThroughDay"), ...
+                sofaDay, 'A table with no expiry must keep the SOFA coverage.');
+
+            referenceSystem.leapSecondTable("reset");
+            testCase.verifyEqual(referenceSystem.leapSecondTable("validThroughDay"), sofaDay);
+            testCase.verifyWarning(@() referenceSystem.leapSecondTable( ...
+                "deltaAT", beyond), 'referenceSystem:leapSecondTable:dubiousYear');
+        end
+
         function convertTimeScale_contract_everyScaleLabelIsTheCanonicalName(testCase)
             testCase.assumeTrue(referenceSystem.mexInfo().built, ...
                 'The MEX gateway is not built.');
@@ -1427,6 +1481,15 @@ classdef TestTime < matlab.unittest.TestCase
             testCase.verifyEqual(epoch.scale, "TT", 'The scale is carried through.');
             testCase.verifyError(@() referenceSystem.j2000SecondsToEpoch(0, "ZULU"), ...
                 'referenceSystem:timeScale:unknownScale');
+            % A leap-bearing scale is refused by name: counted from J2000.0 it
+            % fails in normalizeEpoch for any date more than a day away, with an
+            % error that names neither this function nor the cause.
+            for scale = ["UTC", "GLONASS"]
+                testCase.verifyError(@() referenceSystem.j2000SecondsToEpoch( ...
+                    7.5e8, scale), ...
+                    'referenceSystem:j2000SecondsToEpoch:leapBearingScale', ...
+                    scale + " was not refused by name.");
+            end
         end
 
     end

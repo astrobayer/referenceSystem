@@ -38,9 +38,15 @@ assert <i>algorithmic</i> agreement and never EOP-level agreement.</p>
     <td><b>Fixed.</b> The model reference travels with the data in
         <code>eop.meta.cipModel</code> instead of being assumed. This was the
         most serious defect inherited from v1.</td></tr>
-<tr><td>3</td><td>Linear interpolation of daily EOP</td>
-    <td>~0.1&nbsp;mas peak in xp/yp</td>
-    <td>Justified; the IERS <code>interp.f</code> does the same.</td></tr>
+<tr><td>3</td><td>Interpolation of daily EOP</td>
+    <td>On the zonal-tide UT1 signal alone, from daily rows against hourly
+        evaluations over 2020: linear <b>35.7&nbsp;&micro;s (16.6&nbsp;mm at the
+        equator)</b>, 4-point Lagrange 1.95&nbsp;&micro;s, and zero once the tides are
+        removed before interpolating and restored afterwards</td>
+    <td><b>Default: 4-point Lagrange, as IERS <code>interp.f</code>, with the
+        RG_ZONT2 zonal tides removed and restored</b> (<code>interpolateEop</code>
+        <code>Method</code> and <code>ZonalTides</code>). Linear and spline
+        remain available.</td></tr>
 <tr><td>5</td><td>Sub-daily ocean tide and libration in the EOP</td>
     <td>up to ~0.5&nbsp;mas polar motion, ~50&nbsp;&micro;s UT1 &rarr; <b>~15&nbsp;mm</b></td>
     <td><b>Now default ON.</b> Not optional for GRACE-class work. This is the
@@ -48,10 +54,12 @@ assert <i>algorithmic</i> agreement and never EOP-level agreement.</p>
 <tr><td>6</td><td>Zonal tides in UT1/LOD (RG_ZONT2)</td>
     <td>full model <b>167.7&nbsp;ms peak (&asymp;78&nbsp;m at the equator)</b>;
         short-period part alone 2.07&nbsp;ms (&asymp;0.96&nbsp;m); dLOD 0.93&nbsp;ms/day</td>
-    <td>Already present in a C04 series as observed values. The correction
-        carries a <code>sense</code> tag and <code>interpolateEop</code>
-        <b>refuses</b> it without an explicit opt-in, because double-correcting
-        is invisible and costs millimetres.</td></tr>
+    <td>Already present in a C04 series as observed values. Used by default
+        only to interpolate across: removed at the rows, restored at the epoch,
+        so the output is still UT1&minus;UTC. As a <i>correction</i> it carries a
+        <code>sense</code> tag and <code>interpolateEop</code> <b>refuses</b> it
+        without an explicit opt-in, because turning UT1 into UT1R unintentionally
+        is invisible and costs tens of metres.</td></tr>
 <tr><td>12</td><td>UTC fed to the tidal routines</td><td>&lt; 0.1&nbsp;&micro;as</td>
     <td>Justified. Each routine's own header specifies its scale and the toolbox
         refuses the other one.</td></tr>
@@ -63,11 +71,17 @@ assert <i>algorithmic</i> agreement and never EOP-level agreement.</p>
     <td>Justified, and the choice is <i>not</i> critical &mdash; the opposite of
         what the earlier unmeasured figure implied. Analytic differentiation
         would mean duplicating SOFA's tables.</td></tr>
-<tr><td>17</td><td>ERA rate from &omega;<sub>E</sub> plus interpolated LOD</td>
-    <td>LOD term <b>2.5e-8 of &omega;<sub>E</sub> = 12.5&nbsp;&micro;m/s</b> at a
-        2.18&nbsp;ms LOD</td>
-    <td>Correction is default on. The residual is the interpolation of a daily
-        LOD series plus its own sub-daily signal.</td></tr>
+<tr><td>17</td><td>Earth rotation rate in <code>Rdot</code>/<code>Rddot</code></td>
+    <td>UT1 rate <b>about 2.5e-8 of &omega;<sub>E</sub> = 12.5&nbsp;&micro;m/s</b>, of
+        which the sub-daily tides reach 3.6e-9 (1.8&nbsp;&micro;m/s); their
+        &omega;&#775; reaches 2.5e-10&nbsp;m/s&sup2;. Taking the rate from the LOD
+        column instead missed the motion of R by 1.37&nbsp;&micro;m/s with the
+        tides and 0.40&nbsp;&micro;m/s without.</td>
+    <td><b>Exact:</b> the rate and its change are differenced from the
+        interpolated UT1&minus;TAI at the same samples as Q&#775; and W&#775;, so
+        <code>Rdot</code> and <code>Rddot</code> are the derivatives of the
+        <code>R</code> returned. Measured against logm(R(t&minus;h)'R(t+h))/2h:
+        7.7e-10&nbsp;m/s, that oracle's own floor.</td></tr>
 <tr><td>18</td><td>TIO locator s&prime; from <code>iauSp00</code></td>
     <td>&minus;47&nbsp;&micro;as/century, &asymp; &minus;12&nbsp;&micro;as at 2025
         = 0.37&nbsp;mm</td>

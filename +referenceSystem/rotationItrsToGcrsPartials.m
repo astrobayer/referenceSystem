@@ -104,11 +104,7 @@ function [dRdXp, dRdYp, dRdDeltaUt1, info, dRdotdXp, dRdotdYp, ...
 %   half-offset, samples at t-h and t+h, divisor 2h - and the default 200 s is
 %   that function's measured default, so with the defaults the rate partial is
 %   the partial of the Rdot the rotation actually returns (decision D112).
-%   Until rev. 1.184 this function read DifferenceStep as the FULL span,
-%   sampling at t-h/2 with a default of 600 s; the same option name carried
-%   two meanings in two sibling functions, which is the class of silent
-%   defect O28 exists for, and the same-step claim above was false as
-%   written. The other order - differentiating the already-differenced Rdot -
+%   The other order - differentiating the already-differenced Rdot -
 %   would agree only to the differencing error and would drift from Rdot as
 %   the step changed. info.rateConstruction records which was done, because
 %   the two are not interchangeable and a reader cannot tell from the numbers.

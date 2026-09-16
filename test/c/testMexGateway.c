@@ -180,7 +180,8 @@ int main(void)
         double ut1Sec[2] = {43199.927926315, 43199.927926315};
         double zero3[6] = {0, 0, 0, 0, 0, 0};
         double poleX[6], poleY[6];
-        double omega[2] = {7.292115146706979e-5, 7.292115146706979e-5};
+        double ut1MinusTai[6] = {-33.072073685, -33.072073685, -33.072073685,
+                                 -33.072073685, -33.072073685, -33.072073685};
         double xValue[2] = {7.12264729599e-4, 7.12264729599e-4};
         double yValue[2] = {4.4385250426e-5, 4.4385250426e-5};
         double sValue[2] = {-1.0668e-8, -1.0668e-8};
@@ -246,7 +247,7 @@ int main(void)
         prhs[6] = rsStubVector(poleY, 6);
         prhs[7] = rsStubVector(zero3, 6);
         prhs[8] = rsStubVector(zero3, 6);
-        prhs[9] = rsStubVector(omega, 2);
+        prhs[9] = rsStubVector(ut1MinusTai, 6);
         prhs[10] = rsStubScalar(2006.0);
         prhs[11] = rsStubScalar(200.0);
         expectSuccess("dcm with one output", 1, plhs, 12, prhs);
@@ -281,6 +282,12 @@ int main(void)
         prhs[5] = rsStubVector(poleX, 2);
         expectError("referenceSystem:mex:sizeMismatch",
                     "dcm refuses polar motion that is not n-by-3",
+                    1, plhs, 12, prhs);
+        prhs[5] = rsStubVector(poleX, 6);
+
+        prhs[9] = rsStubVector(ut1Day, 2);
+        expectError("referenceSystem:mex:sizeMismatch",
+                    "dcm refuses UT1 - TAI that is not n-by-3",
                     1, plhs, 12, prhs);
     }
 
@@ -414,10 +421,9 @@ int main(void)
         arg[2] = mxCreateDoubleMatrix(epochCount, 1, mxREAL);
         arg[3] = mxCreateDoubleMatrix(epochCount, 1, mxREAL);
         arg[4] = mxCreateDoubleMatrix(epochCount, 1, mxREAL);
-        for (j = 5; j <= 8; j++) {
+        for (j = 5; j <= 9; j++) {
             arg[j] = mxCreateDoubleMatrix(epochCount, 3, mxREAL);
         }
-        arg[9] = mxCreateDoubleMatrix(epochCount, 1, mxREAL);
         arg[10] = mxCreateDoubleScalar(2006.0);
         arg[11] = mxCreateDoubleScalar(60.0);
         for (i = 0; i < epochCount; i++) {
@@ -425,8 +431,10 @@ int main(void)
             mxGetPr(arg[2])[i] = 43200.0 + 137.0 * (double)i;
             mxGetPr(arg[3])[i] = 57754.0 + (double)i;
             mxGetPr(arg[4])[i] = 43200.0 + 137.0 * (double)i - 69.184;
-            mxGetPr(arg[9])[i] = 7.292115e-5;
             for (j = 0; j < 3; j++) {
+                /* UT1 - TAI changing at 2e-8 s/s, so the rate term is live. */
+                mxGetPr(arg[9])[j * epochCount + i] =
+                    -37.0 + 2.0e-8 * 60.0 * (double)(j - 1);
                 mxGetPr(arg[5])[j * epochCount + i] = 1.0e-7 * (double)(i + 1);
                 mxGetPr(arg[6])[j * epochCount + i] = 2.0e-7 * (double)(i + 1);
                 mxGetPr(arg[7])[j * epochCount + i] = 1.0e-10;
@@ -493,7 +501,9 @@ int main(void)
             }
         }
         printf("  dcmcip vs dcm, worst element difference : %.3g\n", worst);
-        report(ok && worst == 0.0,
+        /* Both calls must have produced matrices, or a pair of failures would
+         * leave worst at zero and pass this check vacuously. */
+        report(ok && dcmOut[0] != NULL && cipOut[0] != NULL && worst == 0.0,
                "dcmcip with the model's own CIP is BIT-IDENTICAL to dcm", "");
 
         arg[0] = mxCreateString("dcmcip");

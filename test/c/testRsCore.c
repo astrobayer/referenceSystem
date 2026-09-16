@@ -396,7 +396,8 @@ static void testRotationAssembly(void)
     double yp[3];
     double dX[3];
     double dY[3];
-    double omega = 7.292115146706979e-5;
+    /* UT1 - TAI held constant: the rate is the ERA slope itself. */
+    double ut1MinusTai[3] = {-33.072073685, -33.072073685, -33.072073685};
     double r[9];
     double rdot[9];
     double rddot[9];
@@ -425,7 +426,7 @@ static void testRotationAssembly(void)
     }
 
     checkInt(rsRotationItrsToGcrs(1, &ttDay, &ttSec, &ut1Day, &ut1Sec, xp, yp,
-             dX, dY, &omega, 2006, 2, 200.0, r, rdot, rddot), 0,
+             dX, dY, ut1MinusTai, 2006, 2, 200.0, r, rdot, rddot), 0,
              "assembly returns success");
 
     for (row = 0; row < 3; row++) {
@@ -466,18 +467,99 @@ static void testRotationAssembly(void)
     /* nargout gating: with derivativeOrder 0 the derivative buffers must not
      * be touched, so a NULL pointer must be safe. */
     checkInt(rsRotationItrsToGcrs(1, &ttDay, &ttSec, &ut1Day, &ut1Sec, xp, yp,
-             dX, dY, &omega, 2006, 0, 0.0, r, NULL, NULL), 0,
+             dX, dY, ut1MinusTai, 2006, 0, 0.0, r, NULL, NULL), 0,
              "order 0 accepts NULL derivative buffers and a zero step");
 
     checkInt(rsRotationItrsToGcrs(1, &ttDay, &ttSec, &ut1Day, &ut1Sec, xp, yp,
-             dX, dY, &omega, 2006, 1, 0.0, r, rdot, NULL), -3,
+             dX, dY, ut1MinusTai, 2006, 1, 0.0, r, rdot, NULL), -3,
              "a non-positive step with derivatives is refused");
     checkInt(rsRotationItrsToGcrs(1, &ttDay, &ttSec, &ut1Day, &ut1Sec, xp, yp,
-             dX, dY, &omega, 1999, 1, 200.0, r, rdot, NULL), -1,
+             dX, dY, ut1MinusTai, 1999, 1, 200.0, r, rdot, NULL), -1,
              "assembly refuses an unknown CIP model");
     checkInt(rsRotationItrsToGcrs(1, &ttDay, &ttSec, &ut1Day, &ut1Sec, xp, yp,
-             dX, dY, &omega, 2006, 3, 200.0, r, rdot, rddot), -2,
+             dX, dY, ut1MinusTai, 2006, 3, 200.0, r, rdot, rddot), -2,
              "assembly refuses a derivative order above 2");
+}
+
+/*
+ * D128: Rdot AND Rddot ARE THE TIME DERIVATIVES OF R. The oracle is R itself,
+ * evaluated at t - d, t and t + d with UT1 - TAI following the same quadratic
+ * the three samples describe, and differenced. The rate and its change are
+ * exaggerated - 1e-6 s/s and 1e-9 s/s^2, against about 2.5e-8 and 5e-13 in
+ * the Earth - so that each term is far above the difference's own error, and
+ * the check fails if either is dropped: without the rate term Rdot misses by
+ * omega * 1e-6 = 7.3e-11 1/s, without omegadot Rddot misses by 7.3e-14 1/s^2.
+ *
+ * Tolerances: Rdot 1e-12 1/s bounds the d = 0.5 s difference's truncation,
+ * omega^3 d^2 / 6 = 1.6e-14, and the core's 200 s CIP difference; Rddot
+ * 5e-15 1/s^2 bounds the d = 10 s second difference's truncation,
+ * omega^4 d^2 / 12 = 2.4e-16, and its roundoff, 4 eps / d^2 = 8.9e-18.
+ */
+static void rsRotationAt(double shift, double rate, double acceleration,
+                         double step, int order, double *r, double *rdot,
+                         double *rddot)
+{
+    double ttDay = 54195.0;
+    double ttSec = 43265.184 + shift;
+    double ut1Day = 54195.0;
+    double base = -33.072073685;
+    double ut1Sec = ttSec - 32.184 + base + rate * shift
+        + 0.5 * acceleration * shift * shift;
+    double poleRate = 1.229 * RS_TEST_AS2R / (365.25 * 86400.0);
+    double xp[3], yp[3], dX[3], dY[3], ut1MinusTai[3];
+    int m;
+
+    for (m = 0; m < 3; m++) {
+        double dt = shift + (m - 1) * step;
+        xp[m] = 0.0349282 * RS_TEST_AS2R + poleRate * dt;
+        yp[m] = 0.4833163 * RS_TEST_AS2R - poleRate * dt;
+        dX[m] = 0.1750e-3 * RS_TEST_AS2R;
+        dY[m] = -0.2259e-3 * RS_TEST_AS2R;
+        ut1MinusTai[m] = base + rate * dt + 0.5 * acceleration * dt * dt;
+    }
+    (void)rsRotationItrsToGcrs(1, &ttDay, &ttSec, &ut1Day, &ut1Sec, xp, yp,
+                               dX, dY, ut1MinusTai, 2006, order, step,
+                               r, rdot, rddot);
+}
+
+static void testRotationRateFollowsUt1(void)
+{
+    const double rate = 1e-6;
+    const double acceleration = 1e-9;
+    const double step = 200.0;
+    double r[9], rdot[9], rddot[9];
+    double before[9], after[9], unused[9];
+    double worstRate = 0.0;
+    double worstAcceleration = 0.0;
+    int k;
+
+    puts("\nRdot and Rddot against differences of R (decision D128)");
+
+    rsRotationAt(0.0, rate, acceleration, step, 2, r, rdot, rddot);
+
+    rsRotationAt(-0.5, rate, acceleration, step, 0, before, unused, unused);
+    rsRotationAt(0.5, rate, acceleration, step, 0, after, unused, unused);
+    for (k = 0; k < 9; k++) {
+        double d = fabs(rdot[k] - (after[k] - before[k]) / 1.0);
+        if (d > worstRate) {
+            worstRate = d;
+        }
+    }
+    printf("  Rdot against a 0.5 s difference of R: %.3g 1/s\n", worstRate);
+    checkTrue(worstRate < 1e-12, "Rdot is the derivative of R, UT1 rate included");
+
+    rsRotationAt(-10.0, rate, acceleration, step, 0, before, unused, unused);
+    rsRotationAt(10.0, rate, acceleration, step, 0, after, unused, unused);
+    for (k = 0; k < 9; k++) {
+        double d = fabs(rddot[k] - (after[k] - 2.0 * r[k] + before[k]) / 100.0);
+        if (d > worstAcceleration) {
+            worstAcceleration = d;
+        }
+    }
+    printf("  Rddot against a 10 s second difference of R: %.3g 1/s^2\n",
+           worstAcceleration);
+    checkTrue(worstAcceleration < 5e-15,
+              "Rddot is the second derivative of R, omegadot included");
 }
 
 static void testEquinoxCrossCheck(void)
@@ -800,6 +882,7 @@ int main(void)
     testThreadReproducibility();
     testCipCoordinates();
     testRotationAssembly();
+    testRotationRateFollowsUt1();
     testEquinoxCrossCheck();
     testAstronomicalUnit();
     testBodyState();

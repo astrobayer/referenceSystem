@@ -55,27 +55,23 @@ function result = leapSecondTable(command, argument)
 %   is about 83000 iauDat evaluations in one vectorised call, takes a few
 %   milliseconds and is cached in a persistent variable for the session.
 %
-%   The coverage end date is discovered the same way: iauDat flags a year more
-%   than five years beyond its own release with status +1, and validThrough is
-%   the day before the first such day. It is not a literal here either.
+%   The coverage end date of the SOFA table is discovered the same way: iauDat
+%   flags a year more than five years beyond its own release with status +1,
+%   and validThrough is the day before the first such day. It is not a literal
+%   here either.
 %
 %   EACH COVERAGE BOUND IS PUBLISHED TWICE, AS A DATE AND AS A DAY NUMBER, and
 %   the second form is not a convenience. Consumers compare a bound against
 %   epoch.day, which is an MJD, so a date-only bound forces every one of them to
-%   write days(bound - datetime(1858, 11, 17)) - and that is the MJD epoch,
-%   copied out of this file into theirs. Four such copies had accumulated by
-%   rev. 1.215, one of them in package code, which is the same shape as finding
-%   M-2 one layer down: a constant with no single owner, free to diverge, and
-%   invisible to the contract test that greps for leap-second dates because
-%   1858-11-17 is not one. The day numbers cost nothing to hand back - both are
-%   already cached, one by localScanSofaTable and one by localColumnsOf - and
-%   they are what removes the copies.
+%   write days(bound - datetime(1858, 11, 17)) - a copy of the MJD epoch in
+%   each of them, free to diverge. The day numbers cost nothing to hand back:
+%   both are cached with the active table.
 %
-%   THE TWO BOUNDS ARE NOT SYMMETRIC UNDER AN OVERRIDE AND THAT IS DELIBERATE.
-%   validFrom follows the ACTIVE table, so leapSecondTable("load", file) moves
-%   it and every consumer that trims to it. validThrough reports where SOFA
-%   stops being willing to answer, which is a property of the bundled iauDat
-%   rather than of the step list, so an override does not move it.
+%   AN OVERRIDE MOVES BOTH BOUNDS WHERE IT STATES THEM. validFrom follows the
+%   active table's first row. validThrough is the day before the expiry a
+%   leap-seconds.list states on its "#@" line, because that is how far its
+%   publisher vouches for it; a two-column table states no expiry and keeps
+%   the coverage of the bundled SOFA release. "reset" restores both.
 %
 %   TRAP, measured against SOFA 20231011 and the reason this function
 %   range-checks rather than trusting the status. iauDat answers a pre-1960
@@ -96,15 +92,11 @@ function result = leapSecondTable(command, argument)
 %   SOFA table. Install the override inside the parfor body, or pass the table
 %   in as sliced data. leapSecondTable("state") reports which table answered.
 %
-%   THE COLUMNS "deltaAT" READS ARE DERIVED ONCE, NOT PER CALL (prompt P28b,
-%   rev. 1.122). The step days, the offsets, the discretize edges, the date of
-%   the first row and the coverage end AS A DAY NUMBER are all fixed for the
-%   life of the active table, and are computed when that table is installed:
-%   after the SOFA scan, after "load" and after "reset". A profiled single-epoch
-%   rotation reached this function six times, four of them on "deltaAT", and
-%   each of those four built a datetime for 1858-11-17, subtracted it, called
-%   days and floored the result to recover a number the scan already knew, then
-%   indexed the timetable three times for columns that had not changed.
+%   THE COLUMNS "deltaAT" READS ARE DERIVED ONCE, NOT PER CALL (prompt P28b).
+%   The step days, the offsets, the discretize edges, the date of the first
+%   row and the coverage end are all fixed for the life of the active table,
+%   and are computed when that table is installed: after the SOFA scan, after
+%   "load" and after "reset".
 %
 %   The cache is not an optimisation of the lookup: the lookup was already one
 %   discretize on integer day numbers. It removes work that was never a function
@@ -131,9 +123,10 @@ function result = leapSecondTable(command, argument)
 %
 % WARNINGS
 %   referenceSystem:leapSecondTable:dubiousYear   One per call, however large N is.
-%       Raised from 2029-01-01 on the bundled SOFA release, because iauDat
-%       flags any year more than five beyond its own IYV. It is SOFA's
-%       reminder that leap seconds cannot be predicted, not a defect.
+%       Raised beyond validThrough: from 2029-01-01 on the bundled SOFA
+%       release, because iauDat flags any year more than five beyond its own
+%       IYV, or beyond the expiry of a loaded leap-seconds.list. Loading a
+%       newer leap-seconds.list moves it.
 %
 % REFERENCES
 %   IAU SOFA release 20231011, iauDat (mex/sofa/dat.c).
@@ -164,14 +157,14 @@ function result = leapSecondTable(command, argument)
         argument = []
     end
 
-    persistent cachedTable cachedValidThrough cachedValidThroughDay ...
-        overrideTable overrideSource activeColumns
+    persistent cachedTable cachedValidThroughDay ...
+        overrideTable overrideSource overrideValidThroughDay activeColumns
 
     % The SOFA table is discovered once per session and then reused. It is
-    % needed even when an override is installed, because the coverage end date
-    % is a property of the SOFA release rather than of the override.
+    % needed even when an override is installed: a table that states no expiry
+    % keeps the SOFA coverage, and "reset" returns to it.
     if isempty(cachedTable)
-        [cachedTable, cachedValidThrough, cachedValidThroughDay] = ...
+        [cachedTable, ~, cachedValidThroughDay] = ...
             localScanSofaTable();
         activeColumns = [];
     end
@@ -193,7 +186,11 @@ function result = leapSecondTable(command, argument)
     % failure part way through leaves the previous columns in place rather than
     % a set derived from a table that was never installed.
     if isempty(activeColumns)
-        activeColumns = localColumnsOf(localActiveTable(cachedTable, overrideTable));
+        if isempty(overrideTable)
+            activeColumns = localColumnsOf(cachedTable, cachedValidThroughDay);
+        else
+            activeColumns = localColumnsOf(overrideTable, overrideValidThroughDay);
+        end
     end
 
     switch command
@@ -202,15 +199,21 @@ function result = leapSecondTable(command, argument)
                 error('referenceSystem:leapSecondTable:missingArgument', ...
                     'The "load" command needs a file name.');
             end
-            overrideTable = localReadOverrideFile(string(argument));
+            [loadedTable, expiryDay] = localReadOverrideFile(string(argument));
+            if isnan(expiryDay)
+                expiryDay = cachedValidThroughDay;
+            end
+            overrideTable = loadedTable;
             overrideSource = string(argument);
-            activeColumns = localColumnsOf(overrideTable);
+            overrideValidThroughDay = expiryDay;
+            activeColumns = localColumnsOf(overrideTable, overrideValidThroughDay);
             result = overrideTable;
 
         case "reset"
             overrideTable = [];
             overrideSource = [];
-            activeColumns = localColumnsOf(cachedTable);
+            overrideValidThroughDay = [];
+            activeColumns = localColumnsOf(cachedTable, cachedValidThroughDay);
             result = cachedTable;
 
         case "list"
@@ -225,13 +228,10 @@ function result = leapSecondTable(command, argument)
             result = activeColumns.mjd(1);
 
         case "validThrough"
-            result = cachedValidThrough;
+            result = activeColumns.validThrough;
 
         case "validThroughDay"
-            % The number localScanSofaTable already computed. Until rev. 1.216
-            % it stopped at this boundary and four consumers rebuilt it from
-            % the datetime, each with its own copy of the MJD epoch.
-            result = cachedValidThroughDay;
+            result = activeColumns.validThroughDay;
 
         case "state"
             activeTable = localActiveTable(cachedTable, overrideTable);
@@ -244,28 +244,28 @@ function result = leapSecondTable(command, argument)
                 'stepCount', height(activeTable), ...
                 'lastChange', activeTable.Time(end), ...
                 'lastDeltaAt', activeTable.deltaAt(end), ...
-                'validThrough', cachedValidThrough);
+                'validThrough', activeColumns.validThrough);
 
         case "deltaAT"
-            result = localDeltaAt(argument, activeColumns, ...
-                cachedValidThroughDay, cachedValidThrough);
+            result = localDeltaAt(argument, activeColumns);
     end
 end
 
 % =========================== local functions ===========================
 
-function columns = localColumnsOf(activeTable)
+function columns = localColumnsOf(activeTable, validThroughDay)
 %LOCALCOLUMNSOF The plain arrays localDeltaAt needs, taken out of the timetable.
 %   Everything here is fixed for the life of the active table: the step days,
-%   the offsets, the discretize edges and the date of the first row, which the
-%   beforeUtcEpoch message prints. Deriving them once turns three timetable
-%   dot-references per deltaAT call into three struct field reads.
+%   the offsets, the discretize edges, the date of the first row, which the
+%   beforeUtcEpoch message prints, and the coverage end as a day and a date.
     stepDay = activeTable.mjd;
     columns = struct( ...
         'mjd', stepDay, ...
         'deltaAt', activeTable.deltaAt, ...
         'edges', [stepDay; Inf], ...
-        'firstDate', activeTable.Time(1));
+        'firstDate', activeTable.Time(1), ...
+        'validThroughDay', validThroughDay, ...
+        'validThrough', localDatetimeOfMjd(validThroughDay));
 end
 
 function activeTable = localActiveTable(cachedTable, overrideTable)
@@ -277,18 +277,16 @@ function activeTable = localActiveTable(cachedTable, overrideTable)
     end
 end
 
-function deltaAt = localDeltaAt(epochIn, columns, validThroughDay, validThrough)
+function deltaAt = localDeltaAt(epochIn, columns)
 %LOCALDELTAAT TAI - UTC for each entry of a UTC epoch.
 %   The lookup is on the integer day number alone. A step takes effect at 0h
 %   UTC, so TAI - UTC is constant across a UTC day, and a day-based lookup is
 %   therefore exact and - unlike a lookup on the decimal MJD - gives the
 %   pre-step value throughout a positive leap second, which is finding C-3.
 %
-%   columns holds the step days, the offsets, the discretize edges and the date
-%   of the first row, all derived once when the active table was installed.
-%   validThroughDay is the same day number the coverage datetime carries;
-%   validThrough itself is used only to print the warning and is otherwise
-%   untouched, so no datetime arithmetic happens on the normal path.
+%   columns holds the step days, the offsets, the discretize edges, the date
+%   of the first row and the coverage end, all derived once when the active
+%   table was installed, so no datetime arithmetic happens on the normal path.
     if isempty(epochIn) || ~isstruct(epochIn)
         error('referenceSystem:leapSecondTable:missingArgument', ...
             'The "deltaAT" command needs a UTC epoch struct.');
@@ -317,7 +315,7 @@ function deltaAt = localDeltaAt(epochIn, columns, validThroughDay, validThrough)
     index = discretize(epoch.day, columns.edges);
     deltaAt = columns.deltaAt(index);
 
-    dubious = epoch.day > validThroughDay;
+    dubious = epoch.day > columns.validThroughDay;
     if any(dubious)
         first = find(dubious, 1);
         last = find(dubious, 1, 'last');
@@ -326,9 +324,10 @@ function deltaAt = localDeltaAt(epochIn, columns, validThroughDay, validThrough)
             'leap-second table; the first is index %d at day %d and the ', ...
             'last is index %d at day %d. Leap seconds cannot be predicted, ', ...
             'so a step announced after the table was built would make these ', ...
-            'values wrong by one second. Install a newer table with ', ...
-            'leapSecondTable("load", file) or suppress this identifier.'], ...
-            sum(dubious), numel(dubious), string(validThrough, 'yyyy-MM-dd'), ...
+            'values wrong by one second. Load a newer IERS leap-seconds.list, ', ...
+            'whose expiry sets the coverage, with leapSecondTable("load", ', ...
+            'file), or suppress this identifier.'], ...
+            sum(dubious), numel(dubious), string(columns.validThrough, 'yyyy-MM-dd'), ...
             first, epoch.day(first), last, epoch.day(last));
     end
 end
@@ -386,11 +385,13 @@ function [deltaAt, status] = localCallGateway(day)
     end
 end
 
-function stepTable = localReadOverrideFile(fileName)
+function [stepTable, validThroughDay] = localReadOverrideFile(fileName)
 %LOCALREADOVERRIDEFILE Read a session override from a leap-second file.
 %   Two formats are accepted: the IERS and IANA leap-seconds.list, whose data
 %   lines carry the NTP time stamp of the step and the TAI - UTC that follows
-%   it, and a plain two-column text table of [dayNumber deltaAt]. IERS Bulletin
+%   it and whose "#@" line carries the NTP time stamp of its expiry, and a
+%   plain two-column text table of [dayNumber deltaAt]. validThroughDay is the
+%   day before that expiry, or NaN when the file states none. IERS Bulletin
 %   C is deliberately not parsed: it is prose that announces a step rather than
 %   a table, and a parser for it would be a guessing machine of the kind
 %   finding M-1 warns about. Convert it to either accepted format instead.
@@ -401,6 +402,16 @@ function stepTable = localReadOverrideFile(fileName)
 
     fileText = string(fileread(fileName));
     line = strtrim(split(fileText, newline));
+    ntpEpochDay = 15020;
+    secondsPerDay = referenceSystem.iersConstants().secondsPerDay;
+    validThroughDay = NaN;
+    expiry = line(startsWith(line, "#@"));
+    if ~isempty(expiry)
+        stamp = sscanf(char(extractAfter(expiry(1), "#@")), '%f', 1);
+        if ~isempty(stamp)
+            validThroughDay = floor(stamp/secondsPerDay + ntpEpochDay) - 1;
+        end
+    end
     line = line(strlength(line) > 0 & ~startsWith(line, "#"));
 
     if isempty(line)
@@ -424,8 +435,6 @@ function stepTable = localReadOverrideFile(fileName)
     % MJD 15020 by definition of the NTP epoch. Anything that large cannot be
     % a day number, so the two formats are told apart by magnitude rather than
     % by a flag the caller could get wrong.
-    ntpEpochDay = 15020;
-    secondsPerDay = referenceSystem.iersConstants().secondsPerDay;
     isNtpFormat = all(value(:,1) > 1e6);
     if isNtpFormat
         stepDay = value(:,1)/secondsPerDay + ntpEpochDay;

@@ -81,6 +81,11 @@ function report = buildDocumentation(options)
 %   referenceSystem:buildDocumentation:docFolderNotFound
 %   referenceSystem:buildDocumentation:outputNotWritable
 %
+% WARNINGS
+%   referenceSystem:buildDocumentation:searchDatabaseFailed
+%       builddocsearchdb failed. The pages are written and open normally;
+%       only the Help browser search will not find them.
+%
 % REFERENCES
 %   Handover Part E and decision D33. MathWorks, "Display Custom
 %   Documentation", for info.xml, helptoc.xml and builddocsearchdb.

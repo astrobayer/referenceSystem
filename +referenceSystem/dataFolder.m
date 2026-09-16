@@ -33,8 +33,8 @@ function folder = dataFolder(newFolder)
 %   downloadKernels each carried a private localDefaultCache that composed
 %   data/ from their own mfilename, so the toolbox held two answers to one
 %   question and neither could be moved. Both now resolve through this
-%   function, which is rev. 1.53's rule applied to a path: where a value has
-%   more than one definition, delete the copies rather than keep them equal.
+%   function: where a value has more than one definition, the copies are
+%   deleted rather than kept equal.
 %
 %   THE MECHANISM IS setpref AND IT MATCHES shAnalysis DELIBERATELY. The same
 %   author maintains both toolboxes and calls shLowLevel.dataFolder with the
@@ -73,7 +73,7 @@ function folder = dataFolder(newFolder)
 %       carries the reason the file system gave.
 %
 % REFERENCES
-%   Handover decision D119 (rev. 1.207) and section C.10. The sibling
+%   Handover decision D119 and section C.10. The sibling
 %   implementation is shLowLevel.dataFolder in the shAnalysis toolbox.
 %
 % EXAMPLE

@@ -33,6 +33,12 @@ static int rsApiCheck(const rsApiInterpolant *ip)
     if (ip->cipModel != 2006 && ip->cipModel != 2000) {
         return RS_API_BAD_INTERPOLANT;
     }
+    /* Zero means six; anything else but six or seven would leave channels the
+     * rotation reads unfilled, and it would read them anyway. */
+    if (ip->quantityCount != 0 && ip->quantityCount != RS_API_QUANTITIES &&
+        ip->quantityCount != RS_API_MAX_QUANTITIES) {
+        return RS_API_BAD_INTERPOLANT;
+    }
     return RS_API_OK;
 }
 
@@ -59,22 +65,13 @@ int rsApiPanelIndex(const rsApiInterpolant *interpolant, double mjdUtc)
 
 /* ZERO MEANS SIX, AND THAT IS A PUBLIC-ABI DECISION RATHER THAN A COURTESY.
  * rsApiInterpolant is a struct a caller fills in themselves - the worked RK4
- * propagator does, and so does testApi - so adding a field with no default
- * silently changes the meaning of every existing hand-built interpolant.
- * Adding it WITHOUT the default did exactly that here: quantityCount came out
- * zero, the panel term in the offset vanished, every panel read panel 0's
- * coefficients, and the residual against the direct chain went from 1.16e-16
- * to 6.53e-07 - small enough to look like a tolerance and entirely wrong.
- * Caught by the standalone C suite before the change left the container.
+ * propagator does, and so does testApi - so a zero count keeps the meaning of
+ * a hand-built interpolant that predates the field.
  *
- * Every fitted quantity at one epoch inside a known panel: the six the rotation
- * needs and, in a format-2 interpolant, the excess length of day as value[6].
- * UNTIL REV. 1.222 THE SEVENTH WAS STRIDDEN OVER, on the reasoning that
- * rsApiRotationRate "differences rather than differentiates". That named the
- * wrong mechanism: the samples are differenced, but the ERA part of Rdot is
- * analytic in omega, and the length of day enters only through omega. Leaving
- * it out cost up to 1.25e-12 1/s against MATLAB on the P19c test arc (rev.
- * 1.220). value must hold RS_API_MAX_QUANTITIES doubles. */
+ * Every fitted quantity at one epoch inside a known panel. The rotation reads
+ * the first six; a seventh channel, the excess length of day of older files,
+ * is read to keep the stride and is not used. value must hold
+ * RS_API_MAX_QUANTITIES doubles. */
 static int rsApiSample(const rsApiInterpolant *ip, int panel, double mjdUtc,
                        double *value)
 {
@@ -262,7 +259,6 @@ static int rsApiRotationCore(const rsApiInterpolant *ip, const double *sampleMjd
     double ttSec[1];
     double ut1Day[1];
     double ut1Sec[1];
-    double omega[1];
     double xp[3];
     double yp[3];
     double dX[3];
@@ -270,8 +266,8 @@ static int rsApiRotationCore(const rsApiInterpolant *ip, const double *sampleMjd
     double cipX[3];
     double cipY[3];
     double cipS[3];
+    double ut1MinusTai[3];
     double value[RS_API_MAX_QUANTITIES];
-    double lengthOfDay = 0.0;          /* s; stays 0 without a lod channel */
     double localR[9];
     double localRdot[9];
     int centrePanel = rsApiPanelIndex(ip, sampleMjd[1]);
@@ -300,30 +296,21 @@ static int rsApiRotationCore(const rsApiInterpolant *ip, const double *sampleMjd
          * sampled dX and dY again would be a few hundred microarcseconds. */
         dX[sample] = 0.0;
         dY[sample] = 0.0;
+        /* UT1 - TAI of the sample, with the TAI - UTC of the sample's own
+         * panel, so a shoulder across a leap second sees no step. The core
+         * forms the Earth rotation rate and its change from these three, as
+         * it does for MATLAB (decision D128). */
+        ut1MinusTai[sample] = value[5] - ip->taiMinusUtc[panel];
         if (sample == 1) {
             ttSec[0] = utcSec + ip->taiMinusUtc[centrePanel] + RS_API_TT_MINUS_TAI;
             ttDay[0] = utcDay;
             ut1Sec[0] = utcSec + value[5];
             ut1Day[0] = utcDay;
-            if (ip->quantityCount >= RS_API_MAX_QUANTITIES) {
-                lengthOfDay = value[6];
-            }
         }
     }
 
-    /* OMEGA IS MATLAB'S DEFAULT, TERM FOR TERM (rev. 1.222). rotationItrsToGcrs
-     * takes the ERA slope from earthRotationAngleRate and, with
-     * 'ApplyLengthOfDay' true, scales it by (1 - lod / secondsPerDay) at the
-     * epoch; rsEarthRotationAngleRate is the same derivation, and the lod is the
-     * same channel of the same panels. Until this revision the value here was
-     * the nominal 7.292115e-5 with no lod, and rev. 1.220 measured the two
-     * omissions at 1.467e-12 and up to 1.25e-12 1/s, partly cancelling to
-     * 5.8e-13 against MATLAB's default. Either repaired alone would have
-     * widened that gap, which is why both changed together. */
-    omega[0] = rsEarthRotationAngleRate() * (1.0 - lengthOfDay / 86400.0);
-
     status = rsRotationItrsToGcrsFromCip(1, ttDay, ttSec, ut1Day, ut1Sec,
-        xp, yp, dX, dY, omega, cipX, cipY, cipS,
+        xp, yp, dX, dY, ut1MinusTai, cipX, cipY, cipS,
         ip->cipModel, derivativeOrder,
         (derivativeOrder > 0) ? step : 1.0, localR, localRdot, NULL);
     if (status != 0) {
@@ -459,15 +446,45 @@ static int rsApiParseCipModel(const char *text)
     return -1;
 }
 
+/* Consume the rest of the current line. Returns the number of characters
+ * other than blanks that it held, so a caller can refuse trailing data. */
+static int rsApiRestOfLine(FILE *stream)
+{
+    int character;
+    int extra = 0;
+    while ((character = fgetc(stream)) != EOF && character != '\n') {
+        if (character != ' ' && character != '\t' && character != '\r') {
+            extra++;
+        }
+    }
+    return extra;
+}
+
+/* The number of blank-separated names on the rest of the current line. */
+static int rsApiCountNames(FILE *stream)
+{
+    int character;
+    int count = 0;
+    int inName = 0;
+    while ((character = fgetc(stream)) != EOF && character != '\n') {
+        int blank = (character == ' ' || character == '\t' || character == '\r');
+        if (!blank && !inName) {
+            count++;
+        }
+        inName = !blank;
+    }
+    return count;
+}
+
 int rsApiReadInterpolant(const char *path, rsApiInterpolant *interpolant,
                          double *coefficient, int coefficientLength,
                          double *taiMinusUtc, int taiLength)
 {
-    char line[512];
+    char key[64];
     FILE *stream;
     int version = 0;
     int seenCoefficient = 0;
-    int panel;
+    int bad = 0;
     int k;
 
     if (path == NULL || interpolant == NULL) {
@@ -487,90 +504,69 @@ int rsApiReadInterpolant(const char *path, rsApiInterpolant *interpolant,
         return RS_API_BAD_FILE;
     }
 
-    while (fgets(line, (int)sizeof line, stream) != NULL) {
-        char text[128];
-        if (sscanf(line, "referenceSystemInterpolant %d", &version) == 1) {
-            /* An unknown version is refused rather than read hopefully: a
-             * format that changed and a reader that guessed would produce
-             * coefficients that are plausible and wrong. */
-            if (version != 1 && version != 2) {
-                fclose(stream);
-                return RS_API_BAD_FILE;
-            }
-            /* FORMAT 1 FILES STAY READABLE, AND THAT IS THE POINT OF THE
-             * VERSION RATHER THAN A COURTESY. The committed arc.eopi fixture
-             * is format 1 and is the only end-to-end evidence that C reads
-             * what MATLAB wrote; a format bump that invalidated it would have
-             * destroyed the check while claiming to extend it. The default
-             * below is overwritten if the file names its quantities. */
+    /* THE HEADER IS READ BY KEY AND VALUE, NOT BY LINE, so no line is too long
+     * to read: taiMinusUtc holds one value per panel on one line, and a
+     * year-long interpolant writes over a thousand characters there. Each key
+     * reads exactly its values and the rest of its line must be empty; a key
+     * this reader does not know is skipped. */
+    while (!bad && fscanf(stream, "%63s", key) == 1) {
+        if (strcmp(key, "referenceSystemInterpolant") == 0) {
+            /* An unknown version is refused rather than read hopefully. */
+            bad = fscanf(stream, "%d", &version) != 1 ||
+                  (version != 1 && version != 2) || rsApiRestOfLine(stream) != 0;
+            /* The default is overwritten if the file names its quantities. */
             interpolant->quantityCount = (version == 1) ? 6 : 7;
-            continue;
-        }
-        if (sscanf(line, "degree %d", &interpolant->degree) == 1) continue;
-        if (sscanf(line, "panelCount %d", &interpolant->panelCount) == 1) continue;
-        if (sscanf(line, "panelSpan %lf", &interpolant->panelSpan) == 1) continue;
-        if (sscanf(line, "firstPanelMjd %lf", &interpolant->firstPanelMjd) == 1) continue;
-        if (sscanf(line, "cipModel %127s", text) == 1) {
-            interpolant->cipModel = rsApiParseCipModel(text);
-            continue;
-        }
-        if (strncmp(line, "quantity ", 9) == 0) {
-            /* COUNTED FROM THE FILE, NOT INFERRED FROM THE VERSION. The file
-             * names its channels; a reader that trusted the version number
-             * instead would stride correctly only for as long as the two
-             * never disagreed, and would then be wrong in a way that produces
-             * smooth, plausible coefficients. */
-            const char *cursor = line + 9;
-            int count = 0;
-            while (*cursor != '\0') {
-                while (*cursor == ' ' || *cursor == '\t') cursor++;
-                if (*cursor == '\0' || *cursor == '\n' || *cursor == '\r') break;
-                count++;
-                while (*cursor != '\0' && *cursor != ' ' && *cursor != '\t' &&
-                       *cursor != '\n' && *cursor != '\r') cursor++;
-            }
-            if (count < RS_API_QUANTITIES || count > RS_API_MAX_QUANTITIES) {
-                fclose(stream);
-                return RS_API_BAD_FILE;
-            }
+        } else if (strcmp(key, "degree") == 0) {
+            bad = fscanf(stream, "%d", &interpolant->degree) != 1 ||
+                  rsApiRestOfLine(stream) != 0;
+        } else if (strcmp(key, "panelCount") == 0) {
+            bad = fscanf(stream, "%d", &interpolant->panelCount) != 1 ||
+                  rsApiRestOfLine(stream) != 0;
+        } else if (strcmp(key, "panelSpan") == 0) {
+            bad = fscanf(stream, "%lf", &interpolant->panelSpan) != 1 ||
+                  rsApiRestOfLine(stream) != 0;
+        } else if (strcmp(key, "firstPanelMjd") == 0) {
+            bad = fscanf(stream, "%lf", &interpolant->firstPanelMjd) != 1 ||
+                  rsApiRestOfLine(stream) != 0;
+        } else if (strcmp(key, "cipModel") == 0) {
+            /* cipModel arrives as text, "IAU2006/2000A", and is mapped by
+             * name rather than by atoi, which would read 0. */
+            char text[64];
+            bad = fscanf(stream, "%63s", text) != 1 || rsApiRestOfLine(stream) != 0;
+            interpolant->cipModel = bad ? -1 : rsApiParseCipModel(text);
+        } else if (strcmp(key, "quantity") == 0) {
+            /* Counted from the file, not inferred from the version. */
+            int count = rsApiCountNames(stream);
+            bad = count < RS_API_QUANTITIES || count > RS_API_MAX_QUANTITIES;
             interpolant->quantityCount = count;
-            continue;
-        }
-        if (strncmp(line, "taiMinusUtc", 11) == 0) {
-            const char *cursor = line + 11;
-            for (k = 0; k < interpolant->panelCount; k++) {
+        } else if (strcmp(key, "taiMinusUtc") == 0) {
+            /* panelCount comes first in every file writeInterpolant writes;
+             * without it the number of values to read is unknown. */
+            bad = interpolant->panelCount < 1;
+            for (k = 0; !bad && k < interpolant->panelCount; k++) {
                 double value;
-                int consumed = 0;
-                if (sscanf(cursor, " %lf%n", &value, &consumed) != 1) {
-                    fclose(stream);
-                    return RS_API_BAD_FILE;
-                }
-                if (taiMinusUtc != NULL) {
+                bad = fscanf(stream, "%lf", &value) != 1;
+                if (!bad && taiMinusUtc != NULL) {
                     if (k >= taiLength) {
                         fclose(stream);
                         return RS_API_BUFFER_TOO_SMALL;
                     }
                     taiMinusUtc[k] = value;
                 }
-                cursor += consumed;
             }
-            continue;
-        }
-        if (strncmp(line, "coefficient", 11) == 0) {
-            seenCoefficient = 1;
+            bad = bad || rsApiRestOfLine(stream) != 0;
+        } else if (strcmp(key, "coefficient") == 0) {
+            seenCoefficient = !(rsApiRestOfLine(stream) != 0);
+            bad = !seenCoefficient;
             break;
+        } else {
+            (void)rsApiRestOfLine(stream);
         }
     }
 
-    /* BOTH VERSIONS, HERE AS WELL AS AT THE VERSION LINE. Until rev. 1.221
-     * this test still read "version != 1": the version line admitted format 2
-     * and this check then refused it, so every file writeInterpolant has
-     * written since P19c came back RS_API_BAD_FILE. The only file the C suite
-     * read was the format-1 fixture, which is why nothing noticed; testApi
-     * now reads a format-2 one too. */
-    if ((version != 1 && version != 2) || !seenCoefficient || interpolant->degree < 1 ||
-        interpolant->panelCount < 1 || interpolant->cipModel < 0 ||
-        !(interpolant->panelSpan > 0.0)) {
+    if (bad || (version != 1 && version != 2) || !seenCoefficient ||
+        interpolant->degree < 1 || interpolant->panelCount < 1 ||
+        interpolant->cipModel < 0 || !(interpolant->panelSpan > 0.0)) {
         fclose(stream);
         return RS_API_BAD_FILE;
     }
@@ -598,6 +594,5 @@ int rsApiReadInterpolant(const char *path, rsApiInterpolant *interpolant,
 
     interpolant->coefficient = coefficient;
     interpolant->taiMinusUtc = taiMinusUtc;
-    (void)panel;
     return RS_API_OK;
 }

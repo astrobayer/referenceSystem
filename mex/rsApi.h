@@ -28,9 +28,10 @@
  *
  * COEFFICIENT LAYOUT
  *   coefficient[((panel * quantityCount) + quantity) * (degree + 1) + k]
- *   quantity 0..5 = X, Y, s, xp, yp, dut1, and 6 = lod in format 2, which is
- *   the order
- *   earthOrientationInterpolant publishes in .quantity. Panel-major so that
+ *   quantity 0..5 = X, Y, s, xp, yp, dut1, the order
+ *   earthOrientationInterpolant publishes in .quantity; older files carry a
+ *   seventh channel, lod, which is read over and not used.
+ *   Panel-major so that
  *   one panel is contiguous: an integrator stays inside one panel for a whole
  *   day and should not stride across the array to do it.
  *
@@ -71,16 +72,12 @@ extern "C" {
  *   panelCount     number of consecutive panels
  *   panelSpan      panel length in days; 1.0 is decision D82
  *   firstPanelMjd  UTC Modified Julian Date at which panel 0 begins
- *   quantityCount  channels per panel: 6 in format 1, 7 in format 2, and
- *                  ZERO MEANS SIX, so an interpolant built by hand before this
- *                  field existed keeps its meaning. Set it explicitly in new
- *                  code. Read from the file's own quantity line rather than
- *                  from the version number. THE C SIDE NEEDS ONLY THE FIRST
- *                  SIX;
- *                  the seventh, the excess length of day, is used by MATLAB
- *                  to form the ERA rate and is skipped over here. What the
- *                  count buys is correct STRIDING, which is the one way a
- *                  reader of an extended file goes wrong silently.
+ *   quantityCount  channels per panel, 6 or 7, and ZERO MEANS SIX, so an
+ *                  interpolant built by hand before this field existed keeps
+ *                  its meaning. Any other value is RS_API_BAD_INTERPOLANT.
+ *                  Read from the file's own quantity line. The rotation reads
+ *                  the first six; what the count buys is correct striding
+ *                  over a seventh.
  *   coefficient    [(degree+1) * quantityCount * panelCount], layout above
  *   taiMinusUtc    [panelCount] seconds, the leap second count on each panel.
  *                  ONE VALUE PER PANEL RATHER THAN ONE FOR THE WHOLE SET,
@@ -131,17 +128,11 @@ int rsApiRotation(const rsApiInterpolant *interpolant, double mjdUtc,
  *          prompt, not a variation to be slipped in here.
  *   rdot   [9], may not be NULL
  *
- * THE EARTH ROTATION RATE IS THE ONE referenceSystem.rotationItrsToGcrs USES BY
- * DEFAULT (rev. 1.222). The ERA part of Rdot is analytic in omega and does not
- * come from the difference, so omega must match or the two APIs disagree by
- * about 1e-12 1/s (7 um/s at 7000 km):
- *   omega = rsEarthRotationAngleRate() * (1 - lod / 86400)
- * where rsEarthRotationAngleRate is the ERA slope (decision D63), and lod is
- * the excess length of day in seconds, read from the panels at mjdUtc when the
- * interpolant carries it (quantityCount 7, format 2) - MATLAB's default
- * 'ApplyLengthOfDay' true. With six channels there is no lod to read and lod is
- * 0, which is MATLAB's 'ApplyLengthOfDay' false. Until rev. 1.222 this used the
- * nominal 7.292115e-5 and no lod: 5.8e-13 1/s from MATLAB's default.
+ * RDOT IS THE TIME DERIVATIVE OF R (decision D128). The Earth rotation rate is
+ * the ERA slope times 1 + d(UT1 - TAI)/dt, the derivative taken as the central
+ * difference of the dut1 panels at the same three samples as the CIP and the
+ * pole, each less the TAI - UTC of its own panel, which is what
+ * referenceSystem.rotationItrsToGcrs does with the same panels.
  *
  * LEAP SECONDS (rev. 1.226). The shoulders are step SI seconds either side, so
  * a shoulder beyond a change in taiMinusUtc is taken at the label that instant

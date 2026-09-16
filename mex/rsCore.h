@@ -450,8 +450,13 @@ void rsEquinoxNutationMatrix(int n, const double *ttDay, const double *ttSec,
  *                        transposed here. Samples 0 and 2 are read only when
  *                        derivativeOrder > 0
  *   dX, dY          [3n] observed CIP offsets, radians, same blocking
- *   omega           [n] Earth rotation rate in rad/s, already corrected for
- *                       the excess length of day by the caller
+ *   ut1MinusTai     [3n] UT1 - TAI in seconds, same blocking. The Earth
+ *                        rotation rate is the ERA slope times
+ *                        1 + d(UT1 - TAI)/dt and its change the slope times
+ *                        d2(UT1 - TAI)/dt2, both from the central differences
+ *                        of these samples, so Rdot and Rddot are the time
+ *                        derivatives of the UT1 the caller interpolated.
+ *                        Read only when derivativeOrder > 0
  *   cipModel        as rsCipCoordinates
  *   derivativeOrder 0, 1 or 2; 0 evaluates the CIP once instead of three
  *                   times, which is the whole of the nargout gating
@@ -472,7 +477,7 @@ int rsRotationItrsToGcrs(int n,
                          const double *ut1Day, const double *ut1Sec,
                          const double *xp, const double *yp,
                          const double *dX, const double *dY,
-                         const double *omega,
+                         const double *ut1MinusTai,
                          int cipModel, int derivativeOrder, double step,
                          double *r, double *rdot, double *rddot);
 
@@ -500,7 +505,7 @@ int rsRotationItrsToGcrsFromCip(int n,
                          const double *ut1Day, const double *ut1Sec,
                          const double *xp, const double *yp,
                          const double *dX, const double *dY,
-                         const double *omega,
+                         const double *ut1MinusTai,
                          const double *cipX, const double *cipY,
                          const double *cipS,
                          int cipModel, int derivativeOrder, double step,

@@ -12,7 +12,8 @@ function epoch = j2000SecondsToEpoch(secondsFromJ2000, scale)
 %                                                    the given scale. Negative
 %                                                    values precede it.
 %   scale              1x1    string | char   -      Time scale, any case, one
-%                                                    of the names in timeScale.
+%                                                    of the names in timeScale
+%                                                    except UTC and GLONASS.
 %
 % OUTPUT ARGUMENTS
 %   Name       Size   Type      Units  Description
@@ -34,9 +35,10 @@ function epoch = j2000SecondsToEpoch(secondsFromJ2000, scale)
 %   may well be counting TAI or GPS seconds from that instant, and assuming TT
 %   would be a silent 32.184 s error.
 %
-%   For a UTC input the count is UTC seconds and therefore not proper time
-%   across a leap second; normalizeEpoch will refuse an offset larger than a
-%   day for that scale. Count in TAI or TT if the arc spans a leap second.
+%   A LEAP-BEARING SCALE IS REFUSED. Seconds counted in UTC or GLONASS since
+%   J2000.0 are not a time: 22 leap seconds lie between J2000.0 and 2017, and
+%   a count of labelled seconds does not say which of them it skipped. Count in
+%   TAI, TT or GPS and convert the epoch with convertTimeScale.
 %
 % ACCURACY
 %   Exact to the resolution of the input. For an arc of one day the seconds
@@ -46,6 +48,7 @@ function epoch = j2000SecondsToEpoch(secondsFromJ2000, scale)
 %   limitation belongs to the caller's representation, not to this function.
 %
 % ERRORS
+%   referenceSystem:j2000SecondsToEpoch:leapBearingScale
 %   referenceSystem:timeScale:unknownScale
 %
 % REFERENCES
@@ -69,6 +72,15 @@ function epoch = j2000SecondsToEpoch(secondsFromJ2000, scale)
     arguments
         secondsFromJ2000 {mustBeNumeric, mustBeReal, mustBeFinite, mustBeNonempty}
         scale (1,1) string
+    end
+
+    scaleInfo = referenceSystem.timeScale(scale);
+    if scaleInfo.isLeapBearing
+        error('referenceSystem:j2000SecondsToEpoch:leapBearingScale', ...
+            ['Seconds since J2000.0 counted in %s are not a time: the leap ', ...
+            'seconds since 2000 are skipped by label and the count does not ', ...
+            'say which. Count in TAI, TT or GPS, and convert the epoch with ', ...
+            'convertTimeScale.'], scaleInfo.name);
     end
 
     constants = referenceSystem.iersConstants();

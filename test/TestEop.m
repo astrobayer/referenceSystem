@@ -285,6 +285,37 @@ classdef TestEop < matlab.unittest.TestCase
             testCase.verifyGreaterThan(withSigma.sigma.xp, 0);
         end
 
+        function interpolateEop_contract_refusesAMissingFrameValue(testCase)
+            % D129. finals2000A leaves dX, dY and the length of day blank in its
+            % predictions, and a blank read as NaN used to reach the rotation
+            % as an all-NaN matrix with no error. A frame quantity missing in
+            % the stencil of an epoch inside the table is refused by name, for
+            % every method - the spline, which skips a NaN row rather than
+            % propagating it, included. lod is not a frame quantity: it passes
+            % through as NaN, and an epoch whose stencil is clear still works.
+            eop = referenceSystem.readEop(testCase.fixture('eop20c04.txt'));
+            gap = find(eop.mjd == 57700);
+            eop.dX(gap) = NaN;
+            eop.lod(gap) = NaN;
+            inside = referenceSystem.daySecondToEpoch([57699 43200], "UTC");
+            clear = referenceSystem.daySecondToEpoch([57720 43200], "UTC");
+
+            for method = ["lagrange", "linear", "spline"]
+                testCase.verifyError(@() referenceSystem.interpolateEop(eop, ...
+                    inside, 'Method', method), ...
+                    'referenceSystem:interpolateEop:missingValue', ...
+                    "A missing dX was not refused under " + method + ".");
+                away = referenceSystem.interpolateEop(eop, clear, 'Method', method);
+                testCase.verifyTrue(isfinite(away.dX), ...
+                    "An epoch clear of the gap lost its dX under " + method + ".");
+            end
+
+            eop.dX(gap) = eop.dX(gap - 1);
+            passed = referenceSystem.interpolateEop(eop, inside);
+            testCase.verifyTrue(isnan(passed.lod), ...
+                'A missing lod must pass through as NaN, not be invented.');
+        end
+
         function tidalCorrections_contract_carryTheirSense(testCase)
             testCase.assumeTrue(referenceSystem.mexInfo().built, ...
                 'The MEX gateway is not built.');
@@ -537,7 +568,7 @@ classdef TestEop < matlab.unittest.TestCase
             utc = referenceSystem.daySecondToEpoch( ...
                 [mjd, 3600*ones(numel(mjd), 1)], "UTC");
 
-            for method = ["linear", "spline"]
+            for method = ["lagrange", "linear", "spline"]
                 whole = referenceSystem.interpolateEop(eop, utc, 'Method', method);
                 cut = referenceSystem.interpolateEop(preTrimmed, utc, ...
                     'Method', method);
@@ -577,6 +608,54 @@ classdef TestEop < matlab.unittest.TestCase
                     "Interpolation at a node changed " + name + ".");
             end
             testCase.verifyEqual(interpolated.dut1, eop.dut1(node), 'AbsTol', 1e-12);
+        end
+
+        function interpolateEop_precision_restoredZonalTidesAreReproducedExactly(testCase)
+            % D126's claim, asserted where it can be exact: a series whose UT1
+            % and length of day ARE the RG_ZONT2 zonal tide, and nothing else,
+            % must come back as the tide at every epoch between the rows,
+            % because "restore" removes the whole signal before any stencil
+            % sees it. The tolerance is 5e-14 s on dut1, a few ulp of the
+            % 36 s of TAI - UTC the arithmetic passes through; on lod the
+            % regularised residual is identically zero, so 1e-20 s bounds the
+            % single restoring addition.
+            %
+            % THE OTHER HALF MAKES IT A TEST. With ZonalTides "interpolate" the
+            % same rows miss the tide by the curvature of a fortnightly signal
+            % over a day, measured at 1.95 us for 4-point Lagrange over 2020;
+            % more than 0.5 us is required, so a restore that silently did
+            % nothing would fail here.
+            testCase.assumeTrue(referenceSystem.mexInfo().built, ...
+                'The MEX gateway is not built.');
+            eop = referenceSystem.readEop(testCase.fixture('eop20c04.txt'));
+            rows = eop.mjd >= 57660 & eop.mjd <= 57745;
+            eop = TestEop.selectRows(eop, rows);
+            rowUtc = referenceSystem.daySecondToEpoch( ...
+                [floor(eop.mjd), (eop.mjd - floor(eop.mjd))*86400], "UTC");
+            rowTide = referenceSystem.zonalTideEopCorrection( ...
+                referenceSystem.convertTimeScale(rowUtc, "TT"));
+            eop.dut1 = rowTide.dut1;
+            eop.lod = rowTide.dlod;
+
+            hour = (0:3600:86400*60-3600)';
+            query = referenceSystem.daySecondToEpoch( ...
+                [57670 + floor(hour/86400), mod(hour, 86400)], "UTC");
+            truth = referenceSystem.zonalTideEopCorrection( ...
+                referenceSystem.convertTimeScale(query, "TT"));
+
+            restored = referenceSystem.interpolateEop(eop, query);
+            interpolated = referenceSystem.interpolateEop(eop, query, ...
+                'ZonalTides', "interpolate");
+
+            missed = max(abs(interpolated.dut1 - truth.dut1));
+            testCase.log(1, sprintf(['zonal tide: restore misses by %.3g s ', ...
+                '(dut1) and %.3g s (lod); interpolating it misses by %.3g s'], ...
+                max(abs(restored.dut1 - truth.dut1)), ...
+                max(abs(restored.lod - truth.dlod)), missed));
+            testCase.verifyEqual(restored.dut1, truth.dut1, 'AbsTol', 5e-14);
+            testCase.verifyEqual(restored.lod, truth.dlod, 'AbsTol', 1e-20);
+            testCase.verifyGreaterThan(missed, 5e-7, ...
+                'Interpolating the tide itself should miss it; the check is blind.');
         end
 
         function readEop_precision_dPsiDEpsilonConversionRoundTrips(testCase)
@@ -834,7 +913,8 @@ classdef TestEop < matlab.unittest.TestCase
                 testCase.verifyEqual(interpolated.meta.(name), eop.meta.(name), ...
                     "meta." + name + " was altered by interpolateEop.");
             end
-            testCase.verifyEqual(interpolated.meta.method, "linear");
+            testCase.verifyEqual(interpolated.meta.method, "lagrange");
+            testCase.verifyEqual(interpolated.meta.zonalTides, "restore");
         end
 
         function readEop_diagnostics_wrongFormatIsRefused(testCase)
@@ -988,6 +1068,37 @@ classdef TestEop < matlab.unittest.TestCase
 
     methods (Test, TestTags = {'reference'})
 
+        function interpolateEop_reference_matchesAnIndependentLagrangeInterpolation(testCase)
+            % The expected values were computed in Python with exact rational
+            % arithmetic from the fixture rows for MJD 57659 to 57662, the
+            % 4-point Lagrange weights at MJD 57660.25 being -7/128, 105/128,
+            % 35/128 and -5/128, with the arcsecond-to-radian factor applied
+            % afterwards. Nothing from this toolbox took part. The epoch lies a
+            % quarter of the way into the interval, where Lagrange and linear
+            % interpolation differ (xp by 1.2e-10 rad).
+            %
+            % Tolerances as in the linear reference above: a few ulp of the
+            % quantity, and of the 37 s intermediate for UT1.
+            eop = referenceSystem.readEop(testCase.fixture('eop20c04.txt'));
+            epoch = referenceSystem.daySecondToEpoch([57660 21600], "UTC");
+
+            atEpoch = referenceSystem.interpolateEop(eop, epoch, ...
+                'ZonalTides', "interpolate");
+
+            testCase.verifyEqual(atEpoch.meta.method, "lagrange", ...
+                'Four-point Lagrange is the default method.');
+            testCase.verifyEqual(atEpoch.xp, 1.1344456060268596e-06, ...
+                'AbsTol', 1e-20, 'The interpolated xp differs from the independent one.');
+            testCase.verifyEqual(atEpoch.yp, 1.6193759454284125e-06, ...
+                'AbsTol', 1e-20, 'The interpolated yp differs from the independent one.');
+            testCase.verifyEqual(atEpoch.dut1, -0.2765482375, ...
+                'AbsTol', 1e-14, 'The interpolated UT1-UTC differs from the independent one.');
+            testCase.verifyEqual(atEpoch.dX, 8.489542069054015e-10, ...
+                'AbsTol', 1e-24, 'The interpolated dX differs from the independent one.');
+            testCase.verifyEqual(atEpoch.lod, 0.00138080625, ...
+                'AbsTol', 1e-18, 'The interpolated LOD differs from the independent one.');
+        end
+
         function interpolateEop_reference_matchesAnIndependentLinearInterpolation(testCase)
             % The expected values were computed in Python directly from the
             % fixture rows for MJD 57660 and 57661, as a + 0.25 (b - a), with the
@@ -1000,7 +1111,8 @@ classdef TestEop < matlab.unittest.TestCase
             eop = referenceSystem.readEop(testCase.fixture('eop20c04.txt'));
             epoch = referenceSystem.daySecondToEpoch([57660 21600], "UTC");
 
-            atEpoch = referenceSystem.interpolateEop(eop, epoch);
+            atEpoch = referenceSystem.interpolateEop(eop, epoch, ...
+                'Method', "linear", 'ZonalTides', "interpolate");
 
             % 1e-20 rad on polar motion and 1e-16 s on UT1 are a few ulp of the
             % interpolated quantities themselves - 1.1e-06 rad and 0.28 s - so

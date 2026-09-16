@@ -64,14 +64,6 @@ function [results, reportFile, summary] = runTestSuite(options)
 %   Benchmark and convergence rows are not produced by this function. A test
 %   that measures something logs one pipe-separated record through
 %   testCase.log, the framework records it, and this function parses those
-%   A WARNINGS section lists every test that raised a MATLAB warning it did not
-%   suppress. Warnings appear in no TestResult, so before revision 1.58 they
-%   reached the console and nowhere else: a real gimbal-lock warning survived
-%   four S4 runs unreported and was found by a reader watching the console. The
-%   count in SUMMARY is of TESTS THAT WARNED, not of warnings - lastwarn keeps
-%   only the most recent - and the section says so rather than implying a total
-%   it does not have.
-%
 %   records into the BENCHMARKS, CONVERGENCE and NOTES sections. The measuring test
 %   therefore owns its numbers and the runner owns only their layout. The record
 %   formats are built by TestPerformance.benchmarkRecord and
@@ -82,13 +74,17 @@ function [results, reportFile, summary] = runTestSuite(options)
 %   durations are given to three decimals; benchmark medians to six, because a
 %   single-epoch call is measured in microseconds.
 %
+%   A WARNINGS section lists every test that raised a MATLAB warning it did not
+%   suppress. Warnings appear in no TestResult, so without it they would reach
+%   the console and nowhere else. The count in SUMMARY is of TESTS THAT WARNED,
+%   not of warnings - lastwarn keeps only the most recent - and the section says
+%   so rather than implying a total it does not have.
+%
 %   A TEST THAT IS MEANT TO FILTER SAYS SO. Two checks in this suite cannot run
 %   on a healthy machine - one needs a MATLAB release that still permits a
 %   namespace folder on the path, the other needs a transfer slow enough to time
-%   out - and until revision 1.204 the report described them in the framework's
-%   words, "assumption was not met" and "assumeTrue failed". Read as intended
-%   that says nothing is wrong; read at a glance it says two things are, on
-%   every run, for the life of the toolbox. The runner therefore carries an
+%   out - and in the framework's words, "assumption was not met", they read at
+%   a glance as two things wrong on every run. The runner therefore carries an
 %   allow-list of the tests whose assumption is EXPECTED to fail, with the
 %   standing reason for each. They are labelled SKIP, counted separately in the
 %   summary, and listed under INTENTIONALLY SKIPPED with the reason instead of
@@ -122,14 +118,25 @@ function [results, reportFile, summary] = runTestSuite(options)
 %
 % ERRORS
 %   referenceSystem:runTestSuite:testFolderMissing
-%
-% WARNINGS
-%   None raised by this function. It RECORDS the warnings raised by the tests
-%   it runs, in the WARNINGS section of the report; see WarningRecordingPlugin.
 %       The test folder is not where the package expects it, next to the
 %       package folder. Reinstall the toolbox as one distribution folder.
 %   referenceSystem:runTestSuite:cannotWriteReport
 %       The report file could not be opened for writing.
+%   referenceSystem:runTestSuite:packageNotResolvable
+%       The referenceSystem namespace does not resolve, so no test could
+%       reach the toolbox; the suite is not run.
+%   referenceSystem:runTestSuite:testClassExcluded
+%       A test class contributed no tests. Raised after the report is
+%       written, so the results that did run can still be read.
+%
+% WARNINGS
+%   referenceSystem:runTestSuite:missingReportLine
+%       A report block produced a missing string; the line is marked and the
+%       rest of the report is written.
+%   referenceSystem:runTestSuite:controlCharacterInReport
+%       A report line carried a control character; it is replaced by a space.
+%   The warnings raised BY THE TESTS are recorded in the report's own WARNINGS
+%   section, not raised again; see WarningRecordingPlugin.
 %
 % REFERENCES
 %   Handover section D.1 (test categories), D.2 (structure), D.3 (this report).
