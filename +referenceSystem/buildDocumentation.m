@@ -100,7 +100,7 @@ function report = buildDocumentation(options)
 % See also BUILDMEX, RUNTESTSUITE, MEXINFO.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.1
+% referenceSystem v2.2
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-27 09:40 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------

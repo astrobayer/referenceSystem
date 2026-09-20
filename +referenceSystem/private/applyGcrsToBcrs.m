@@ -51,7 +51,7 @@ function [position, velocity] = applyGcrsToBcrs(ingredient, position, velocity)
 % See also BCRSTRANSFORM, GCRSTOBCRS, BCRSTOGCRS.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.1
+% referenceSystem v2.2
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-08-02 09:20 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------

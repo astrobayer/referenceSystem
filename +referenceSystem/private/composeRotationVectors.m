@@ -82,7 +82,7 @@ function [q, stepAngle] = composeRotationVectors(startQuaternion, ...
 % See also INTEGRATEATTITUDE, INTEGRATEATTITUDEINCREMENTS.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.1
+% referenceSystem v2.2
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-27 23:55 (CEST, UTC+02:00) - session S9, prompt P27b
 % -------------------------------------------------------------------------

@@ -173,7 +173,7 @@ function [R, rates, info] = wanderAzimuthRotation(origin, wanderAngle, options)
 %   INTEGRATEATTITUDE, IERSCONSTANTS.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.1
+% referenceSystem v2.2
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-26 22:40 (CEST, UTC+02:00) - session S5, prompt P26
 % -------------------------------------------------------------------------

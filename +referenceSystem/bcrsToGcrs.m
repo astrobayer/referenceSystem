@@ -81,7 +81,7 @@ function [rGcrs, vGcrs, info] = bcrsToGcrs(rBcrs, vBcrs, epoch, options)
 % See also GCRSTOBCRS, BARYCENTRICBODYSTATE, GEOCENTRICBODYSTATE, IERSCONSTANTS.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.1
+% referenceSystem v2.2
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-28 15:45 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------

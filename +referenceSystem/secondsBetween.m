@@ -60,7 +60,7 @@ function interval = secondsBetween(fromEpoch, toEpoch)
 % See also ADDSECONDS, NORMALIZEEPOCH, CONVERTTIMESCALE.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.1
+% referenceSystem v2.2
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------

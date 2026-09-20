@@ -96,7 +96,7 @@ function [omega, info, convention] = angularVelocityFromRotationRate(R, Rdot, op
 % See also ANGULARVELOCITYTOROTATIONRATE, INTEGRATEATTITUDE, INVERTROTATION.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.1
+% referenceSystem v2.2
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-26 22:20 (CEST, UTC+02:00) - session S5, prompt P26
 % -------------------------------------------------------------------------

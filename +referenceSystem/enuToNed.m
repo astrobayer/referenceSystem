@@ -52,7 +52,7 @@ function ned = enuToNed(enu)
 % See also NEDTOENU, ROTATIONECEFTONED, CARTESIANTOENU.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.1
+% referenceSystem v2.2
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-26 05:15 (CEST, UTC+02:00) - session S4, prompt P12
 % -------------------------------------------------------------------------
