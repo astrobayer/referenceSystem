@@ -1,0 +1,116 @@
+# Rebuild the two GENERATED documents on the runner, on request.
+#
+# WHY THIS EXISTS
+#   doc/referenceSystem_functionReference.html is written by
+#   referenceSystem.buildDocumentation, which needs MATLAB, and
+#   auditPackage.py fails the build when the page's bodies no longer match
+#   the help blocks they were generated from. So any change that touches a
+#   help block - a wording fix, a new ERRORS row, a version bump, which
+#   rewrites the provenance footer of every file - cannot be finished by a
+#   contributor without a MATLAB licence. The self-hosted runner is the one
+#   machine in this project that has one; this makes it reachable.
+#
+# WHY IT IS NOT PART OF ci.yml
+#   ci.yml's matlab job has `needs: [audit, csuites]`, and the audit is
+#   exactly what a stale page fails. A rebuild that only runs after the
+#   audit passes cannot repair the state that makes the audit fail. This
+#   workflow therefore depends on nothing and is dispatched deliberately.
+#
+# WHY IT COMMITS RATHER THAN UPLOADING AN ARTIFACT
+#   An artifact has to be downloaded, unpacked and committed by hand, and
+#   the hand is what this exists to remove. It pushes ONE commit onto the
+#   branch it was dispatched against, and only when a file actually
+#   changed - a no-op rebuild pushes nothing and says so.
+#
+# THE MANUAL IS BUILT ON UBUNTU, NOT ON THE MATLAB RUNNER
+#   doc/buildReferenceManual.py is pure Python and reportlab. Building it
+#   where the version is PINNED makes the PDF reproducible; building it on
+#   whatever reportlab happens to sit on the Windows runner does not. The
+#   first run after this lands will therefore rewrite the PDF once, because
+#   the committed copy was built by an unrecorded version.
+#
+# Created: 2026-09-20
+# Author:  Developed by Matthias Weigelt with the help of Anthropic
+#          Claude Opus 5, 2026-09-20
+
+name: rebuild-docs
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rebuild-docs-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  manual:
+    name: manual (python)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: { python-version: '3.12' }
+
+      # PINNED. An unpinned generator makes the committed PDF depend on the
+      # day it was built, which is the same defect as an unpinned action.
+      - run: python3 -m pip install --upgrade pip reportlab==5.0.1
+
+      - run: python3 doc/buildReferenceManual.py
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: referenceManual
+          path: doc/referenceSystem_manual.pdf
+          if-no-files-found: error
+
+  reference:
+    name: reference page (MATLAB)
+    needs: manual
+    runs-on: [self-hosted, Windows]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      # The probe and the reasoning behind it live in astrobayer/ci-actions,
+      # pinned to an immutable tag for the reason ci.yml states at length.
+      - uses: astrobayer/ci-actions/matlab-probe@v1.0.0
+        timeout-minutes: 2
+
+      # Steps="reference" only: the search database lands in doc/helpsearch*,
+      # which .gitignore excludes, so building it here would produce nothing
+      # to commit and one more way to fail.
+      - uses: matlab-actions/run-command@bfa857648f4895aa98a446fe41c85e0788421ed5 # v3
+        with:
+          command: |
+            addpath(pwd);
+            r = referenceSystem.buildDocumentation('Force', true, ...
+                'Steps', "reference");
+            fprintf('%s: %s\n', r.referenceAction, r.referenceFile);
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: referenceManual
+          path: doc
+
+      - name: Commit the regenerated documents, if they moved
+        shell: bash
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add doc/referenceSystem_functionReference.html \
+                  doc/referenceSystem_manual.pdf
+          if git diff --cached --quiet; then
+            echo "Both documents already match the sources. Nothing to commit."
+            exit 0
+          fi
+          git diff --cached --stat
+          git commit \
+            -m "docs: regenerate the function reference and the manual" \
+            -m "Written by referenceSystem.buildDocumentation and doc/buildReferenceManual.py on the runner, from .github/workflows/rebuild-docs.yml. Generated files are never edited by hand."
+          git push origin "HEAD:$BRANCH"
