@@ -96,7 +96,7 @@ function [Rinv, RdotInv, RddotInv] = invertRotation(R, Rdot, Rddot, options)
 % See also APPLYROTATION, ROTATIONITRSTOGCRS, ROTATIONGCRSTOCIRS.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.1
+% referenceSystem v2.2
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-25 22:35 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------

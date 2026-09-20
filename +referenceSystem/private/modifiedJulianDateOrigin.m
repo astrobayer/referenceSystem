@@ -33,7 +33,7 @@ function origin = modifiedJulianDateOrigin()
 % See also IERSCONSTANTS, DATETIMETOEPOCH, EPOCHTO, LEAPSECONDTABLE.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.1
+% referenceSystem v2.2
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-09-15 14:10 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------

@@ -172,7 +172,7 @@ function epochOut = convertTimeScale(epochIn, scaleOut, options)
 % See also TIMESCALE, LEAPSECONDS, NORMALIZEEPOCH, EPOCHTO.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.1
+% referenceSystem v2.2
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-24 19:55 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------

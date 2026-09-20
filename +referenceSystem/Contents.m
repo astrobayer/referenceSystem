@@ -1,5 +1,5 @@
 % referenceSystem — Time systems, Earth orientation and coordinate transformations
-% Version 2.1.244 15-Sep-2026
+% Version 2.2.244 15-Sep-2026
 %
 %   Reference and time system transformations for satellite geodesy, built on
 %   the IERS Conventions (2010) and the IAU SOFA library. All functions live in
@@ -142,7 +142,7 @@
 %   that govern every function in this package.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.1
+% referenceSystem v2.2
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-24 20:30 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------

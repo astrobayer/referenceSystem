@@ -457,8 +457,22 @@ def check_generated_docs_carry_the_current_version():
         # The PDF's text is compressed, so the stamp is read from the raw
         # bytes; reportlab writes it uncompressed in the title string.
         raw = open(manual, 'rb').read()
-        found = set(m.decode() for m in re.findall(rb'2\.1\.\d+', raw))
-        if found and current not in found:
+        # THE PATTERN IS DERIVED FROM toolboxVersion, NOT WRITTEN HERE.  It
+        # read rb'2\.1\.\d+' until rev. 1.245, which was a second copy of
+        # majorMinorVersion in a file whose whole job is to catch second
+        # copies.  The copy was not merely untidy: the first MINOR bump
+        # moves the sources to 2.2.x, a correctly rebuilt manual then
+        # contains no 2.1.x at all, `found` comes back empty, and the guard
+        # below passes it in silence - a gate that stops gating at the exact
+        # release it exists for.  Measured on the 2.2.244 rebuild: the only
+        # triple in the file is 2.2.244.
+        pattern = re.escape(release.group(1)).encode() + rb'\.\d+'
+        found = set(m.decode() for m in re.findall(pattern, raw))
+        if not found:
+            fail('doc/manualStampMissing',
+                 'the manual carries no v%s.* version stamp; rebuild it '
+                 'with doc/buildReferenceManual.py' % release.group(1))
+        elif current not in found:
             fail('doc/manualStampIsStale',
                  'the manual says v%s against sources v%s; rebuild it with '
                  'doc/buildReferenceManual.py' % (sorted(found)[0], current))

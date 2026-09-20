@@ -6,7 +6,7 @@
 % script; it is written with |%%| section breaks so that conversion is one
 % command and needs no editing.
 %
-% referenceSystem v2.1
+% referenceSystem v2.2
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-26 23:05 (CEST, UTC+02:00)
 

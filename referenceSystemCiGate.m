@@ -71,7 +71,7 @@ function referenceSystemCiGate()
 % See also SETUPREFERENCESYSTEM, REFERENCESYSTEM.RUNTESTSUITE
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.1
+% referenceSystem v2.2
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-08-21 15:20 (CEST, UTC+02:00)
 % Revised: 2026-09-15 14:00 (CEST, UTC+02:00)

@@ -8,7 +8,7 @@
 | Document status | **REVS. 1.238-1.243: THE WHOLE-REPO REVIEW'S FIFTEEN FINDINGS FIXED, AND TWO DEFAULTS CHANGED ON MATTHIAS'S DECISION.** `interpolateEop` interpolates with four-point Lagrange and removes the RG_ZONT2 zonal tides before interpolating and restores them after, by default; on the zonal-tide signal over 2020, linear interpolation of daily rows erred by 35.7 us in UT1, Lagrange by 1.95 us, and remove-and-restore by zero (D126, 1.238).Rdot and Rddot are the exact derivatives of R: the rate is formed in C from the same three UT1-TAI samples as the CIP rate, and it matches a logm oracle at the 1e-16 1/s floor (1.239). A missing EOP value is refused as `interpolateEop:missingValue`, not interpolated into NaN; the C reader parses the interpolant header by key and has no line limit; the C API refuses a channel count other than 0, 6 or 7 (1.239). The BCRS-to-GCRS velocity carries its dT/dt factor, which moved the oracle test case from 1.33e-4 to 1.8e-10 m/s, and only the live SPICE set answers a query (1.240). Raised identifiers are held to their own help, the unimplemented `cipCoordinates` option is gone, a leap-seconds.list moves the coverage, and a leap-bearing J2000 count is refused (1.241). Help blocks carry no revision history, and the audit enforces it (1.242). **Removed:** `rotationItrsToGcrs`'s `ApplyLengthOfDay` and its `info` fields; the interpolant's lod channel. **GREEN ON BOTH TIERS, THE SAME FIGURES ON EACH: 620 tests, 619 passed, 0 failed, 1 skipped by design, 0 unexpected.** The local gate measured it at `715686c` on R2026a, and Actions run 35050534974 measured it again on the self-hosted Windows runner for PR #24 at `3c179ac`, with all three required jobs green and the C suites at 115 / 73 / 28 / 67 on both machines. O2 is discharged for revs. 1.238-1.244. **PR #24 is open and ready for review against `main`, which stays at PR #23 (`5a00549`) until Matthias merges;** CI gates it with three required checks, the MATLAB one on a self-hosted Windows runner; `dataFolder` is the one authority for the data location (D119); the supported release is R2026a (D120). Nothing asserted is uncited, and the licence is in place and scoped. |
 | Created | 2026-07-20, 20:15 CEST (UTC+02:00) |
 | Last revised | 2026-09-15 (Europe/Berlin, UTC+02:00) - rev. 1.244. **Dates adjudicated at rev. 1.188: the wall clock is the truth.** |
-| Sources at | **v2.1.244** - the patch component IS this revision number (SC.11, D107) |
+| Sources at | **v2.2.244** - the patch component IS this revision number (SC.11, D107) |
 | Model | Claude Opus 5 (Anthropic) — rev. 1.81 onward; rev. 1.0–1.80 were Claude Opus 4.8 |
 | Review panel | GRACE L1→L2 processing · MATLAB architecture · time metrology · reference frames · IERS Conventions (2010) |
 | Predecessors reviewed | `ecef2eci.zip` (rev. of 2026-07-xx), `geodesyToolbox.zip` v1.0, `convertTimeSystem.m` (2026-07-10) |
@@ -1458,7 +1458,7 @@ function [rGcrs, vGcrs] = applyRotation(R, Rdot, rItrs, vItrs)
 % See also ROTATIONITRSTOGCRS, CIPCOORDINATES.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.1
+% referenceSystem v2.2
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: <YYYY-MM-DD HH:MM> (CEST, UTC+02:00)
 % -------------------------------------------------------------------------

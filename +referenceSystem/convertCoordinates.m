@@ -169,7 +169,7 @@ function [y, info] = convertCoordinates(x, fromFrame, toFrame, options)
 % See also CARTESIANTOGEODETIC, CONVERTITRF, ROTATIONITRSTOGCRS, APPLYROTATION.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.1
+% referenceSystem v2.2
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-26 22:55 (CEST, UTC+02:00) - session S5, prompt P15
 % -------------------------------------------------------------------------

@@ -16,7 +16,7 @@ classdef TestNavigation < matlab.unittest.TestCase
 %   explicitly; it must never import the package (handover section C.5 rule 4).
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.1
+% referenceSystem v2.2
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-26 23:20 (CEST, UTC+02:00) - session S5, prompt P26
 % -------------------------------------------------------------------------

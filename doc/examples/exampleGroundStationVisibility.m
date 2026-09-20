@@ -2,7 +2,7 @@
 % Local-level geometry: earth-fixed to ENU, then to azimuth, elevation and
 % range, with the conventions stated rather than assumed.
 %
-% referenceSystem v2.1
+% referenceSystem v2.2
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-26 23:05 (CEST, UTC+02:00)
 

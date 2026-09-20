@@ -118,7 +118,7 @@ function [cartesian, velocity] = convertItrf(cartesian, fromFrame, toFrame, ...
 % See also ITRFPARAMETERS, APPLYHELMERT7, CARTESIANTOGEODETIC.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.1
+% referenceSystem v2.2
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-26 06:00 (CEST, UTC+02:00) - session S4, prompt P10
 % -------------------------------------------------------------------------

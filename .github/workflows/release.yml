@@ -1,0 +1,66 @@
+# Tag and release on merge - referenceSystem's adoption of the shared action.
+#
+# WHAT IT DOES HERE
+#   mode: file. +referenceSystem/Contents.m states the version, and
+#   auditPackage.py checks it against toolboxVersion's two literals, the
+#   handover header, the generated reference page and the manual. So nothing
+#   in this workflow decides a number: the bump happens INSIDE the pull
+#   request that earns it, where the audit verifies the whole chain, and the
+#   action only asks whether a tag for the stated version exists yet.
+#
+#   A merge that does not touch the version releases nothing and says so.
+#
+# THE PATCH COMPONENT IS THE REVISION NUMBER (D107), NOT A COUNTER THIS
+# WORKFLOW COULD INCREMENT
+#   auditPackage.py fails version/patchIsNotTheRevision unless patchVersion
+#   equals the newest "| 1.x |" row of the handover revision log. A label
+#   saying "patch" cannot know which revision was written; the file does.
+#   That is why this repository takes mode: file and not the version:
+#   labels ci-actions uses.
+#
+# WHY THE TAG IS ANNOTATED
+#   Creating a release for a tag that does not exist makes GitHub create the
+#   tag, lightweight. The action runs `git tag -a` first and then
+#   `gh release create --verify-tag`, so that cannot happen here. V2.2.1,
+#   with its capital V, is also why the action reads only vX.Y.Z tags: a tag
+#   that does not match is not a version of this repository and must never
+#   become the base of the next one.
+#
+# THE ACTION IS PINNED TO AN IMMUTABLE TAG, not @v1 and not @main, by the
+#   same rule ci.yml's matlab-probe step follows: a moving tag would let a
+#   commit in ci-actions change this repository's release behaviour with
+#   nothing in this repository's diff to explain it.
+#
+# Created: 2026-09-20
+# Author:  Developed by Matthias Weigelt with the help of Anthropic
+#          Claude Opus 5, 2026-09-20
+
+name: release
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: release
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - uses: astrobayer/ci-actions/matlab-release@v1.3.1
+        with:
+          mode: file
+          version-file: +referenceSystem/Contents.m

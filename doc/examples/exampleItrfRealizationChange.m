@@ -2,7 +2,7 @@
 % A station coordinate is meaningless without its realization and its epoch.
 % This example moves one between two of them and shows what each step is worth.
 %
-% referenceSystem v2.1
+% referenceSystem v2.2
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-26 23:05 (CEST, UTC+02:00)
 

@@ -111,7 +111,7 @@ function [r2, v2, a2] = applyRotation(R, second, third, fourth, fifth, sixth, op
 % See also ROTATIONITRSTOGCRS, INVERTROTATION, ROTATIONGCRSTOCIRS.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.1
+% referenceSystem v2.2
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-25 22:25 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------

@@ -83,7 +83,7 @@ function versionInfo = toolboxVersion()
 % See also IERSCONSTANTS, ELLIPSOIDPARAMETERS.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.1
+% referenceSystem v2.2
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-24 11:05 (CEST, UTC+02:00)
 % Revised: 2026-08-09 10:15 (CEST, UTC+02:00)
@@ -91,7 +91,7 @@ function versionInfo = toolboxVersion()
 
 %#codegen
 
-    majorMinorVersion = "2.1";
+    majorMinorVersion = "2.2";
     % D107: THE PATCH IS THE HANDOVER REVISION. Bump this in the same edit that
     % writes the revision log entry; the two are checked against each other.
     patchVersion = "244";

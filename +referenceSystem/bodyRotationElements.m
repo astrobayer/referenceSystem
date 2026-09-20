@@ -173,7 +173,7 @@ function [rightAscension, declination, primeMeridian, info] = ...
 % See also ROTATIONICRFTOBODYFIXED, BARYCENTRICBODYSTATE, ROTATIONITRSTOGCRS.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.1
+% referenceSystem v2.2
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-30 20:15 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------
