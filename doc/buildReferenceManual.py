@@ -816,9 +816,18 @@ def main():
     st = buildStyles()
     target = os.path.join(HERE, 'referenceSystem_manual.pdf')
 
+    # THE SUBJECT CARRIES THE HANDOVER REVISION, AND THAT IS WHAT MAKES IT
+    # CHECKABLE. The front-matter table has printed the revision since D107,
+    # but it is page content: compressed into a content stream, so no reader
+    # of the raw bytes can find it. The version is findable only because it
+    # sits in the title, i.e. in the document metadata. Until D132 that was
+    # enough - the version moved with the revision, so doc/manualStampIsStale
+    # caught a stale manual every time. It no longer does, so the revision
+    # goes where the version already is.
     doc = Manual(target, info,
                  title='referenceSystem v%s Reference Manual' % info['version'],
-                 author=info['author'])
+                 author=info['author'],
+                 subject='handover revision 1.%s' % info['handoverRevision'])
     story = []
     cover(story, st, info)
     chapterTheory(story, st)
