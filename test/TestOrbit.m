@@ -560,6 +560,11 @@ classdef TestOrbit < matlab.unittest.TestCase
         % dropped by the mapping; only the labels differ.
 
         function orbitSunGeometry_contract_returnsOnePerState(testCase)
+            % The one tolerance here bounds a NORMALISATION and nothing
+            % physical: info.sunDirection is the Sun vector divided by its own
+            % length, so its norm is 1 to a few units in the last place.
+            % 1e-15 is about four of them at unit magnitude, which is the
+            % rounding of that division and admits no error in the direction.
             [r, v] = TestOrbit.circularState(89, 30, 0:60:300);
             [beta, u, info] = referenceSystem.orbitSunGeometry(r, v, ...
                 TestOrbit.j2000Epoch(6));
@@ -913,14 +918,22 @@ classdef TestOrbit < matlab.unittest.TestCase
             % attribution needs, with the CIP equator so the precession-
             % nutation series is in the measurement.
             %
-            % 1.0 s IS A PREDICTION AND NOT YET A MEASUREMENT. No benchmark of
-            % geocentricBodyState or cipCoordinates exists to derive it from,
-            % so it is deliberately generous and is to be tightened from the
-            % BENCHMARK record of the first green run, the way rev. 1.73's
-            % L5 target was. Under the section D.1 rule this warns below 5x
-            % and fails only above it, so a generous first target costs a
-            % warning and never a false red.
-            targetSeconds = 1.0;
+            % 0.20 s, TIGHTENED FROM THE 1.0 s PREDICTED AT REV. 1.246, AND
+            % FROM A BOUND RATHER THAN FROM THE MEDIAN. The first run of this
+            % method took 0.23237 s in total on the self-hosted PCWIN64
+            % runner, and medianDuration calls the function three times, so
+            % the median is at most 0.078 s however the setup is apportioned.
+            % 0.20 s is 2.6x that bound, which is the "twice the slowest host,
+            % rounded up" rule of TestRotationAlgebra applied to the only
+            % measurement there is.
+            %
+            % THE MEDIAN ITSELF IS NOT QUOTED HERE ON PURPOSE. Its BENCHMARK
+            % row is logged at Concise and reaches the report artefact, which
+            % the egress policy of a CI-only session cannot fetch; the wall
+            % time is in the job log, which it can. A bound that was read is
+            % worth more than a median that was assumed, and the next session
+            % with the artefact in hand can replace this with the row.
+            targetSeconds = 0.20;
             stateCount = 1440;
             [r, v] = TestOrbit.circularState(89, 30, ...
                 (0:stateCount - 1)*360/stateCount);
