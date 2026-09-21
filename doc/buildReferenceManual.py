@@ -65,6 +65,7 @@ def readVersionInfo():
         'version': '%s.%s' % (release, patch),
         'release': release,
         'patch': patch,
+        'handoverRevision': literal('handoverRevision'),
         'buildDate': literal('buildDate'),
         'author': literal('toolboxAuthor'),
         'model': literal('generatorModel'),
@@ -250,8 +251,8 @@ def cover(story, st, info):
     story.append(Spacer(1, 8 * mm))
     story.append(tableOf([
         ['Version', 'v%s' % info['version']],
-        ['Handover revision', '1.%s &mdash; the patch component IS the '
-                              'revision (D107)' % info['patch']],
+        ['Handover revision', '1.%s &mdash; provenance, and no part of '
+                              'the version (D132)' % info['handoverRevision']],
         ['Build date', info['buildDate']],
         ['Author', info['author']],
         ['Developed with', info['model']],

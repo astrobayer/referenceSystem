@@ -136,7 +136,7 @@ function [X, Y, s] = cipCoordinates(epoch, options)
 %   EVALUATEINTERPOLANT.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.2
+% referenceSystem v2.3
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-25 21:40 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------

@@ -14,11 +14,15 @@ function versionInfo = toolboxVersion()
 %   ----                     ----   ----     -----  -----------
 %   versionInfo              1x1    struct   -      Fields listed below.
 %   .version                 1x1    string   -      Semantic version, release plus
-%                                                  patch, e.g. '2.1.204'.
-%   .release                 1x1    string   -      Major and minor only, '2.1'.
-%   .patch                   1x1    string   -      Patch component, e.g. '204'.
-%                                                  This IS the handover
-%                                                  revision number (D107).
+%                                                  patch, e.g. '2.3.0'.
+%   .release                 1x1    string   -      Major and minor only, '2.3'.
+%   .patch                   1x1    string   -      Patch component, e.g. '0'. A
+%                                                  SEMANTIC patch counter and
+%                                                  not a revision number (D132).
+%   .handoverRevision        1x1    string   -      Revision of the handover
+%                                                  these sources were written
+%                                                  at, e.g. '246'. Provenance,
+%                                                  and no part of the version.
 %   .buildDate               1x1    string   -      Source revision date, ISO 8601.
 %   .sofaRelease             1x1    string   -      Bundled IAU SOFA release, '20231011'.
 %   .iersConventions         1x1    string   -      IERS Conventions edition, '2010'.
@@ -36,20 +40,27 @@ function versionInfo = toolboxVersion()
 %   two tag lines in every help block have exactly one authority each and a
 %   provenance test can verify the agreement.
 %
-%   THE PATCH COMPONENT IS THE HANDOVER REVISION NUMBER (decision D107).
-%   Version 2.1.N is the state of the sources at handover revision 1.N, and the
-%   two are edited together or not at all. Major and minor identify the
-%   RELEASE; the patch identifies the DOCUMENT REVISION that produced these
-%   sources, so an archived copy can be tied to the revision log entry that
-%   explains it without guessing from dates. A test and auditPackage.py both
-%   read the top row of the handover's revision log and refuse a disagreement,
-%   because a convention nothing checks is a convention that drifts.
+%   THE VERSION IS SEMANTIC AND THE REVISION IS A SEPARATE FIELD (D132). The
+%   patch component counts fixes, as the organisation's VERSIONING.md defines
+%   it; it is not a count of document revisions and it does not move because a
+%   session edited the handover. What it says is what every other toolbox here
+%   says with the same three numbers.
+%
+%   THE PROVENANCE THE OLD RULE BOUGHT IS KEPT, IN ITS OWN FIELD. Until this
+%   release the patch WAS the handover revision, so an archived copy could be
+%   tied to the log entry that explains it. That link was load bearing and is
+%   not given up: handoverRevision carries the number instead, a test and
+%   auditPackage.py still read the top row of the revision log and refuse a
+%   disagreement, and the test report still prints both. What changed is that
+%   the revision stopped being a component of a version whose other two
+%   components make a compatibility promise - one field, one meaning.
 %
 %   versionTag CARRIES MAJOR.MINOR ONLY, AND DELIBERATELY. It appears in the
 %   help footer of every file in the toolbox; putting the patch there would
-%   rewrite 233 lines on every revision and bury each session's real diff. The
-%   footer states the release, versionInfo.version states the revision, and the
-%   test report prints the latter so a run is always traceable to a document.
+%   rewrite 233 lines on every patch release and bury each session's real diff.
+%   The footer states the release, versionInfo.version states the full version,
+%   and the test report prints the revision beside it so a run is always
+%   traceable to a document.
 %
 %   THE FOOTER IS TWO LINES AND NOT ONE (decision D103). Naming the author in
 %   full alongside the toolbox, the version and the model exceeds the 100-column
@@ -75,7 +86,7 @@ function versionInfo = toolboxVersion()
 %
 % EXAMPLE
 %   v = referenceSystem.toolboxVersion();
-%   fprintf('%s (SOFA %s)\n', v.version, v.sofaRelease);
+%   fprintf('%s at handover rev. 1.%s\n', v.version, v.handoverRevision);
 %
 % KEYWORDS
 %   version, provenance, build, SOFA, IERS Conventions, metadata
@@ -83,7 +94,7 @@ function versionInfo = toolboxVersion()
 % See also IERSCONSTANTS, ELLIPSOIDPARAMETERS.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.2
+% referenceSystem v2.3
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-24 11:05 (CEST, UTC+02:00)
 % Revised: 2026-08-09 10:15 (CEST, UTC+02:00)
@@ -91,10 +102,15 @@ function versionInfo = toolboxVersion()
 
 %#codegen
 
-    majorMinorVersion = "2.2";
-    % D107: THE PATCH IS THE HANDOVER REVISION. Bump this in the same edit that
-    % writes the revision log entry; the two are checked against each other.
-    patchVersion = "245";
+    majorMinorVersion = "2.3";
+    % D132: A SEMANTIC PATCH COUNTER. It rises for fixes and resets when the
+    % minor rises; it is not a revision counter and nothing edits it because a
+    % document changed. 2.3.0 is the first version chosen under that rule.
+    patchVersion = "0";
+    % D132: THE HANDOVER REVISION, WHICH IS NO LONGER PART OF THE VERSION.
+    % Bump this in the same edit that writes the revision log entry; the two
+    % are checked against each other by a test and by auditPackage.py.
+    handoverRevision = "246";
     buildDate = "2026-09-21";
     toolboxAuthor = "Matthias Weigelt";
     generatorModel = "Claude Opus 5 (Anthropic)";
@@ -109,6 +125,7 @@ function versionInfo = toolboxVersion()
         'version', majorMinorVersion + "." + patchVersion, ...
         'release', majorMinorVersion, ...
         'patch', patchVersion, ...
+        'handoverRevision', handoverRevision, ...
         'buildDate', buildDate, ...
         'sofaRelease', "20231011", ...
         'iersConventions', "2010", ...

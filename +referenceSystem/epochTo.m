@@ -1,9 +1,9 @@
 function value = epochTo(epoch, format)
-%EPOCHTO Convert an epoch struct to one of the five external representations.
+%EPOCHTO Convert an epoch struct to one of the six external representations.
 %
 %   value = epochTo(epoch, format) returns the epoch in the requested outbound
-%   representation. format is one of "mjd", "daySecond", "datetime", "gpsWeek"
-%   or "j2000Seconds".
+%   representation. format is one of "mjd", "daySecond", "datetime", "gpsWeek",
+%   "j2000Seconds" or "gpsNanoseconds".
 %
 % INPUT ARGUMENTS
 %   Name     Size   Type            Units  Description
@@ -21,6 +21,8 @@ function value = epochTo(epoch, format)
 %           Nx2    double              -      "gpsWeek": [week secondOfWeek].
 %           Nx1    double              s      "j2000Seconds": seconds since
 %                                             2000-01-01T12:00 of the scale.
+%           Nx1    int64               ns     "gpsNanoseconds": nanoseconds
+%                                             since 2000-01-01T12:00 GPS.
 %
 % METHOD
 %   The outbound direction is one function where the inbound direction is five
@@ -33,16 +35,28 @@ function value = epochTo(epoch, format)
 %   (handover section C.7 rule 6).
 %
 %   Each format is the exact inverse of its constructor: "mjd" of mjdToEpoch,
-%   "daySecond" of daySecondToEpoch, and so on. "gpsWeek" is defined only for a
-%   GPS epoch and refuses any other scale rather than converting silently,
-%   because a week number is a statement about GPS time.
+%   "daySecond" of daySecondToEpoch, and so on. "gpsWeek" and "gpsNanoseconds"
+%   are defined only for a GPS epoch and refuse any other scale rather than
+%   converting silently, because both are statements about GPS time.
+%
+%   "gpsNanoseconds" RETURNS int64 AND IS THE ONLY FORMAT THAT DOES. A 2020
+%   time tag is about 6.3e17 ns, above 2^53, so returning it as a double would
+%   drop whole nanoseconds; the type is the contract, not a convenience. Its
+%   span is bounded, and the bound is the same one gpsNanosecondsToEpoch
+%   applies, taken from the one authority both read rather than restated here.
 %
 %   MJD 0 is 1858-11-17 00:00 by definition; datetimeToEpoch carries the same
 %   origin for the inbound direction and a precision test binds the two.
 %
 % ACCURACY
 %   "daySecond" and "gpsWeek" are exact: they move integers and the unmodified
-%   seconds field. "mjd" and "j2000Seconds" collapse the split form back into
+%   seconds field. "gpsNanoseconds" is exact as well, and exact in the stronger
+%   sense that matters: every int64 value of the span survives
+%   gpsNanosecondsToEpoch and this function bit for bit. The seconds of day
+%   carry at most 9.6e-12 s of rounding, which is 0.0096 ns once scaled, so
+%   rounding to the nearest nanosecond lands on the original integer.
+%
+%   "mjd" and "j2000Seconds" collapse the split form back into
 %   one double and therefore lose resolution - 0.63 us near MJD 60000 for a
 %   decimal MJD, 0.48 us near 2100 for seconds from J2000 - so a round trip
 %   through them reproduces the original to about two units in the last place
@@ -53,6 +67,7 @@ function value = epochTo(epoch, format)
 % ERRORS
 %   referenceSystem:epochTo:wrongScale
 %   referenceSystem:epochTo:unrepresentableLeapSecond
+%   referenceSystem:epochTo:outsideRepresentableSpan
 %   MATLAB:validators:mustBeMember
 %
 % REFERENCES
@@ -65,13 +80,13 @@ function value = epochTo(epoch, format)
 %   assert(isequal(referenceSystem.epochTo(epoch, "daySecond"), [60310 43200]));
 %
 % KEYWORDS
-%   epoch, MJD, datetime, GPS week, J2000, round trip
+%   epoch, MJD, datetime, GPS week, J2000, GPS nanoseconds, int64, round trip
 %
 % See also MJDTOEPOCH, DAYSECONDTOEPOCH, DATETIMETOEPOCH, GPSWEEKTOEPOCH,
-%   J2000SECONDSTOEPOCH.
+%   J2000SECONDSTOEPOCH, GPSNANOSECONDSTOEPOCH.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.2
+% referenceSystem v2.3
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------
@@ -79,7 +94,8 @@ function value = epochTo(epoch, format)
     arguments
         epoch (1,1) struct
         format (1,1) string {mustBeMember(format, ...
-            ["mjd", "daySecond", "datetime", "gpsWeek", "j2000Seconds"])}
+            ["mjd", "daySecond", "datetime", "gpsWeek", "j2000Seconds", ...
+            "gpsNanoseconds"])}
     end
 
     epoch = referenceSystem.normalizeEpoch(epoch);
@@ -111,6 +127,32 @@ function value = epochTo(epoch, format)
             elapsedDay = epoch.day - gpsWeekZeroDay;
             week = floor(elapsedDay/daysPerWeek);
             value = [week, (elapsedDay - week*daysPerWeek)*secondsPerDay + epoch.sec];
+
+        case "gpsNanoseconds"
+            if epoch.scale ~= "GPS"
+                error('referenceSystem:epochTo:wrongScale', ...
+                    ['A GPS nanosecond count is defined for GPS time only; ', ...
+                    'this epoch is %s. Convert with convertTimeScale first.'], ...
+                    epoch.scale);
+            end
+            span = gpsNanosecondSpan();
+            dayOffset = epoch.day - span.originDay;
+            outside = abs(dayOffset) > span.maxDayOffset;
+            if any(outside)
+                first = find(outside, 1);
+                error('referenceSystem:epochTo:outsideRepresentableSpan', ...
+                    ['Index %d holds MJD %d, outside the representable span ', ...
+                    'MJD %d to MJD %d. int64 arithmetic saturates rather than ', ...
+                    'wrapping, so a day beyond the span would return a ', ...
+                    'plausible and wrong count instead of failing.'], ...
+                    first, epoch.day(first), ...
+                    span.originDay - span.maxDayOffset, ...
+                    span.originDay + span.maxDayOffset);
+            end
+            % round, not fix: sec came back from a division by 1e9 and is short
+            % of the integer by up to 0.0096 ns, which fix would truncate away.
+            value = int64(dayOffset)*span.nanosecondPerDay + ...
+                int64(round(epoch.sec*1e9)) - span.halfDayNanosecond;
 
         case "datetime"
             if any(epoch.sec >= secondsPerDay)

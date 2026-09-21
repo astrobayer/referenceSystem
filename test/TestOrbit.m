@@ -11,7 +11,7 @@ classdef TestOrbit < matlab.unittest.TestCase
 %   explicitly; it must never import the package (handover section C.5 rule 4).
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.2
+% referenceSystem v2.3
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-26 23:05 (CEST, UTC+02:00) - session S5, prompt P14
 % -------------------------------------------------------------------------
@@ -547,5 +547,472 @@ classdef TestOrbit < matlab.unittest.TestCase
         end
 
     end
+
+
+    methods (Test, TestTags = {'contract'})
+
+        % ISSUE #25 NAMES THE SEVEN CATEGORIES OF THE PREPARATION CONCEPT, AND
+        % THIS TOOLBOX HAS TEN TAGS, NOT THOSE SEVEN (handover section D.1).
+        % The mapping is stated once, here, rather than invented per test:
+        % robustness is 'contract', which is where a documented refusal and an
+        % edge shape belong, and metamorphic is 'precision', which is where a
+        % relation between two runs of the same function belongs. Nothing is
+        % dropped by the mapping; only the labels differ.
+
+        function orbitSunGeometry_contract_returnsOnePerState(testCase)
+            [r, v] = TestOrbit.circularState(89, 30, 0:60:300);
+            [beta, u, info] = referenceSystem.orbitSunGeometry(r, v, ...
+                TestOrbit.j2000Epoch(6));
+
+            testCase.verifySize(beta, [1 6]);
+            testCase.verifySize(u, [1 6]);
+            testCase.verifySize(info.sunDirection, [3 6]);
+            testCase.verifySize(info.uSun, [1 6]);
+            testCase.verifySize(info.sineOfPlaneAngle, [1 6]);
+            testCase.verifySize(info.sineOfNodeAngle, [1 6]);
+            testCase.verifyEqual(info.equator, "cip");
+
+            testCase.verifyGreaterThanOrEqual(beta, -pi/2);
+            testCase.verifyLessThanOrEqual(beta, pi/2);
+            testCase.verifyGreaterThanOrEqual(u, 0);
+            testCase.verifyLessThan(u, 2*pi);
+            testCase.verifyEqual(sqrt(sum(info.sunDirection.^2, 1)), ...
+                ones(1, 6), 'AbsTol', 1e-15, ...
+                'The reported Sun direction must be a unit vector.');
+        end
+
+        function orbitSunGeometry_contract_expandsASingleEpoch(testCase)
+            % One instant, six states: a caller sampling an orbit at one epoch
+            % should not have to build six identical epochs to say so.
+            [r, v] = TestOrbit.circularState(89, 30, 0:60:300);
+            [beta, u] = referenceSystem.orbitSunGeometry(r, v, ...
+                TestOrbit.j2000Epoch(1));
+
+            testCase.verifySize(beta, [1 6]);
+            testCase.verifySize(u, [1 6]);
+            % The orbit normal is one vector, so one beta serves all six.
+            testCase.verifyEqual(beta, repmat(beta(1), 1, 6), 'AbsTol', 1e-15);
+        end
+
+        function orbitSunGeometry_contract_rejectsARowLayout(testCase)
+            % Decision D65 again: L5 takes 3xN like L2, never Nx3 like L4.
+            [r, v] = TestOrbit.circularState(89, 30, 0:90:270);
+            testCase.verifyError(@() referenceSystem.orbitSunGeometry( ...
+                r.', v.', TestOrbit.j2000Epoch(4)), ...
+                'referenceSystem:orbitSunGeometry:wrongStateSize');
+        end
+
+        function orbitSunGeometry_contract_rejectsMismatchedCounts(testCase)
+            [r, v] = TestOrbit.circularState(89, 30, 0:90:270);
+            testCase.verifyError(@() referenceSystem.orbitSunGeometry( ...
+                r, v, TestOrbit.j2000Epoch(3)), ...
+                'referenceSystem:orbitSunGeometry:sizeMismatch');
+        end
+
+        function orbitSunGeometry_contract_refusesUt1(testCase)
+            % UT1 is an angle, not a uniform time: neither the Sun nor the
+            % precession-nutation model can be evaluated at it.
+            [r, v] = TestOrbit.circularState(89, 30, 0);
+            ut1 = referenceSystem.daySecondToEpoch([51544 43200], "UT1");
+            testCase.verifyError(@() referenceSystem.orbitSunGeometry( ...
+                r, v, ut1), 'referenceSystem:orbitSunGeometry:wrongScale');
+        end
+
+        function orbitSunGeometry_contract_refusesAnEquatorialOrbit(testCase)
+            % k x h vanishes: the orbit lies in the chosen equator, so it has
+            % no ascending node and u has no origin. Refused by its own name,
+            % not measured from an arbitrary axis.
+            [r, v] = TestOrbit.circularState(0, 0, 0);
+            testCase.verifyError(@() referenceSystem.orbitSunGeometry( ...
+                r, v, TestOrbit.j2000Epoch(1), 'Equator', "gcrs"), ...
+                'referenceSystem:orbitSunGeometry:undefinedNode');
+        end
+
+        function orbitSunGeometry_contract_refusesARadialVelocity(testCase)
+            % The orbit normal itself does not exist, so the refusal is the
+            % orbit frame's and carries ITS identifier - this function does
+            % not rebuild the triad and must not invent a second name for the
+            % same condition.
+            [r, ~] = TestOrbit.circularState(89, 30, 0);
+            testCase.verifyError(@() referenceSystem.orbitSunGeometry( ...
+                r, r*1e-3, TestOrbit.j2000Epoch(1)), ...
+                'referenceSystem:rotationGcrsToRsw:degenerateOrbitPlane');
+        end
+
+        function orbitSunGeometry_contract_refusesAnUnknownEquator(testCase)
+            [r, v] = TestOrbit.circularState(89, 30, 0);
+            testCase.verifyError(@() referenceSystem.orbitSunGeometry( ...
+                r, v, TestOrbit.j2000Epoch(1), 'Equator', "j2000"), ...
+                'MATLAB:validators:mustBeMember');
+        end
+
+    end
+
+
+    methods (Test, TestTags = {'reference'})
+
+        function orbitSunGeometry_reference_argumentOfLatitude(testCase)
+            % INDEPENDENT ORACLE, AND NOT THE CONSTRUCTION THAT MADE THE
+            % STATES. The literals below come from numpy, by the textbook
+            % route of Vallado Sect. 2.4: the inclination and the right
+            % ascension of the node are recovered from h = r x v, and then
+            %
+            %     u = atan2(z/sin i, x cos RAAN + y sin RAAN),
+            %
+            % which is a different expression from the vector form the
+            % function evaluates. The states themselves are hardcoded, so
+            % MATLAB never runs the construction either.
+            %
+            % Tolerance: the geometry is four normalisations and an arc
+            % tangent, so it is roundoff. A 1e-9 m component of a 6.87e6 m
+            % radius is 1.5e-16 rad; 1e-12 bounds that with three decades to
+            % spare and bounds nothing else.
+            [r, v] = TestOrbit.referenceStates();
+            expected = [0, 0.78539816339744817, 1.5707963267948966, ...
+                3.1415926535897931, 4.7123889803846897];
+
+            [~, u] = referenceSystem.orbitSunGeometry(r, v, ...
+                TestOrbit.j2000Epoch(5), 'Equator', "gcrs");
+
+            testCase.verifyEqual(u, expected, 'AbsTol', 1e-12);
+        end
+
+        function orbitSunGeometry_reference_betaAgainstTheAlmanacSun(testCase)
+            % THE SUN COMES FROM AN INDEPENDENT PUBLISHED SOURCE, NOT FROM
+            % THIS TOOLBOX. The Astronomical Almanac's low-precision solar
+            % coordinates give the Sun to 0.01 degrees over 1950-2050; beta
+            % and uSun below were formed from that direction in numpy.
+            %
+            % THE EPOCH IS J2000.0 EXACTLY, AND THAT IS WHY THE COMPARISON IS
+            % LEGITIMATE. The Almanac formula is referred to the mean equinox
+            % of date, which differs from the GCRS by precession - about 0.11
+            % degrees by 2020, ten times the formula's own accuracy. At
+            % J2000.0 the two differ by the frame bias alone, 23 mas, which is
+            % 1.1e-7 rad and negligible here.
+            %
+            % Tolerance, one term at a time: 0.01 deg formula accuracy is
+            % 1.75e-4 rad; the Almanac series is apparent and this toolbox
+            % returns a geometric direction, which is aberration at 20.5
+            % arcsec, or 9.9e-5 rad; frame bias 1.1e-7 rad. The sum is 2.8e-4
+            % and 4e-4 rounds it up. Nothing in it is the orbit geometry,
+            % which is exact, so this bounds the SUN and a sign error or an
+            % axis swap in beta is orders of magnitude outside it.
+            [r, v] = TestOrbit.referenceStates();
+            [beta, ~, info] = referenceSystem.orbitSunGeometry(r, v, ...
+                TestOrbit.j2000Epoch(5), 'Equator', "gcrs");
+
+            testCase.verifyEqual(beta, repmat(1.0444757698576079, 1, 5), ...
+                'AbsTol', 4e-4);
+            testCase.verifyEqual(info.uSun, ...
+                repmat(4.0840924119785402, 1, 5), 'AbsTol', 4e-4);
+
+            almanac = [0.18010164163354572; -0.90248138840147263; ...
+                -0.39126812069200367];
+            separation = acos(min(1, info.sunDirection(:, 1).'*almanac));
+            testCase.verifyLessThan(separation, 4e-4, ...
+                'The toolbox Sun and the Almanac Sun must agree at J2000.0.');
+            testCase.log(1, TestPerformance.noteRecord("orbitSunGeometry", ...
+                sprintf("sunSeparation=%.3e rad", separation), ...
+                "toolbox Sun against the Astronomical Almanac at J2000.0"));
+        end
+
+    end
+
+
+    methods (Test, TestTags = {'precision'})
+
+        function orbitSunGeometry_precision_theClassicalBetaFormula(testCase)
+            % The published spherical form,
+            %
+            %   sin beta = cos dec sin i sin(RAAN - ra) + sin dec cos i,
+            %
+            % evaluated from the Sun's right ascension and declination and the
+            % orbit's inclination and node, against the vector form the
+            % function uses. The two are algebraically the same statement, so
+            % what this pins is the SIGN CONVENTION and the transcription -
+            % the part of a published formula that is actually got wrong.
+            [r, v] = TestOrbit.referenceStates();
+            [beta, ~, info] = referenceSystem.orbitSunGeometry(r, v, ...
+                TestOrbit.j2000Epoch(5), 'Equator', "gcrs");
+
+            momentum = cross(r, v, 1);
+            momentum = momentum./sqrt(sum(momentum.^2, 1));
+            inclination = acos(momentum(3, :));
+            node = atan2(momentum(1, :), -momentum(2, :));
+            rightAscension = atan2(info.sunDirection(2, :), ...
+                info.sunDirection(1, :));
+            declination = asin(info.sunDirection(3, :));
+
+            classical = asin(cos(declination).*sin(inclination).* ...
+                sin(node - rightAscension) + sin(declination).* ...
+                cos(inclination));
+
+            % Both routes are a handful of transcendental calls on unit-norm
+            % quantities, so the difference is accumulated roundoff: 1e-12
+            % bounds it and bounds no convention error.
+            testCase.verifyEqual(beta, classical, 'AbsTol', 1e-12);
+        end
+
+        function orbitSunGeometry_precision_betaIgnoresTheEquator(testCase)
+            % beta = asin(h . s) contains no pole at all, so the two equators
+            % must give BITWISE the same angle. An implementation that let the
+            % equator leak into beta would fail here and nowhere else.
+            % 2020 AND NOT J2000.0: at J2000.0 the two equators coincide to
+            % within the frame bias, so the test would pass on a function
+            % that ignored the equator entirely. It has to run where they
+            % differ for the BITWISE claim to mean anything.
+            [r, v] = TestOrbit.circularState(89, 30, 0:45:315);
+            epoch = TestOrbit.epochIn2020(8);
+
+            betaCip = referenceSystem.orbitSunGeometry(r, v, epoch);
+            betaGcrs = referenceSystem.orbitSunGeometry(r, v, epoch, ...
+                'Equator', "gcrs");
+
+            testCase.verifyEqual(betaCip, betaGcrs, ...
+                'beta must not depend on which equator defines the node.');
+        end
+
+        function orbitSunGeometry_precision_theTwoEquatorsDiffer(testCase)
+            % THE MEASUREMENT ISSUE #25 ASKS FOR, WITH A DERIVED BOUND RATHER
+            % THAN A QUOTED ONE. Tilting the reference pole by a small vector
+            % dk rotates the node within the orbit plane by (dk . n)/|k x h|
+            % to first order, so the shift in u is at most the pole offset
+            % divided by that margin. The offset is read from cipCoordinates
+            % at run time, so this tolerance re-derives itself as the model or
+            % the epoch changes and can never become a stale literal.
+            %
+            % The issue asked for a real 2020-01-01 GNV1B arc. The repository
+            % carries no orbit fixture and section D.2 forbids a test that
+            % fetches one, so a synthetic near-polar orbit stands in - and the
+            % quantity measured is a property of the two EQUATORS and of the
+            % inclination, not of the orbit product, so nothing is lost.
+            % The epoch is 2020-01-01, which is the one the issue names:
+            % precession had moved the pole by about 400 arcseconds by then,
+            % where at J2000.0 it has moved by the frame bias alone and there
+            % would be nothing to measure.
+            [r, v] = TestOrbit.circularState(89, 30, 0:45:315);
+            epoch = TestOrbit.epochIn2020(8);
+
+            [~, uCip, infoCip] = referenceSystem.orbitSunGeometry(r, v, epoch);
+            [~, uGcrs] = referenceSystem.orbitSunGeometry(r, v, epoch, ...
+                'Equator', "gcrs");
+
+            shift = abs(mod(uCip - uGcrs + pi, 2*pi) - pi);
+            [poleX, poleY] = referenceSystem.cipCoordinates( ...
+                referenceSystem.convertTimeScale(epoch, "TT"));
+            poleOffset = hypot(poleX, poleY).';
+            bound = poleOffset./infoCip.sineOfNodeAngle;
+
+            testCase.verifyLessThanOrEqual(shift, 1.02*bound, ...
+                'The u shift exceeds the first-order pole-offset bound.');
+            testCase.verifyGreaterThan(min(shift), 0.1*max(bound), ...
+                ['The two equators gave the same u, so one of them is not ', ...
+                'being applied and the option is untested.']);
+            testCase.log(1, TestPerformance.noteRecord("orbitSunGeometry", ...
+                sprintf("uShiftCipMinusGcrs=%.4e rad (%.4f deg), bound %.4e", ...
+                mean(shift), rad2deg(mean(shift)), mean(bound)), ...
+                "measured difference between the CIP and GCRS equators"));
+        end
+
+        function orbitSunGeometry_precision_reversingTheVelocity(testCase)
+            % Reversing v reverses h, so beta changes sign; the node reverses
+            % with it while the in-plane quarter-turn axis does not, which
+            % sends u to pi - u. Both halves are asserted: a sign test that
+            % checked only beta would pass an implementation that had lost
+            % track of the node entirely.
+            [r, v] = TestOrbit.circularState(89, 30, 0:45:315);
+            epoch = TestOrbit.j2000Epoch(8);
+
+            [beta, u] = referenceSystem.orbitSunGeometry(r, v, epoch, ...
+                'Equator', "gcrs");
+            [betaReversed, uReversed] = referenceSystem.orbitSunGeometry( ...
+                r, -v, epoch, 'Equator', "gcrs");
+
+            testCase.verifyEqual(betaReversed, -beta, 'AbsTol', 1e-15);
+            testCase.verifyEqual(mod(uReversed + u, 2*pi), ...
+                mod(repmat(pi, 1, 8), 2*pi), 'AbsTol', 1e-12);
+        end
+
+        function orbitSunGeometry_precision_rotatingAboutThePole(testCase)
+            % Turning the whole orbit about the pole of the chosen equator
+            % carries the node with it, so u is unchanged. This is what
+            % separates an argument of latitude from an angle measured off a
+            % fixed axis, and it is the relation an implementation that
+            % hardcoded the x axis would fail.
+            epoch = TestOrbit.j2000Epoch(6);
+            [r, v] = TestOrbit.circularState(89, 30, 0:60:300);
+            [rTurned, vTurned] = TestOrbit.circularState(89, 137, 0:60:300);
+
+            [~, u] = referenceSystem.orbitSunGeometry(r, v, epoch, ...
+                'Equator', "gcrs");
+            [~, uTurned] = referenceSystem.orbitSunGeometry( ...
+                rTurned, vTurned, epoch, 'Equator', "gcrs");
+
+            testCase.verifyEqual(uTurned, u, 'AbsTol', 1e-12);
+        end
+
+        function orbitSunGeometry_precision_theCipPoleIsTheCirsThirdRow(testCase)
+            % The help of orbitSunGeometry says the CIP direction is taken
+            % from the DEFINITION of X and Y rather than from a rotation, and
+            % that the equality with rotationGcrsToCirs is asserted by a test
+            % rather than relied on by the code. This is that test.
+            epoch = referenceSystem.convertTimeScale( ...
+                TestOrbit.j2000Epoch(4), "TT");
+            [poleX, poleY, locator] = referenceSystem.cipCoordinates(epoch);
+            rotation = referenceSystem.rotationGcrsToCirs(poleX, poleY, ...
+                locator);
+
+            fromRotation = permute(rotation(3, :, :), [2 3 1]);
+            fromDefinition = [poleX.'; poleY.'; ...
+                sqrt(1 - poleX.'.^2 - poleY.'.^2)];
+
+            testCase.verifyEqual(fromRotation, fromDefinition, ...
+                'AbsTol', 1e-15, ...
+                'X and Y are the GCRS components of the CIP by definition.');
+        end
+
+    end
+
+
+    methods (Test, TestTags = {'vectorization'})
+
+        function orbitSunGeometry_vectorization_batchEqualsTheLoop(testCase)
+            % 1e-15 rad AND NOT ZERO, deliberately. The geometry here is
+            % elementwise and would be bit identical, but the Sun and the CIP
+            % are evaluated in C, where changing the batch length may change
+            % how the loop is vectorised even though the arithmetic per epoch
+            % is the same. One ulp of an angle of order 1 rad bounds that and
+            % admits no algorithmic difference.
+            [r, v] = TestOrbit.circularState(89, 30, 0:36:324);
+            epoch = TestOrbit.epochIn2020(10);
+
+            [beta, u, info] = referenceSystem.orbitSunGeometry(r, v, epoch);
+
+            for k = 1:10
+                single = referenceSystem.daySecondToEpoch( ...
+                    [epoch.day(k) epoch.sec(k)], epoch.scale);
+                [betaOne, uOne, infoOne] = referenceSystem.orbitSunGeometry( ...
+                    r(:, k), v(:, k), single);
+                testCase.verifyEqual(betaOne, beta(k), 'AbsTol', 1e-15, ...
+                    sprintf('beta of state %d is not the batch value.', k));
+                testCase.verifyEqual(uOne, u(k), 'AbsTol', 1e-15, ...
+                    sprintf('u of state %d is not the batch value.', k));
+                testCase.verifyEqual(infoOne.uSun, info.uSun(k), ...
+                    'AbsTol', 1e-15);
+            end
+        end
+
+    end
+
+
+    methods (Test, TestTags = {'speed'})
+
+        function orbitSunGeometry_speed_oneDayOfDriverData(testCase)
+            % The workload a calibration run actually asks for: one day of
+            % orbit geometry at 60 s, which is the rate per-revolution
+            % attribution needs, with the CIP equator so the precession-
+            % nutation series is in the measurement.
+            %
+            % 1.0 s IS A PREDICTION AND NOT YET A MEASUREMENT. No benchmark of
+            % geocentricBodyState or cipCoordinates exists to derive it from,
+            % so it is deliberately generous and is to be tightened from the
+            % BENCHMARK record of the first green run, the way rev. 1.73's
+            % L5 target was. Under the section D.1 rule this warns below 5x
+            % and fails only above it, so a generous first target costs a
+            % warning and never a false red.
+            targetSeconds = 1.0;
+            stateCount = 1440;
+            [r, v] = TestOrbit.circularState(89, 30, ...
+                (0:stateCount - 1)*360/stateCount);
+            epoch = TestOrbit.epochIn2020(stateCount);
+
+            medianSeconds = TestPerformance.medianDuration(@() ...
+                referenceSystem.orbitSunGeometry(r, v, epoch), 3);
+
+            testCase.log(matlab.unittest.Verbosity.Concise, ...
+                TestPerformance.benchmarkRecord("orbitSunGeometry", ...
+                stateCount, medianSeconds, targetSeconds));
+            if medianSeconds > targetSeconds
+                warning('referenceSystem:test:slowerThanTarget', ...
+                    'orbitSunGeometry took %.3f s against a %.3f s target.', ...
+                    medianSeconds, targetSeconds);
+            end
+            testCase.verifyLessThan(medianSeconds, 5*targetSeconds);
+        end
+
+    end
+
+
+    methods (Static, Access = private)
+
+        function epoch = j2000Epoch(count)
+            %J2000EPOCH J2000.0 exactly, repeated count times, scale TT.
+            %   MJD 51544 + 43200 s is 2000-01-01T12:00 TT. The day number is
+            %   repeated and the seconds held, rather than a decimal MJD
+            %   being used, for the reason epochAt states.
+            epoch = referenceSystem.daySecondToEpoch( ...
+                repmat([51544 43200], count, 1), "TT");
+        end
+
+        function epoch = epochIn2020(count)
+            %EPOCHIN2020 A 60 s epoch series from 2020-01-01T00:00 TT.
+            %   MJD 58849 is 2020-01-01. Sixty seconds is the rate at which
+            %   per-revolution attribution consumes orbit geometry, and 1440
+            %   of them is exactly one day.
+            second = (0:count - 1).'*60;
+            epoch = referenceSystem.daySecondToEpoch( ...
+                [repmat(58849, count, 1), second], "TT");
+        end
+
+        function [r, v] = circularState(inclinationDegree, nodeDegree, ...
+                argumentDegree)
+            %CIRCULARSTATE A circular orbit state at each argument of latitude.
+            %   Built from cos and sin around the node and orbit-normal
+            %   directions, never through a package function, so a test does
+            %   not compare the toolbox against itself. GRACE-like radius.
+            radius = 6871000;
+            speed = sqrt(3.986004418e14/radius);
+            inclination = deg2rad(inclinationDegree);
+            node = deg2rad(nodeDegree);
+            argument = deg2rad(reshape(argumentDegree, 1, []));
+
+            nodeAxis = [cos(node); sin(node); 0];
+            normalAxis = [sin(inclination)*sin(node); ...
+                -sin(inclination)*cos(node); cos(inclination)];
+            aheadAxis = cross(normalAxis, nodeAxis);
+
+            r = radius*(cos(argument).*nodeAxis + sin(argument).*aheadAxis);
+            v = speed*(-sin(argument).*nodeAxis + cos(argument).*aheadAxis);
+        end
+
+        function [r, v] = referenceStates()
+            %REFERENCESTATES The five states the numpy oracle was run on.
+            %   Hardcoded to seventeen digits so the comparison never depends
+            %   on MATLAB re-running the construction: i = 89 deg, RAAN = 30
+            %   deg, circular at 6871 km, at u = 0, 45, 90, 180 and 270 deg.
+            r = [ ...
+                +5.95046054940287862e+06 +4.16521447949002916e+06 ...
+                -5.99577423152874180e+04 -5.95046054940287862e+06 ...
+                +5.99577423152866904e+04; ...
+                +3.43549999999999953e+06 +2.50269828416725108e+06 ...
+                +1.03849855997201113e+05 -3.43549999999999953e+06 ...
+                -1.03849855997201536e+05; ...
+                +0.00000000000000000e+00 +4.85779071577532124e+06 ...
+                +6.86995351341956481e+06 +8.41326658050038379e-10 ...
+                -6.86995351341956481e+06];
+            v = [ ...
+                -6.64636574225921493e+01 -4.71116879542230163e+03 ...
+                -6.59613514769254562e+03 +6.64636574225913535e+01 ...
+                +6.59613514769254562e+03; ...
+                +1.15118431512781981e+02 -2.61145987415183436e+03 ...
+                -3.80828040313144220e+03 -1.15118431512782450e+02 ...
+                +3.80828040313144220e+03; ...
+                +7.61540076716045223e+03 +5.38490152391239280e+03 ...
+                +4.66308808686367272e-13 -7.61540076716045223e+03 ...
+                -1.39892642605910171e-12];
+        end
+
+    end
+
 
 end

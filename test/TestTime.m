@@ -11,7 +11,7 @@ classdef TestTime < matlab.unittest.TestCase
 %   out of the namespace, which is exactly what these tests exist to catch.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.2
+% referenceSystem v2.3
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-24 11:05 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------
@@ -29,9 +29,9 @@ classdef TestTime < matlab.unittest.TestCase
             testCase.verifyClass(versionInfo, 'struct');
             testCase.verifySize(versionInfo, [1 1]);
             testCase.verifyEqual(sort(string(fieldnames(versionInfo))), ...
-                sort(["version"; "release"; "patch"; "buildDate"; ...
-                "sofaRelease"; "iersConventions"; "author"; "generator"; ...
-                "versionTag"; "helpTag"]));
+                sort(["version"; "release"; "patch"; "handoverRevision"; ...
+                "buildDate"; "sofaRelease"; "iersConventions"; "author"; ...
+                "generator"; "versionTag"; "helpTag"]));
 
             fieldName = string(fieldnames(versionInfo));
             for k = 1:numel(fieldName)
@@ -41,12 +41,12 @@ classdef TestTime < matlab.unittest.TestCase
                 testCase.verifySize(value, [1 1]);
             end
 
-            % NO VERSION LITERAL IS ASSERTED HERE ANY MORE (D107). It would
-            % have to be edited in this file on every revision, and a literal
-            % that must be edited in step with the thing it checks is not a
-            % check. What is asserted is the COMPOSITION - that version is
-            % major.minor.patch and that its patch is the handover revision -
-            % which holds for every revision without being rewritten for any.
+            % NO VERSION LITERAL IS ASSERTED HERE, AND THAT SURVIVED D132.
+            % A literal that must be edited in step with the thing it checks
+            % is not a check. What is asserted is the COMPOSITION - that
+            % version is major.minor.patch - which holds for every release
+            % without being rewritten for any. The handover revision is now a
+            % field of its own and is checked against the log below.
             testCase.verifyEqual(versionInfo.version, ...
                 versionInfo.release + "." + versionInfo.patch, ...
                 'version must be exactly release.patch.');
@@ -72,13 +72,17 @@ classdef TestTime < matlab.unittest.TestCase
                 'The version line carries no provenance; that is the other line.');
         end
 
-        function toolboxVersion_contract_patchIsTheHandoverRevision(testCase)
-            % DECISION D107, ENFORCED RATHER THAN CONVENTIONAL. The patch
-            % component of the semantic version IS the handover revision
-            % number: version 2.1.166 is the state of these sources at
-            % revision 1.166. That ties an archived copy of the toolbox to the
-            % revision log entry that explains it, which dates cannot do - two
+        function toolboxVersion_contract_handoverRevisionMatchesTheLog(testCase)
+            % DECISION D132, ENFORCED RATHER THAN CONVENTIONAL. handoverRevision
+            % IS the revision number at the top of the log: these sources are
+            % the state of the toolbox at revision 1.N. That ties an archived
+            % copy to the entry that explains it, which dates cannot do - two
             % revisions on one day are ordinary here.
+            %
+            % UNTIL 2.3.0 THIS WAS THE PATCH COMPONENT (D107), and the point
+            % of D132 is that it no longer has to be: the provenance is kept
+            % and the version is free to mean what VERSIONING.md says it
+            % means. The instrument did not weaken, it moved one field.
             %
             % THE HANDOVER IS THE AUTHORITY AND THE VERSION IS THE CONSUMER,
             % so the parse runs in that direction. The top row of the revision
@@ -90,7 +94,7 @@ classdef TestTime < matlab.unittest.TestCase
                 'HANDOVER_referenceSystem.md');
             testCase.assumeTrue(isfile(handover), ...
                 ['The handover document is not in this distribution, so ', ...
-                'decision D107 cannot be checked here. auditPackage.py ', ...
+                'decision D132 cannot be checked here. auditPackage.py ', ...
                 'checks it in the development tree, where it is always ', ...
                 'present.']);
 
@@ -99,19 +103,43 @@ classdef TestTime < matlab.unittest.TestCase
             testCase.assertNotEmpty(token, ...
                 'The handover revision log has no parseable "| 1.x |" row.');
 
-            % READ AS A FIELD, NEVER PARSED OUT OF version. That is O30's
-            % rule and the reason toolboxVersion exposes patch at all.
+            % READ AS A FIELD, NEVER PARSED OUT OF anything. That is O30's
+            % rule and the reason toolboxVersion exposes the components.
             versionInfo = referenceSystem.toolboxVersion();
 
             % token{1}, NOT token(1): with 'once' the tokens come back as a
             % cell array of char, so the braces are what yields the text and
             % the parentheses would hand sprintf a cell.
-            testCase.verifyEqual(versionInfo.patch, string(token{1}), sprintf( ...
-                ['The version is %s and the handover is at revision 1.%s. ', ...
-                'D107 makes these the same number, and they are written in ', ...
-                'the same edit: bump patchVersion in toolboxVersion.m when ', ...
-                'you write the revision log entry, not afterwards.'], ...
-                versionInfo.version, token{1}));
+            testCase.verifyEqual(versionInfo.handoverRevision, ...
+                string(token{1}), sprintf( ...
+                ['The sources declare handover revision 1.%s and the log is ', ...
+                'at 1.%s. D132 makes these the same number, and they are ', ...
+                'written in the same edit: bump handoverRevision in ', ...
+                'toolboxVersion.m when you write the revision log entry, ', ...
+                'not afterwards.'], ...
+                versionInfo.handoverRevision, token{1}));
+        end
+
+        function toolboxVersion_contract_thePatchIsNotTheRevision(testCase)
+            % D132 IS A CLAIM THAT TWO NUMBERS ARE INDEPENDENT, AND AN
+            % INDEPENDENCE CLAIM NEEDS ITS OWN INSTRUMENT. Without this, a
+            % future edit that quietly put the revision back into the patch
+            % would pass everything above: the composition test would hold,
+            % the revision test would hold, and the policy would have been
+            % reversed with nothing red. The two fields are therefore required
+            % to be separately declared literals, and the patch is required to
+            % be a plain counter rather than a copy of the revision.
+            versionInfo = referenceSystem.toolboxVersion();
+
+            testCase.verifyMatches(versionInfo.patch, '^\d+$', ...
+                'The patch component must be a plain number.');
+            testCase.verifyMatches(versionInfo.handoverRevision, '^\d+$');
+            testCase.verifyNotEqual(versionInfo.patch, ...
+                versionInfo.handoverRevision, ...
+                ['The patch equals the handover revision. Under D132 the ', ...
+                'patch counts fixes and the revision is provenance; if a ', ...
+                'release genuinely needs both to read the same, this test ', ...
+                'is what must be argued with, not edited around.']);
         end
 
         function toolboxVersion_contract_versionMatchesContents(testCase)
@@ -1695,6 +1723,219 @@ classdef TestTime < matlab.unittest.TestCase
         end
 
     end
+
+
+    methods (Test, TestTags = {'contract'})
+
+        function gpsNanosecondsToEpoch_contract_returnsAGpsEpoch(testCase)
+            epoch = referenceSystem.gpsNanosecondsToEpoch( ...
+                int64([0; 631108800000000000; -1]));
+
+            testCase.verifyEqual(sort(string(fieldnames(epoch))), ...
+                sort(["day"; "sec"; "scale"; "source"]));
+            testCase.verifySize(epoch.day, [3 1]);
+            testCase.verifySize(epoch.sec, [3 1]);
+            testCase.verifyEqual(epoch.scale, "GPS");
+            testCase.verifyEqual(epoch.source, "gpsNanosecondsToEpoch");
+            testCase.verifyClass(epoch.day, 'double');
+        end
+
+        function gpsNanosecondsToEpoch_contract_refusesADouble(testCase)
+            % THE REFUSAL IS THE FUNCTION'S REASON TO EXIST. An arguments
+            % block that declared the type would CONVERT the double instead,
+            % which is the silent loss this representation is here to stop.
+            testCase.verifyError(@() referenceSystem.gpsNanosecondsToEpoch( ...
+                631108800000000000), 'MATLAB:validators:mustBeA');
+            testCase.verifyError(@() referenceSystem.gpsNanosecondsToEpoch( ...
+                int32(0)), 'MATLAB:validators:mustBeA');
+        end
+
+        function gpsNanosecondsToEpoch_contract_refusesOutsideTheSpan(testCase)
+            % int64 saturates at intmax in MATLAB rather than wrapping, so a
+            % count past the span would convert to a plausible wrong epoch.
+            testCase.verifyError(@() referenceSystem.gpsNanosecondsToEpoch( ...
+                intmax('int64')), ...
+                'referenceSystem:gpsNanosecondsToEpoch:outsideRepresentableSpan');
+            testCase.verifyError(@() referenceSystem.gpsNanosecondsToEpoch( ...
+                intmin('int64')), ...
+                'referenceSystem:gpsNanosecondsToEpoch:outsideRepresentableSpan');
+        end
+
+        function epochTo_contract_gpsNanosecondsRefusesAnotherScale(testCase)
+            % A nanosecond count from this origin is a statement about GPS
+            % time, exactly as a week number is, and is refused for any other
+            % scale rather than converted behind the caller's back.
+            epoch = referenceSystem.daySecondToEpoch([58849 0], "TT");
+            testCase.verifyError(@() referenceSystem.epochTo(epoch, ...
+                "gpsNanoseconds"), 'referenceSystem:epochTo:wrongScale');
+        end
+
+        function epochTo_contract_gpsNanosecondsRefusesOutsideTheSpan(testCase)
+            epoch = referenceSystem.daySecondToEpoch([400000 0], "GPS");
+            testCase.verifyError(@() referenceSystem.epochTo(epoch, ...
+                "gpsNanoseconds"), ...
+                'referenceSystem:epochTo:outsideRepresentableSpan');
+        end
+
+        function epochTo_contract_gpsNanosecondsIsTheOnlyInt64(testCase)
+            % The type is the contract: a double return would drop whole
+            % nanoseconds above 2^53 and the caller could not tell.
+            epoch = referenceSystem.daySecondToEpoch([58849 0], "GPS");
+            testCase.verifyClass(referenceSystem.epochTo(epoch, ...
+                "gpsNanoseconds"), 'int64');
+            testCase.verifyClass(referenceSystem.epochTo(epoch, ...
+                "j2000Seconds"), 'double');
+        end
+
+    end
+
+
+    methods (Test, TestTags = {'reference'})
+
+        function gpsNanosecondsToEpoch_reference_theL1bOrigin(testCase)
+            % THE LITERALS ARE ARITHMETIC ON THE PUBLISHED ORIGIN, NOT ON THIS
+            % TOOLBOX. The GRACE-FO handbook defines the time tag as
+            % continuous seconds past 2000-01-01T12:00:00 GPS, which is
+            % MJD 51544 + 43200 s. From there:
+            %
+            %   0                    -> MJD 51544, 43200 s
+            %   -43200e9             -> MJD 51544,     0 s
+            %   +43200e9             -> MJD 51545,     0 s
+            %   631108800e9          -> MJD 58849,     0 s   (2020-01-01)
+            %
+            % The last is the value issue #26 quotes as "2020 gpsns ~ 6.3e17",
+            % and reproducing it is what fixes the ORIGIN: a count from the
+            % 1980 GPS week epoch would be 1.26e18 and would land elsewhere.
+            epoch = referenceSystem.gpsNanosecondsToEpoch(int64( ...
+                [0; -43200000000000; 43200000000000; 631108800000000000]));
+
+            testCase.verifyEqual(epoch.day, [51544; 51544; 51545; 58849]);
+            testCase.verifyEqual(epoch.sec, [43200; 0; 0; 0]);
+        end
+
+        function epochTo_reference_gpsNanosecondsInvertsTheOrigin(testCase)
+            epoch = referenceSystem.daySecondToEpoch( ...
+                [51544 43200; 58849 0; 58849 0.5], "GPS");
+
+            testCase.verifyEqual(referenceSystem.epochTo(epoch, ...
+                "gpsNanoseconds"), ...
+                int64([0; 631108800000000000; 631108800500000000]));
+        end
+
+    end
+
+
+    methods (Test, TestTags = {'precision'})
+
+        function gpsNanosecondsToEpoch_precision_roundTripIsExact(testCase)
+            % THE CLAIM IS BIT IDENTITY, NOT A TOLERANCE, AND IT IS ASSERTED
+            % AT THE ENDS OF THE SPAN AS WELL AS INSIDE IT. The seconds of
+            % day carry one rounding of at most 9.6e-12 s, which is 0.0096 ns
+            % once scaled, so rounding to the nearest nanosecond must land
+            % back on the original integer for EVERY value - including the
+            % ones one nanosecond short of a day boundary, where a truncating
+            % implementation would lose a whole nanosecond.
+            rng(26);
+            span = 106750*int64(86400)*int64(1000000000);
+            % 1.98 and not 2: double(span) rounds UP to the nearest
+            % multiple of 1024 near 2^63, so scaling by the full width could
+            % produce a count a few hundred nanoseconds past the span and the
+            % test would exercise the refusal instead of the round trip.
+            random = int64(round((rand(200, 1) - 0.5)*1.98*double(span)));
+            % int64(631108800000000001) WOULD NOT BE THAT NUMBER. The
+            % literal is parsed as a double first, and 6.3e17 + 1 is not a
+            % double, so it would arrive as ...000 and this test would
+            % quietly check one value twice. The tag itself IS representable,
+            % so the neighbour is formed by integer addition - which is the
+            % defect this whole representation exists to prevent, met in the
+            % test that checks it.
+            tag2020 = int64(631108800000000000);
+            edge = [int64([0; 1; -1; 86399999999999; 86400000000000; ...
+                -86400000000000]); tag2020; tag2020 + 1];
+            nanosecond = [random; edge; span; -span];
+
+            epoch = referenceSystem.gpsNanosecondsToEpoch(nanosecond);
+            back = referenceSystem.epochTo(epoch, "gpsNanoseconds");
+
+            testCase.verifyEqual(back, nanosecond, ...
+                'The round trip must be an identity over the whole span.');
+        end
+
+        function gpsNanosecondsToEpoch_precision_resolvesOneNanosecond(testCase)
+            % Adjacent counts must give distinct epochs a nanosecond apart.
+            % At a 2020 tag this is the property a double cannot have.
+            base = int64(631108800000000000);
+            epoch = referenceSystem.gpsNanosecondsToEpoch([base; base + 1]);
+
+            testCase.verifyEqual(diff(epoch.sec), 1e-9, 'AbsTol', 1e-20);
+            testCase.verifyEqual( ...
+                diff(referenceSystem.epochTo(epoch, "gpsNanoseconds")), ...
+                int64(1));
+        end
+
+        function gpsNanosecondsToEpoch_precision_aDoubleWouldLose(testCase)
+            % THE MEASUREMENT THAT JUSTIFIES THE WHOLE REPRESENTATION, made
+            % here rather than asserted in a comment: a 2020 tag is above
+            % 2^53, so the nearest double is not the integer and a converter
+            % that went through one would return a different instant.
+            % Formed by addition, not written as a literal: see the round
+            % trip test above for why a literal would not survive the parse.
+            exact = int64(631108800000000000) + 1;
+            throughDouble = int64(double(exact));
+
+            testCase.verifyNotEqual(throughDouble, exact, ...
+                ['A double held this count exactly, so the premise of ', ...
+                'issue #26 no longer holds on this release.']);
+            testCase.verifyGreaterThan(double(exact), 2^53);
+
+            epoch = referenceSystem.gpsNanosecondsToEpoch(exact);
+            testCase.verifyEqual( ...
+                referenceSystem.epochTo(epoch, "gpsNanoseconds"), exact);
+        end
+
+        function epochTo_precision_gpsNanosecondsAgreesWithJ2000(testCase)
+            % The two formats share one origin - 2000-01-01T12:00 of the
+            % scale - so they must describe the same instant. j2000Seconds
+            % collapses the split form into a double and loses about 0.1 us
+            % near 2020, which is what the tolerance below bounds: 1e-6 s is
+            % that resolution, and it bounds nothing about the origin, which
+            % a disagreement of 43200 s or of 315964800 s would blow through.
+            epoch = referenceSystem.daySecondToEpoch( ...
+                [58849 0; 58849 0.5; 51544 43200], "GPS");
+
+            fromNanoseconds = double(referenceSystem.epochTo(epoch, ...
+                "gpsNanoseconds"))/1e9;
+
+            testCase.verifyEqual(fromNanoseconds, ...
+                referenceSystem.epochTo(epoch, "j2000Seconds"), ...
+                'AbsTol', 1e-6);
+        end
+
+    end
+
+
+    methods (Test, TestTags = {'vectorization'})
+
+        function gpsNanosecondsToEpoch_vectorization_batchEqualsTheLoop(testCase)
+            % Integer arithmetic throughout, so bit identity is the claim and
+            % AbsTol 0 is what states it.
+            % 123456789012345678 is not a double either; the last two
+            % digits are added in integer arithmetic for the same reason.
+            nanosecond = [int64([0; 631108800000000000; -43200000000000; ...
+                86399999999999]); int64(123456789012345600) + 78];
+
+            batch = referenceSystem.gpsNanosecondsToEpoch(nanosecond);
+            for k = 1:numel(nanosecond)
+                single = referenceSystem.gpsNanosecondsToEpoch(nanosecond(k));
+                testCase.verifyEqual(single.day, batch.day(k), 'AbsTol', 0, ...
+                    sprintf('Day of entry %d differs from the batch.', k));
+                testCase.verifyEqual(single.sec, batch.sec(k), 'AbsTol', 0, ...
+                    sprintf('Second of entry %d differs from the batch.', k));
+            end
+        end
+
+    end
+
 
 end
 

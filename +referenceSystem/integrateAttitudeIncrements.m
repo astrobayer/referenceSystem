@@ -170,7 +170,7 @@ function [q, info, convention] = integrateAttitudeIncrements(initialQuaternion, 
 % See also INTEGRATEATTITUDE, GRACEFOIMUINCREMENTS, ATTITUDECONVENTION.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.2
+% referenceSystem v2.3
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-28 00:20 (CEST, UTC+02:00) - session S9, prompt P27b
 % -------------------------------------------------------------------------

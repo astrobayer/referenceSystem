@@ -63,7 +63,7 @@ function [position, velocity, info] = bodyState(body, epoch, options, ...
 % See also BARYCENTRICBODYSTATE, GEOCENTRICBODYSTATE, EPHEMERISBODIES.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.2
+% referenceSystem v2.3
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-28 10:40 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------

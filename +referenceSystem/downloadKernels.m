@@ -189,7 +189,7 @@ function manifest = downloadKernels(options)
 % See also READEPHEMERIS, DOWNLOADEOP, SETUPREFERENCESYSTEM, EPHEMERISBODIES.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.2
+% referenceSystem v2.3
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-29 09:15 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------

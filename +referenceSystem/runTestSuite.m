@@ -151,7 +151,7 @@ function [results, reportFile, summary] = runTestSuite(options)
 % See also MEXINFO, TOOLBOXVERSION.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.2
+% referenceSystem v2.3
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-24 12:20 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------
@@ -466,11 +466,11 @@ end
 function reportLine = headerBlock(environment)
 %HEADERBLOCK The six identification lines and their rules.
 %
-%   THE VERSION LINE EXISTS BECAUSE OF D107. The footer tag carries the release
-%   and never the patch, so without this line a report could not be tied to the
-%   handover revision that produced it - and dates cannot do that job, since two
-%   revisions on one day are ordinary in this project. Every field is read, none
-%   is parsed (obligation O30).
+%   THE VERSION LINE CARRIES THE HANDOVER REVISION BESIDE THE VERSION (D132).
+%   The version is semantic and says nothing about which document revision
+%   produced these sources, so the revision is printed from its own field -
+%   and dates cannot do that job, since two revisions on one day are ordinary
+%   in this project. Every field is read, none is parsed (obligation O30).
 %   versionInfo and mexState are supplied by the main function, which keeps this
 %   function pure and keeps every qualified sibling call in one place.
 %
@@ -491,7 +491,7 @@ function reportLine = headerBlock(environment)
     reportLine = [heavyRule(); ...
         versionInfo.versionTag + " — TEST REPORT"; ...
         pad("Version", 10) + ": " + versionInfo.version + ...
-            " (handover rev. 1." + versionInfo.patch + ", built " + ...
+            " (handover rev. 1." + versionInfo.handoverRevision + ", built " + ...
             versionInfo.buildDate + ")"; ...
         pad("Generated", 10) + ": " + string(timestamp) + " (" + ...
             zoneLabel(timestamp) + ")"; ...

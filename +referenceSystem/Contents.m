@@ -1,5 +1,5 @@
 % referenceSystem — Time systems, Earth orientation and coordinate transformations
-% Version 2.2.245 21-Sep-2026
+% Version 2.3.0  21-Sep-2026
 %
 %   Reference and time system transformations for satellite geodesy, built on
 %   the IERS Conventions (2010) and the IAU SOFA library. All functions live in
@@ -26,7 +26,8 @@
 %   datetimeToEpoch      - Epoch from a MATLAB datetime array.
 %   gpsWeekToEpoch       - Epoch from a GPS week number and seconds of week.
 %   j2000SecondsToEpoch  - Epoch from seconds elapsed since the J2000.0 epoch.
-%   epochTo              - Epoch to one of the five external representations.
+%   gpsNanosecondsToEpoch - Epoch from int64 GPS nanoseconds past 2000-01-01 12:00.
+%   epochTo              - Epoch to one of the six external representations.
 %   addSeconds           - Advance an epoch by seconds of its own time scale.
 %   secondsBetween       - Seconds elapsed from one epoch to another.
 %   leapSecondTable      - The single leap-second authority of the toolbox.
@@ -104,6 +105,7 @@
 %
 % L5 — Orbit, attitude and navigation
 %   rotationGcrsToRsw    - Inertial to orbit frame rotation from a satellite state.
+%   orbitSunGeometry     - Solar beta angle and argument of latitude of a satellite.
 %   interpolateQuaternions - Interpolate an attitude series to a vector of epochs.
 %   rotationNavToBody    - Navigation-frame to body-frame rotation from roll, pitch and yaw.
 %   angularVelocityToRotationRate - Rotation rate from an angular velocity.
@@ -142,7 +144,7 @@
 %   that govern every function in this package.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.2
+% referenceSystem v2.3
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-24 20:30 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------
