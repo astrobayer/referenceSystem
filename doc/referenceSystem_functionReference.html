@@ -21,6 +21,7 @@ each function by <code>referenceSystem.buildDocumentation</code>
 <li><a href="#datetimetoepoch">datetimeToEpoch</a></li>
 <li><a href="#gpsweektoepoch">gpsWeekToEpoch</a></li>
 <li><a href="#j2000secondstoepoch">j2000SecondsToEpoch</a></li>
+<li><a href="#gpsnanosecondstoepoch">gpsNanosecondsToEpoch</a></li>
 <li><a href="#epochto">epochTo</a></li>
 <li><a href="#addseconds">addSeconds</a></li>
 <li><a href="#secondsbetween">secondsBetween</a></li>
@@ -105,6 +106,7 @@ each function by <code>referenceSystem.buildDocumentation</code>
 <p class="layer"><b>L5 - Orbit, attitude and navigation</b></p>
 <ul class="index">
 <li><a href="#rotationgcrstorsw">rotationGcrsToRsw</a></li>
+<li><a href="#orbitsungeometry">orbitSunGeometry</a></li>
 <li><a href="#interpolatequaternions">interpolateQuaternions</a></li>
 <li><a href="#rotationnavtobody">rotationNavToBody</a></li>
 <li><a href="#angularvelocitytorotationrate">angularVelocityToRotationRate</a></li>
@@ -157,11 +159,15 @@ each function by <code>referenceSystem.buildDocumentation</code>
   ----                     ----   ----     -----  -----------
   versionInfo              1x1    struct   -      Fields listed below.
   .version                 1x1    string   -      Semantic version, release plus
-                                                 patch, e.g. '2.1.204'.
-  .release                 1x1    string   -      Major and minor only, '2.1'.
-  .patch                   1x1    string   -      Patch component, e.g. '204'.
-                                                 This IS the handover
-                                                 revision number (D107).
+                                                 patch, e.g. '2.3.0'.
+  .release                 1x1    string   -      Major and minor only, '2.3'.
+  .patch                   1x1    string   -      Patch component, e.g. '0'. A
+                                                 SEMANTIC patch counter and
+                                                 not a revision number (D132).
+  .handoverRevision        1x1    string   -      Revision of the handover
+                                                 these sources were written
+                                                 at, e.g. '246'. Provenance,
+                                                 and no part of the version.
   .buildDate               1x1    string   -      Source revision date, ISO 8601.
   .sofaRelease             1x1    string   -      Bundled IAU SOFA release, '20231011'.
   .iersConventions         1x1    string   -      IERS Conventions edition, '2010'.
@@ -178,20 +184,27 @@ each function by <code>referenceSystem.buildDocumentation</code>
   two tag lines in every help block have exactly one authority each and a
   provenance test can verify the agreement.
 
-  THE PATCH COMPONENT IS THE HANDOVER REVISION NUMBER (decision D107).
-  Version 2.1.N is the state of the sources at handover revision 1.N, and the
-  two are edited together or not at all. Major and minor identify the
-  RELEASE; the patch identifies the DOCUMENT REVISION that produced these
-  sources, so an archived copy can be tied to the revision log entry that
-  explains it without guessing from dates. A test and auditPackage.py both
-  read the top row of the handover's revision log and refuse a disagreement,
-  because a convention nothing checks is a convention that drifts.
+  THE VERSION IS SEMANTIC AND THE REVISION IS A SEPARATE FIELD (D132). The
+  patch component counts fixes, as the organisation's VERSIONING.md defines
+  it; it is not a count of document revisions and it does not move because a
+  session edited the handover. What it says is what every other toolbox here
+  says with the same three numbers.
+
+  THE PROVENANCE THE OLD RULE BOUGHT IS KEPT, IN ITS OWN FIELD. Until this
+  release the patch WAS the handover revision, so an archived copy could be
+  tied to the log entry that explains it. That link was load bearing and is
+  not given up: handoverRevision carries the number instead, a test and
+  auditPackage.py still read the top row of the revision log and refuse a
+  disagreement, and the test report still prints both. What changed is that
+  the revision stopped being a component of a version whose other two
+  components make a compatibility promise - one field, one meaning.
 
   versionTag CARRIES MAJOR.MINOR ONLY, AND DELIBERATELY. It appears in the
   help footer of every file in the toolbox; putting the patch there would
-  rewrite 233 lines on every revision and bury each session's real diff. The
-  footer states the release, versionInfo.version states the revision, and the
-  test report prints the latter so a run is always traceable to a document.
+  rewrite 233 lines on every patch release and bury each session's real diff.
+  The footer states the release, versionInfo.version states the full version,
+  and the test report prints the revision beside it so a run is always
+  traceable to a document.
 
   THE FOOTER IS TWO LINES AND NOT ONE (decision D103). Naming the author in
   full alongside the toolbox, the version and the model exceeds the 100-column
@@ -213,14 +226,14 @@ each function by <code>referenceSystem.buildDocumentation</code>
   IERS Conventions (2010), IERS Technical Note 36, G. Petit and B. Luzum (eds.).</pre>
 <h4>EXAMPLE</h4>
 <pre>v = referenceSystem.toolboxVersion();
-  fprintf('%s (SOFA %s)\n', v.version, v.sofaRelease);</pre>
+  fprintf('%s at handover rev. 1.%s\n', v.version, v.handoverRevision);</pre>
 <h4>KEYWORDS</h4>
 <pre>version, provenance, build, SOFA, IERS Conventions, metadata
 
 See also IERSCONSTANTS, ELLIPSOIDPARAMETERS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 11:05 (CEST, UTC+02:00)
 Revised: 2026-08-09 10:15 (CEST, UTC+02:00)
@@ -311,7 +324,7 @@ Revised: 2026-08-09 10:15 (CEST, UTC+02:00)
 See also DOWNLOADKERNELS, DOWNLOADEOP, SETUPREFERENCESYSTEM
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-08-21 18:05 (CEST, UTC+02:00)
 Revised: 2026-08-21 18:05 (CEST, UTC+02:00)
@@ -438,7 +451,7 @@ Revised: 2026-08-21 18:05 (CEST, UTC+02:00)
 See also TOOLBOXVERSION, ELLIPSOIDPARAMETERS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 11:05 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -529,7 +542,7 @@ Created: 2026-07-24 11:05 (CEST, UTC+02:00)
 See also IERSCONSTANTS, TOOLBOXVERSION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 11:05 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -606,7 +619,7 @@ Created: 2026-07-24 11:05 (CEST, UTC+02:00)
 See also NORMALIZEEPOCH, CONVERTTIMESCALE.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -708,7 +721,7 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 See also TIMESCALE, LEAPSECONDS, DAYSECONDTOEPOCH, EPOCHTO, CONVERTTIMESCALE.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -772,7 +785,7 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 See also DAYSECONDTOEPOCH, DATETIMETOEPOCH, EPOCHTO, NORMALIZEEPOCH.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -831,7 +844,7 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 See also MJDTOEPOCH, EPOCHTO, NORMALIZEEPOCH.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -896,7 +909,7 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 See also MJDTOEPOCH, DAYSECONDTOEPOCH, EPOCHTO.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -962,7 +975,7 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 See also MJDTOEPOCH, EPOCHTO, CONVERTTIMESCALE.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -1027,19 +1040,107 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 See also MJDTOEPOCH, DAYSECONDTOEPOCH, EPOCHTO.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
 <p class="top"><a href="#contents">back to contents</a></p>
 </div>
+<div class="fcn" id="gpsnanosecondstoepoch">
+<h3>referenceSystem.gpsNanosecondsToEpoch</h3>
+<p class="h1">Epoch from int64 GPS nanoseconds past 2000-01-01 12:00.</p>
+<h4>SYNTAX</h4>
+<pre>epoch = gpsNanosecondsToEpoch(nanosecond) converts the exact integer time
+  tag of the GRACE and GRACE-FO Level-1B products to the canonical epoch
+  struct of handover section B.3. The returned scale is "GPS" by
+  construction, and the conversion is exact: no intermediate double ever
+  holds the full count.</pre>
+<h4>INPUT ARGUMENTS</h4>
+<pre>Name         Size   Type    Units  Description
+  ----         ----   ----    -----  -----------
+  nanosecond   Nx1    int64   ns     Nanoseconds elapsed since
+                                     2000-01-01T12:00:00 GPS. int64 and
+                                     nothing else; a double argument is
+                                     refused rather than converted, see
+                                     METHOD.</pre>
+<h4>OUTPUT ARGUMENTS</h4>
+<pre>Name       Size   Type      Units  Description
+  ----       ----   ----      -----  -----------
+  epoch      1x1    struct    -      Canonical epoch, N entries.
+  .day       Nx1    double    d      Integer day number.
+  .sec       Nx1    double    s      Seconds of day, [0, 86400).
+  .scale     1x1    string    -      "GPS".
+  .source    1x1    string    -      "gpsNanosecondsToEpoch".</pre>
+<h4>METHOD</h4>
+<pre>THE ORIGIN IS 2000-01-01 12:00:00 GPS AND NOT THE GPS WEEK EPOCH. The
+  Level-1B products count continuous seconds from that instant, and the same
+  count scaled to nanoseconds is what the readers of the GRACE-FO toolchain
+  carry. It is MJD 51544 + 43200 s read in the GPS scale, and GPS time has
+  no leap seconds, so the count is a plain elapsed interval.
+
+  A DOUBLE ARGUMENT IS REFUSED, WHICH IS THE WHOLE POINT OF THE FUNCTION.
+  A 2020 tag is about 6.3e17 ns, far above 2^53, so a double cannot hold
+  every value of this representation and a conversion through one loses
+  whole nanoseconds without saying so. An arguments block that declared the
+  type as int64 would CONVERT a double silently, which is the same defect
+  wearing a validator's clothes, so the class is asserted with mustBeA and
+  the argument is left untyped.
+
+  THE SPLIT IS EXACT IN BOTH COMPONENTS. The whole days are separated in
+  int64 by a floored division, so the day number is exact for any input; the
+  remainder is smaller than 86400e9 and therefore below 2^53, so converting
+  it to seconds is the only rounding in the function and it is a relative
+  one of at most eps/2 on a quantity under 86400. Scaling that back by 1e9,
+  which epochTo does, moves the result by less than 0.02 ns, so rounding to
+  the nearest nanosecond recovers the input EXACTLY. The round trip is an
+  identity over the whole representable span, not an approximation to it.
+
+  THE SPAN IS BOUNDED AND THE BOUND IS DERIVED. int64 arithmetic saturates
+  at intmax in MATLAB rather than wrapping, so a count near the limit would
+  otherwise produce a plausible, monotone, wrong epoch. The inclusive bounds
+  come from gpsNanosecondSpan, which is also what epochTo bounds its epoch
+  with, so the two directions describe one span and not two.
+
+  No scale argument is offered. This representation names its own scale, as
+  a GPS week number does: a count of GPS nanoseconds is GPS time by
+  definition. Convert the result with convertTimeScale to work in another.</pre>
+<h4>ACCURACY</h4>
+<pre>Exact over the whole representable span, MJD -55206 to MJD 158294, that is
+  1707-09-24 to 2292-04-09. The day number is integer arithmetic throughout.
+  The seconds of day carry one rounding of at most 1.1e-16 relative, which is
+  9.6e-12 s at the end of a day, and the outbound conversion in epochTo
+  removes it: every int64 value in the span survives a round trip bit for
+  bit, which is asserted rather than claimed.</pre>
+<h4>ERRORS</h4>
+<pre>referenceSystem:gpsNanosecondsToEpoch:outsideRepresentableSpan
+  MATLAB:validators:mustBeA</pre>
+<h4>REFERENCES</h4>
+<pre>GRACE-FO Level-1 Data Product User Handbook, JPL D-56935, Sect. 3, on the
+  continuous seconds past 2000-01-01 12:00:00 GPS used as the time tag.
+  IS-GPS-200N, Section 20.3.3.5.2.4 (GPS time is continuous).
+  IERS Conventions (2010), IERS Technical Note 36, Ch. 1.</pre>
+<h4>EXAMPLE</h4>
+<pre>epoch = referenceSystem.gpsNanosecondsToEpoch(int64(631108800000000000));
+  assert(epoch.day == 58849 &amp;&amp; epoch.sec == 0);   % 2020-01-01 00:00 GPS</pre>
+<h4>KEYWORDS</h4>
+<pre>epoch, GPS, nanoseconds, int64, exact, GRACE-FO, Level-1B, time tag
+
+See also EPOCHTO, GPSWEEKTOEPOCH, J2000SECONDSTOEPOCH, CONVERTTIMESCALE.
+
+-------------------------------------------------------------------------
+referenceSystem v2.3
+Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
+Created: 2026-09-21 16:25 (CEST, UTC+02:00)
+-------------------------------------------------------------------------</pre>
+<p class="top"><a href="#contents">back to contents</a></p>
+</div>
 <div class="fcn" id="epochto">
 <h3>referenceSystem.epochTo</h3>
-<p class="h1">Convert an epoch struct to one of the five external representations.</p>
+<p class="h1">Convert an epoch struct to one of the six external representations.</p>
 <h4>SYNTAX</h4>
 <pre>value = epochTo(epoch, format) returns the epoch in the requested outbound
-  representation. format is one of "mjd", "daySecond", "datetime", "gpsWeek"
-  or "j2000Seconds".</pre>
+  representation. format is one of "mjd", "daySecond", "datetime", "gpsWeek",
+  "j2000Seconds" or "gpsNanoseconds".</pre>
 <h4>INPUT ARGUMENTS</h4>
 <pre>Name     Size   Type            Units  Description
   ----     ----   ----            -----  -----------
@@ -1054,7 +1155,9 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
           Nx1    datetime            -      "datetime": unzoned instants.
           Nx2    double              -      "gpsWeek": [week secondOfWeek].
           Nx1    double              s      "j2000Seconds": seconds since
-                                            2000-01-01T12:00 of the scale.</pre>
+                                            2000-01-01T12:00 of the scale.
+          Nx1    int64               ns     "gpsNanoseconds": nanoseconds
+                                            since 2000-01-01T12:00 GPS.</pre>
 <h4>METHOD</h4>
 <pre>The outbound direction is one function where the inbound direction is five
   (decision D32), and the asymmetry is deliberate rather than an oversight.
@@ -1066,15 +1169,27 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
   (handover section C.7 rule 6).
 
   Each format is the exact inverse of its constructor: "mjd" of mjdToEpoch,
-  "daySecond" of daySecondToEpoch, and so on. "gpsWeek" is defined only for a
-  GPS epoch and refuses any other scale rather than converting silently,
-  because a week number is a statement about GPS time.
+  "daySecond" of daySecondToEpoch, and so on. "gpsWeek" and "gpsNanoseconds"
+  are defined only for a GPS epoch and refuse any other scale rather than
+  converting silently, because both are statements about GPS time.
+
+  "gpsNanoseconds" RETURNS int64 AND IS THE ONLY FORMAT THAT DOES. A 2020
+  time tag is about 6.3e17 ns, above 2^53, so returning it as a double would
+  drop whole nanoseconds; the type is the contract, not a convenience. Its
+  span is bounded, and the bound is the same one gpsNanosecondsToEpoch
+  applies, taken from the one authority both read rather than restated here.
 
   MJD 0 is 1858-11-17 00:00 by definition; datetimeToEpoch carries the same
   origin for the inbound direction and a precision test binds the two.</pre>
 <h4>ACCURACY</h4>
 <pre>"daySecond" and "gpsWeek" are exact: they move integers and the unmodified
-  seconds field. "mjd" and "j2000Seconds" collapse the split form back into
+  seconds field. "gpsNanoseconds" is exact as well, and exact in the stronger
+  sense that matters: every int64 value of the span survives
+  gpsNanosecondsToEpoch and this function bit for bit. The seconds of day
+  carry at most 9.6e-12 s of rounding, which is 0.0096 ns once scaled, so
+  rounding to the nearest nanosecond lands on the original integer.
+
+  "mjd" and "j2000Seconds" collapse the split form back into
   one double and therefore lose resolution - 0.63 us near MJD 60000 for a
   decimal MJD, 0.48 us near 2100 for seconds from J2000 - so a round trip
   through them reproduces the original to about two units in the last place
@@ -1084,6 +1199,7 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 <h4>ERRORS</h4>
 <pre>referenceSystem:epochTo:wrongScale
   referenceSystem:epochTo:unrepresentableLeapSecond
+  referenceSystem:epochTo:outsideRepresentableSpan
   MATLAB:validators:mustBeMember</pre>
 <h4>REFERENCES</h4>
 <pre>IERS Conventions (2010), IERS Technical Note 36, Ch. 1.
@@ -1093,13 +1209,13 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 <pre>epoch = referenceSystem.daySecondToEpoch([60310 43200], "TT");
   assert(isequal(referenceSystem.epochTo(epoch, "daySecond"), [60310 43200]));</pre>
 <h4>KEYWORDS</h4>
-<pre>epoch, MJD, datetime, GPS week, J2000, round trip
+<pre>epoch, MJD, datetime, GPS week, J2000, GPS nanoseconds, int64, round trip
 
 See also MJDTOEPOCH, DAYSECONDTOEPOCH, DATETIMETOEPOCH, GPSWEEKTOEPOCH,
-  J2000SECONDSTOEPOCH.
+  J2000SECONDSTOEPOCH, GPSNANOSECONDSTOEPOCH.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -1159,7 +1275,7 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 See also SECONDSBETWEEN, NORMALIZEEPOCH, CONVERTTIMESCALE.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -1220,7 +1336,7 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 See also ADDSECONDS, NORMALIZEEPOCH, CONVERTTIMESCALE.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -1365,7 +1481,7 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 See also CONVERTTIMESCALE, NORMALIZEEPOCH, MEXINFO.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 19:40 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -1536,7 +1652,7 @@ Created: 2026-07-24 19:40 (CEST, UTC+02:00)
 See also TIMESCALE, LEAPSECONDS, NORMALIZEEPOCH, EPOCHTO.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 19:55 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -1708,7 +1824,7 @@ Created: 2026-07-24 19:55 (CEST, UTC+02:00)
 See also CONVERTTIMESCALE, NORMALIZEEPOCH, TIMESCALE.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 20:10 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -1920,7 +2036,7 @@ Created: 2026-07-24 20:10 (CEST, UTC+02:00)
 See also INTERPOLATEEOP, DOWNLOADEOP, SUBDAILYEOPCORRECTION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 11:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -2102,7 +2218,7 @@ Created: 2026-07-25 11:20 (CEST, UTC+02:00)
 See also READEOP, SUBDAILYEOPCORRECTION, ZONALTIDEEOPCORRECTION, LEAPSECONDTABLE.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 11:55 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -2220,7 +2336,7 @@ Created: 2026-07-25 11:55 (CEST, UTC+02:00)
 See also INTERPOLATEEOP, ZONALTIDEEOPCORRECTION, READEOP.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 12:15 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -2334,7 +2450,7 @@ Created: 2026-07-25 12:15 (CEST, UTC+02:00)
 See also INTERPOLATEEOP, SUBDAILYEOPCORRECTION, READEOP.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 12:30 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -2423,7 +2539,7 @@ Created: 2026-07-25 12:30 (CEST, UTC+02:00)
 See also READEOP, INTERPOLATEEOP.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 12:45 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -2560,7 +2676,7 @@ See also ROTATIONGCRSTOCIRS, ROTATIONITRSTOGCRS, INTERPOLATEEOP, READEOP,
   EVALUATEINTERPOLANT.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 21:40 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -2753,7 +2869,7 @@ Created: 2026-07-25 21:40 (CEST, UTC+02:00)
 See also rotationItrsToGcrs, cipCoordinates, interpolateEop, readEop
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-27 10:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -2858,7 +2974,7 @@ See also rotationItrsToGcrs, rotationItrsToGcrsPartials,
   earthRotationAngleRate, interpolateEop
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-27 20:10 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -3022,7 +3138,7 @@ See also ROTATIONITRSTOGCRS, EARTHORIENTATIONPARTIALS, INTERPOLATEEOP,
   IERSCONSTANTS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-08-05 09:30 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -3080,7 +3196,7 @@ Created: 2026-08-05 09:30 (CEST, UTC+02:00)
 See also earthOrientationInterpolant, rotationItrsToGcrs
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-27 10:40 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -3142,7 +3258,7 @@ Created: 2026-07-27 10:40 (CEST, UTC+02:00)
 See also earthOrientationInterpolant, readInterpolant, evaluateInterpolant
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-27 21:10 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -3196,7 +3312,7 @@ Created: 2026-07-27 21:10 (CEST, UTC+02:00)
 See also writeInterpolant, earthOrientationInterpolant
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-27 21:10 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -3269,7 +3385,7 @@ Created: 2026-07-27 21:10 (CEST, UTC+02:00)
 See also EARTHROTATIONANGLE, IERSCONSTANTS, ROTATIONITRSTOGCRS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 22:00 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -3374,7 +3490,7 @@ Created: 2026-07-25 22:00 (CEST, UTC+02:00)
 See also GREENWICHSIDEREALTIME, ROTATIONITRSTOGCRS, INTERPOLATEEOP.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 21:55 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -3467,7 +3583,7 @@ Created: 2026-07-25 21:55 (CEST, UTC+02:00)
 See also EARTHROTATIONANGLE, ROTATIONITRSTOGCRS, CONVERTTIMESCALE.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 22:05 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -3550,7 +3666,7 @@ Created: 2026-07-25 22:05 (CEST, UTC+02:00)
 See also ROTATIONGCRSTOCIRS, GREENWICHSIDEREALTIME, ROTATIONITRSTOGCRS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 23:00 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -3629,7 +3745,7 @@ Created: 2026-07-25 23:00 (CEST, UTC+02:00)
 See also CIPCOORDINATES, ROTATIONTIRSTOITRS, ROTATIONITRSTOGCRS, APPLYROTATION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 22:10 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -3725,7 +3841,7 @@ Created: 2026-07-25 22:10 (CEST, UTC+02:00)
 See also ROTATIONGCRSTOCIRS, ROTATIONITRSTOGCRS, INTERPOLATEEOP, APPLYROTATION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 22:15 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -3950,7 +4066,7 @@ See also CIPCOORDINATES, APPLYROTATION, INVERTROTATION, EARTHROTATIONANGLE,
   INTERPOLATEEOP, READEOP, EARTHORIENTATIONINTERPOLANT.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 22:50 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -4061,7 +4177,7 @@ Created: 2026-07-25 22:50 (CEST, UTC+02:00)
 See also ROTATIONITRSTOGCRS, INVERTROTATION, ROTATIONGCRSTOCIRS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 22:25 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -4157,7 +4273,7 @@ Created: 2026-07-25 22:25 (CEST, UTC+02:00)
 See also APPLYROTATION, ROTATIONITRSTOGCRS, ROTATIONGCRSTOCIRS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 22:35 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -4265,7 +4381,7 @@ Created: 2026-07-25 22:35 (CEST, UTC+02:00)
 See also CONVERTITRF, APPLYHELMERT7, ELLIPSOIDPARAMETERS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 05:40 (CEST, UTC+02:00) - session S4, prompt P10
 -------------------------------------------------------------------------</pre>
@@ -4382,7 +4498,7 @@ Created: 2026-07-26 05:40 (CEST, UTC+02:00) - session S4, prompt P10
 See also ITRFPARAMETERS, APPLYHELMERT7, CARTESIANTOGEODETIC.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 06:00 (CEST, UTC+02:00) - session S4, prompt P10
 -------------------------------------------------------------------------</pre>
@@ -4502,7 +4618,7 @@ Created: 2026-07-26 06:00 (CEST, UTC+02:00) - session S4, prompt P10
 See also CONVERTITRF, ITRFPARAMETERS, APPLYMOLODENSKY.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 06:20 (CEST, UTC+02:00) - session S4, prompt P11
 -------------------------------------------------------------------------</pre>
@@ -4615,7 +4731,7 @@ Created: 2026-07-26 06:20 (CEST, UTC+02:00) - session S4, prompt P11
 See also APPLYHELMERT7, GEODETICTOCARTESIAN, CARTESIANTOGEODETIC.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 06:35 (CEST, UTC+02:00) - session S4, prompt P11
 -------------------------------------------------------------------------</pre>
@@ -4711,7 +4827,7 @@ Created: 2026-07-26 06:35 (CEST, UTC+02:00) - session S4, prompt P11
 See also CARTESIANTOGEODETIC, ELLIPSOIDPARAMETERS, CARTESIANTOENU.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 04:20 (CEST, UTC+02:00) - session S4, prompt P12
 -------------------------------------------------------------------------</pre>
@@ -4806,7 +4922,7 @@ Created: 2026-07-26 04:20 (CEST, UTC+02:00) - session S4, prompt P12
 See also GEODETICTOCARTESIAN, CARTESIANTOSPHERICAL, ELLIPSOIDPARAMETERS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 04:35 (CEST, UTC+02:00) - session S4, prompt P12
 -------------------------------------------------------------------------</pre>
@@ -4893,7 +5009,7 @@ Created: 2026-07-26 04:35 (CEST, UTC+02:00) - session S4, prompt P12
 See also ENUTOCARTESIAN, ROTATIONECEFTOENU, ENUTOAZIMUTHELEVATION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 05:05 (CEST, UTC+02:00) - session S4, prompt P12
 -------------------------------------------------------------------------</pre>
@@ -4953,7 +5069,7 @@ Created: 2026-07-26 05:05 (CEST, UTC+02:00) - session S4, prompt P12
 See also CARTESIANTOENU, ROTATIONECEFTOENU, AZIMUTHELEVATIONTOENU.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 05:10 (CEST, UTC+02:00) - session S4, prompt P12
 -------------------------------------------------------------------------</pre>
@@ -5006,7 +5122,7 @@ Created: 2026-07-26 05:10 (CEST, UTC+02:00) - session S4, prompt P12
 See also NEDTOENU, ROTATIONECEFTONED, CARTESIANTOENU.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 05:15 (CEST, UTC+02:00) - session S4, prompt P12
 -------------------------------------------------------------------------</pre>
@@ -5047,7 +5163,7 @@ Created: 2026-07-26 05:15 (CEST, UTC+02:00) - session S4, prompt P12
 See also ENUTONED, ROTATIONECEFTOENU, ROTATIONECEFTONED.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 05:16 (CEST, UTC+02:00) - session S4, prompt P12
 -------------------------------------------------------------------------</pre>
@@ -5124,7 +5240,7 @@ Created: 2026-07-26 05:16 (CEST, UTC+02:00) - session S4, prompt P12
 See also ROTATIONECEFTONED, CARTESIANTOENU, ROTATIONX, ROTATIONZ.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 04:50 (CEST, UTC+02:00) - session S4, prompt P12
 -------------------------------------------------------------------------</pre>
@@ -5196,7 +5312,7 @@ Created: 2026-07-26 04:50 (CEST, UTC+02:00) - session S4, prompt P12
 See also ROTATIONECEFTOENU, ENUTONED, ROTATIONY, ROTATIONZ.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 04:55 (CEST, UTC+02:00) - session S4, prompt P12
 -------------------------------------------------------------------------</pre>
@@ -5271,7 +5387,7 @@ Created: 2026-07-26 04:55 (CEST, UTC+02:00) - session S4, prompt P12
 See also AZIMUTHELEVATIONTOENU, CARTESIANTOENU, ENUTONED.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 05:20 (CEST, UTC+02:00) - session S4, prompt P12
 -------------------------------------------------------------------------</pre>
@@ -5335,7 +5451,7 @@ Created: 2026-07-26 05:20 (CEST, UTC+02:00) - session S4, prompt P12
 See also ENUTOAZIMUTHELEVATION, ENUTOCARTESIAN, CARTESIANTOENU.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 05:22 (CEST, UTC+02:00) - session S4, prompt P12
 -------------------------------------------------------------------------</pre>
@@ -5403,7 +5519,7 @@ Created: 2026-07-26 05:22 (CEST, UTC+02:00) - session S4, prompt P12
 See also SPHERICALTOCARTESIAN, CARTESIANTOGEODETIC, GEODETICTOCARTESIAN.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 05:26 (CEST, UTC+02:00) - session S4, prompt P12
 -------------------------------------------------------------------------</pre>
@@ -5460,7 +5576,7 @@ Created: 2026-07-26 05:26 (CEST, UTC+02:00) - session S4, prompt P12
 See also CARTESIANTOSPHERICAL, GEODETICTOCARTESIAN, CARTESIANTOGEODETIC.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 05:28 (CEST, UTC+02:00) - session S4, prompt P12
 -------------------------------------------------------------------------</pre>
@@ -5591,7 +5707,7 @@ Created: 2026-07-26 05:28 (CEST, UTC+02:00) - session S4, prompt P12
 See also UTMTOGEODETIC, GEODETICTOCARTESIAN, ELLIPSOIDPARAMETERS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 07:00 (CEST, UTC+02:00) - session S4, prompt P13
 -------------------------------------------------------------------------</pre>
@@ -5683,7 +5799,7 @@ Created: 2026-07-26 07:00 (CEST, UTC+02:00) - session S4, prompt P13
 See also GEODETICTOUTM, CARTESIANTOGEODETIC, ELLIPSOIDPARAMETERS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 07:15 (CEST, UTC+02:00) - session S4, prompt P13
 -------------------------------------------------------------------------</pre>
@@ -5787,7 +5903,7 @@ Created: 2026-07-26 07:15 (CEST, UTC+02:00) - session S4, prompt P13
 See also ELLIPSOIDALTOORTHOMETRIC, ORTHOMETRICTOELLIPSOIDAL, CARTESIANTOGEODETIC.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 07:40 (CEST, UTC+02:00) - session S4, prompt P13
 -------------------------------------------------------------------------</pre>
@@ -5859,7 +5975,7 @@ Created: 2026-07-26 07:40 (CEST, UTC+02:00) - session S4, prompt P13
 See also ORTHOMETRICTOELLIPSOIDAL, GEOIDUNDULATION, CARTESIANTOGEODETIC.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 07:25 (CEST, UTC+02:00) - session S4, prompt P13
 -------------------------------------------------------------------------</pre>
@@ -5923,7 +6039,7 @@ Created: 2026-07-26 07:25 (CEST, UTC+02:00) - session S4, prompt P13
 See also ELLIPSOIDALTOORTHOMETRIC, GEOIDUNDULATION, GEODETICTOCARTESIAN.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 07:28 (CEST, UTC+02:00) - session S4, prompt P13
 -------------------------------------------------------------------------</pre>
@@ -6032,7 +6148,7 @@ Created: 2026-07-26 07:28 (CEST, UTC+02:00) - session S4, prompt P13
 See also QUATERNIONFROMROTATION, ROTATIONFROMEULERSEQUENCE, MULTIPLYQUATERNIONS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 02:05 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -6100,7 +6216,7 @@ Created: 2026-07-26 02:05 (CEST, UTC+02:00) - session S4, prompt P25
 See also ROTATIONFROMEULERSEQUENCE, ATTITUDECONVENTION, APPLYROTATION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 02:10 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -6168,7 +6284,7 @@ Created: 2026-07-26 02:10 (CEST, UTC+02:00) - session S4, prompt P25
 See also ROTATIONFROMEULERSEQUENCE, ATTITUDECONVENTION, APPLYROTATION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 02:10 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -6236,7 +6352,7 @@ Created: 2026-07-26 02:10 (CEST, UTC+02:00) - session S4, prompt P25
 See also ROTATIONFROMEULERSEQUENCE, ATTITUDECONVENTION, APPLYROTATION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 02:10 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -6330,7 +6446,7 @@ Created: 2026-07-26 02:10 (CEST, UTC+02:00) - session S4, prompt P25
 See also EULERSEQUENCEFROMROTATION, ROTATIONFROMROLLPITCHYAW, ATTITUDECONVENTION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 02:20 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -6446,7 +6562,7 @@ Created: 2026-07-26 02:20 (CEST, UTC+02:00) - session S4, prompt P25
 See also ROTATIONFROMEULERSEQUENCE, ROLLPITCHYAWFROMROTATION, ATTITUDECONVENTION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 02:30 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -6516,7 +6632,7 @@ Created: 2026-07-26 02:30 (CEST, UTC+02:00) - session S4, prompt P25
 See also ROLLPITCHYAWFROMROTATION, ROTATIONFROMEULERSEQUENCE, ATTITUDECONVENTION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 02:40 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -6584,7 +6700,7 @@ Created: 2026-07-26 02:40 (CEST, UTC+02:00) - session S4, prompt P25
 See also ROTATIONFROMROLLPITCHYAW, EULERSEQUENCEFROMROTATION, ATTITUDECONVENTION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 02:45 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -6656,7 +6772,7 @@ Created: 2026-07-26 02:45 (CEST, UTC+02:00) - session S4, prompt P25
 See also QUATERNIONFROMROTATION, MULTIPLYQUATERNIONS, ATTITUDECONVENTION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 03:05 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -6737,7 +6853,7 @@ Created: 2026-07-26 03:05 (CEST, UTC+02:00) - session S4, prompt P25
 See also ROTATIONFROMQUATERNION, NORMALIZEQUATERNION, ATTITUDECONVENTION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 02:55 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -6820,7 +6936,7 @@ Created: 2026-07-26 02:55 (CEST, UTC+02:00) - session S4, prompt P25
 See also AXISANGLEFROMROTATION, ROTATIONFROMQUATERNION, ATTITUDECONVENTION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 03:35 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -6910,7 +7026,7 @@ Created: 2026-07-26 03:35 (CEST, UTC+02:00) - session S4, prompt P25
 See also ROTATIONFROMAXISANGLE, QUATERNIONFROMROTATION, EULERSEQUENCEFROMROTATION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 03:45 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -6981,7 +7097,7 @@ Created: 2026-07-26 03:45 (CEST, UTC+02:00) - session S4, prompt P25
 See also EULERSEQUENCEFROMQUATERNION, ROTATIONFROMEULERSEQUENCE, MULTIPLYQUATERNIONS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 03:55 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -7051,7 +7167,7 @@ Created: 2026-07-26 03:55 (CEST, UTC+02:00) - session S4, prompt P25
 See also QUATERNIONFROMEULERSEQUENCE, EULERSEQUENCEFROMROTATION, ROTATIONFROMQUATERNION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 04:00 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -7146,7 +7262,7 @@ Created: 2026-07-26 04:00 (CEST, UTC+02:00) - session S4, prompt P25
 See also INVERTQUATERNION, NORMALIZEQUATERNION, ATTITUDECONVENTION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 03:25 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -7208,7 +7324,7 @@ Created: 2026-07-26 03:25 (CEST, UTC+02:00) - session S4, prompt P25
 See also MULTIPLYQUATERNIONS, NORMALIZEQUATERNION, INVERTROTATION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 03:15 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -7280,7 +7396,7 @@ Created: 2026-07-26 03:15 (CEST, UTC+02:00) - session S4, prompt P25
 See also QUATERNIONFROMROTATION, INVERTQUATERNION, MULTIPLYQUATERNIONS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 03:10 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -7401,9 +7517,158 @@ Created: 2026-07-26 03:10 (CEST, UTC+02:00) - session S4, prompt P25
 See also APPLYROTATION, INVERTROTATION, ROTATIONITRSTOGCRS, INTERPOLATEQUATERNIONS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 21:10 (CEST, UTC+02:00) - session S5, prompt P14
+-------------------------------------------------------------------------</pre>
+<p class="top"><a href="#contents">back to contents</a></p>
+</div>
+<div class="fcn" id="orbitsungeometry">
+<h3>referenceSystem.orbitSunGeometry</h3>
+<p class="h1">Solar beta angle and argument of latitude of a satellite.</p>
+<h4>SYNTAX</h4>
+<pre>[beta, u] = orbitSunGeometry(r, v, epoch) returns the solar beta angle and
+  the argument of latitude for each of the N inertial states.
+
+  [beta, u] = orbitSunGeometry(r, v, epoch, 'Equator', "gcrs") measures the
+  ascending node from the GCRS equator instead of the true equator of date.
+
+  [beta, u, info] = orbitSunGeometry(...) also returns the Sun direction it
+  used, the argument of latitude of the Sun, and two degeneracy margins.</pre>
+<h4>INPUT ARGUMENTS</h4>
+<pre>Name    Size   Type     Units  Description
+  ----    ----   ----     -----  -----------
+  r       3xN    double   m      GCRS position, one state per COLUMN. The
+                                 column layout is L2's and rotationGcrsToRsw's,
+                                 not L4's row layout (decision D65).
+  v       3xN    double   m/s    GCRS velocity, one state per column. A
+                                 single column is applied to every state.
+  epoch   1x1    struct   -      Epoch struct, N entries or one, any scale
+                                 except UT1.</pre>
+<h4>OPTIONAL NAME-VALUE ARGUMENTS</h4>
+<pre>Name        Size   Type     Default     Description
+  ----        ----   ----     -------     -----------
+  Equator     1x1    string   "cip"       Equator whose pole defines the
+                                          ascending node: "cip", the true
+                                          equator of date, or "gcrs".
+  Source      1x1    string   "sofa"      Sun provider, forwarded to
+                                          geocentricBodyState.
+  Ephemeris   1x1    struct   struct([])  Furnished kernels, forwarded to
+                                          geocentricBodyState.</pre>
+<h4>OUTPUT ARGUMENTS</h4>
+<pre>Name                Size   Type     Units  Description
+  ----                ----   ----     -----  -----------
+  beta                1xN    double   rad    Solar beta angle, [-pi/2, pi/2],
+                                             positive when the Sun lies on the
+                                             side of the orbit normal.
+  u                   1xN    double   rad    Argument of latitude, [0, 2*pi).
+  info                1x1    struct   -      Diagnostics.
+  .sunDirection       3xN    double   -      Geocentric Sun unit vector, GCRS.
+  .uSun               1xN    double   rad    Argument of latitude of the Sun's
+                                             projection into the orbit plane,
+                                             so u - uSun is the orbit angle
+                                             measured from orbit noon.
+  .equator            1x1    string   -      The equator that was used.
+  .sineOfPlaneAngle   1xN    double   -      |r x v|/(|r||v|), the margin
+                                             against a rectilinear state, as
+                                             rotationGcrsToRsw reports it.
+  .sineOfNodeAngle    1xN    double   -      |k x h|, the margin against an
+                                             orbit in the chosen equator, for
+                                             which the node is undefined.</pre>
+<h4>METHOD</h4>
+<pre>Both quantities are pure geometry of three directions: the orbit normal,
+  the Sun and the pole of an equator. Nothing here is a force model and
+  nothing is an orbit propagation.
+
+      h = (r x v)/|r x v|         orbit normal, the cross-track axis of
+                                  rotationGcrsToRsw and taken from it
+      s = Sun/|Sun|               GEOCENTRIC Sun direction, from
+                                  geocentricBodyState("sun", epoch)
+      beta = asin(h . s)          positive towards the orbit normal
+      n = (k x h)/|k x h|         ascending node direction, k the pole
+      m = h x n                   in plane, a quarter revolution ahead of n
+      u = atan2(rHat . m, rHat . n)   wrapped to [0, 2*pi)
+
+  with uSun the same expression evaluated on s, which is the argument of
+  latitude of the Sun's projection into the orbit plane.
+
+  THE TRIAD IS NOT REBUILT HERE. rotationGcrsToRsw already owns the orbit
+  frame, its degeneracy criterion and its margin, so this function calls it
+  and reads the cross-track row rather than forming r x v a second time. A
+  rectilinear state is therefore refused with that function's identifier and
+  its message, which is the behaviour a caller has already read about.
+
+  WHICH EQUATOR DEFINES THE NODE IS A CHOICE AND IT IS NOT NEGLIGIBLE. The
+  GCRS equator and the true equator of date differ by precession-nutation,
+  which had moved the pole by about 400 arcseconds by 2020, and u shifts by
+  up to that angle divided by the sine of the orbit inclination to the
+  equator - of order 0.1 degrees for a near-polar orbit, with the exact
+  value depending on where the node lies. Geodetic latitude zero in the ITRS
+  is the true equator up to polar motion, so "cip" is the physically
+  meaningful default and is what a latitude-binned analysis wants; "gcrs" is
+  offered so the difference can be measured rather than argued about.
+
+  THE CIP DIRECTION IS TAKEN FROM ITS DEFINITION, NOT FROM A ROTATION. X and
+  Y from cipCoordinates ARE the first two GCRS components of the CIP unit
+  vector, so k = [X; Y; sqrt(1 - X^2 - Y^2)] needs no further machinery and
+  does not drag in the CIO locator, which says nothing about where the pole
+  is. That this equals the third row of rotationGcrsToCirs is asserted by a
+  test rather than relied on by the code.
+
+  THE SUN DIRECTION IS GEOCENTRIC AND THE SATELLITE-CENTRIC ONE IS NOT
+  OFFERED. beta is defined on the geocentric direction. Seen from the
+  satellite the Sun moves by up to |r|/AU, which is 4.6e-5 rad or 9.5
+  arcseconds at a GRACE altitude - far above the accuracy of the Sun model
+  below, so it is a real difference and not a rounding. No consumer has
+  asked for it, and an option nobody needs is a way to get the wrong one.</pre>
+<h4>ACCURACY</h4>
+<pre>The geometry is exact to machine precision: four normalisations, three
+  cross products and two arc tangents, no series and no iteration. The
+  accuracy of the ANSWER is that of the three directions it is built from.
+
+    term                                            effect on beta
+    ---------------------------------------------   --------------
+    "sofa" Sun, RMS 8.3e3 m at 1.5e11 m              5.5e-8 rad
+    BCRS versus GCRS caveat of geocentricBodyState   below 1.5e-8 rad
+    geocentric versus satellite-centric Sun          4.6e-5 rad, excluded
+                                                     by definition
+    a 1 mm/s velocity error at 7.5 km/s              1.3e-7 rad
+
+  Input-state errors therefore dominate for any real orbit product, and the
+  Sun model is not the limiting term. For u the same holds, with the choice
+  of equator far above every other term at 2e-3 rad.</pre>
+<h4>ERRORS</h4>
+<pre>referenceSystem:orbitSunGeometry:wrongStateSize
+  referenceSystem:orbitSunGeometry:sizeMismatch
+  referenceSystem:orbitSunGeometry:wrongScale
+  referenceSystem:orbitSunGeometry:undefinedNode
+  referenceSystem:rotationGcrsToRsw:zeroState
+  referenceSystem:rotationGcrsToRsw:degenerateOrbitPlane
+      Raised on this function's behalf by the orbit frame it calls: a
+      vanishing state, and a radial velocity for which the orbit normal
+      itself does not exist.</pre>
+<h4>REFERENCES</h4>
+<pre>D. A. Vallado (2013), Fundamentals of Astrodynamics and Applications,
+  4th ed., Sect. 2.4 and 3.4, the argument of latitude and the RSW frame.
+  O. Montenbruck and E. Gill (2000), Satellite Orbits, Sect. 3.3.
+  IERS Conventions (2010), IERS Technical Note 36, Ch. 5, on X, Y as the
+  GCRS coordinates of the Celestial Intermediate Pole.
+  GRACE-FO Level-1 Data Product User Handbook, JPL D-56935.</pre>
+<h4>EXAMPLE</h4>
+<pre>t = referenceSystem.datetimeToEpoch(datetime(2020, 1, 1), "GPS");
+  [beta, u] = referenceSystem.orbitSunGeometry(rGcrs, vGcrs, t);
+  fprintf('beta = %.2f deg\n', rad2deg(beta(1)));</pre>
+<h4>KEYWORDS</h4>
+<pre>beta angle, argument of latitude, orbit plane, Sun, eclipse season,
+  orbit noon, GCRS, CIP, GRACE, satellite
+
+See also ROTATIONGCRSTORSW, GEOCENTRICBODYSTATE, CIPCOORDINATES,
+  ROTATIONGCRSTOCIRS, CONVERTTIMESCALE.
+
+-------------------------------------------------------------------------
+referenceSystem v2.3
+Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
+Created: 2026-09-21 17:05 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
 <p class="top"><a href="#contents">back to contents</a></p>
 </div>
@@ -7572,7 +7837,7 @@ Created: 2026-07-26 21:10 (CEST, UTC+02:00) - session S5, prompt P14
 See also NORMALIZEQUATERNION, MULTIPLYQUATERNIONS, INVERTQUATERNION, SECONDSBETWEEN.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 21:35 (CEST, UTC+02:00) - session S5, prompt P14
 -------------------------------------------------------------------------</pre>
@@ -7667,7 +7932,7 @@ See also ROTATIONFROMROLLPITCHYAW, ROTATIONECEFTONED, ROTATIONECEFTOENU,
   ANGULARVELOCITYTOROTATIONRATE.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 22:30 (CEST, UTC+02:00) - session S5, prompt P26
 -------------------------------------------------------------------------</pre>
@@ -7774,7 +8039,7 @@ Created: 2026-07-26 22:30 (CEST, UTC+02:00) - session S5, prompt P26
 See also ANGULARVELOCITYFROMROTATIONRATE, INTEGRATEATTITUDE, ROTATIONNAVTOBODY.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 22:15 (CEST, UTC+02:00) - session S5, prompt P26
 -------------------------------------------------------------------------</pre>
@@ -7870,7 +8135,7 @@ Created: 2026-07-26 22:15 (CEST, UTC+02:00) - session S5, prompt P26
 See also ANGULARVELOCITYTOROTATIONRATE, INTEGRATEATTITUDE, INVERTROTATION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 22:20 (CEST, UTC+02:00) - session S5, prompt P26
 -------------------------------------------------------------------------</pre>
@@ -8043,7 +8308,7 @@ Created: 2026-07-26 22:20 (CEST, UTC+02:00) - session S5, prompt P26
 See also ANGULARVELOCITYTOROTATIONRATE, INTERPOLATEQUATERNIONS, ROTATIONNAVTOBODY.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 22:25 (CEST, UTC+02:00) - session S5, prompt P26
 -------------------------------------------------------------------------</pre>
@@ -8212,7 +8477,7 @@ Created: 2026-07-26 22:25 (CEST, UTC+02:00) - session S5, prompt P26
 See also INTEGRATEATTITUDE, GRACEFOIMUINCREMENTS, ATTITUDECONVENTION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-28 00:20 (CEST, UTC+02:00) - session S9, prompt P27b
 -------------------------------------------------------------------------</pre>
@@ -8385,7 +8650,7 @@ See also ROTATIONECEFTOENU, ROTATIONECEFTONED, ROTATIONNAVTOBODY,
   INTEGRATEATTITUDE, IERSCONSTANTS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 22:40 (CEST, UTC+02:00) - session S5, prompt P26
 -------------------------------------------------------------------------</pre>
@@ -8490,7 +8755,7 @@ Created: 2026-07-26 22:40 (CEST, UTC+02:00) - session S5, prompt P26
 See also GRACEFOIMUINCREMENTS, GRACEFOIMUALIGNMENT, READEOP.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-27 21:20 (CEST, UTC+02:00) - session S9, prompt P27
 -------------------------------------------------------------------------</pre>
@@ -8594,7 +8859,7 @@ Created: 2026-07-27 21:20 (CEST, UTC+02:00) - session S9, prompt P27
 See also GRACEFOIMUINCREMENTS, READIMU1B, INTEGRATEATTITUDE.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-27 21:05 (CEST, UTC+02:00) - session S9, prompt P27
 -------------------------------------------------------------------------</pre>
@@ -8801,7 +9066,7 @@ Created: 2026-07-27 21:05 (CEST, UTC+02:00) - session S9, prompt P27
 See also READIMU1B, GRACEFOIMUALIGNMENT, INTEGRATEATTITUDE.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-27 21:40 (CEST, UTC+02:00) - session S9, prompt P27
 -------------------------------------------------------------------------</pre>
@@ -8908,7 +9173,7 @@ Created: 2026-07-27 21:40 (CEST, UTC+02:00) - session S9, prompt P27
 See also BARYCENTRICBODYSTATE, GEOCENTRICBODYSTATE, READEPHEMERIS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-28 10:05 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -9022,7 +9287,7 @@ Created: 2026-07-28 10:05 (CEST, UTC+02:00)
 See also GEOCENTRICBODYSTATE, EPHEMERISBODIES, READEPHEMERIS, CONVERTTIMESCALE.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-28 10:25 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -9120,7 +9385,7 @@ Created: 2026-07-28 10:25 (CEST, UTC+02:00)
 See also BARYCENTRICBODYSTATE, EPHEMERISBODIES, READEPHEMERIS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-28 10:50 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -9262,7 +9527,7 @@ Created: 2026-07-28 10:50 (CEST, UTC+02:00)
 See also BARYCENTRICBODYSTATE, GEOCENTRICBODYSTATE, EPHEMERISBODIES.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-28 11:10 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -9450,7 +9715,7 @@ Created: 2026-07-28 11:10 (CEST, UTC+02:00)
 See also READEPHEMERIS, DOWNLOADEOP, SETUPREFERENCESYSTEM, EPHEMERISBODIES.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-29 09:15 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -9580,7 +9845,7 @@ Created: 2026-07-29 09:15 (CEST, UTC+02:00)
 See also BCRSTOGCRS, BARYCENTRICBODYSTATE, GEOCENTRICBODYSTATE, IERSCONSTANTS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-28 15:35 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -9661,7 +9926,7 @@ Created: 2026-07-28 15:35 (CEST, UTC+02:00)
 See also GCRSTOBCRS, BARYCENTRICBODYSTATE, GEOCENTRICBODYSTATE, IERSCONSTANTS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-28 15:45 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -9834,7 +10099,7 @@ Created: 2026-07-28 15:45 (CEST, UTC+02:00)
 See also ROTATIONICRFTOBODYFIXED, BARYCENTRICBODYSTATE, ROTATIONITRSTOGCRS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-30 20:15 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -9946,7 +10211,7 @@ Created: 2026-07-30 20:15 (CEST, UTC+02:00)
 See also BODYROTATIONELEMENTS, ROTATIONITRSTOGCRS, APPLYROTATION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-30 21:40 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -10116,7 +10381,7 @@ Created: 2026-07-30 21:40 (CEST, UTC+02:00)
 See also CARTESIANTOGEODETIC, CONVERTITRF, ROTATIONITRSTOGCRS, APPLYROTATION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 22:55 (CEST, UTC+02:00) - session S5, prompt P15
 -------------------------------------------------------------------------</pre>
@@ -10201,7 +10466,7 @@ Created: 2026-07-26 22:55 (CEST, UTC+02:00) - session S5, prompt P15
 See also RUNTESTSUITE, TOOLBOXVERSION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 12:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -10269,7 +10534,7 @@ Created: 2026-07-24 12:20 (CEST, UTC+02:00)
 See also buildMex, setupReferenceSystem, mexInfo
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-27 18:30 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -10365,7 +10630,7 @@ Created: 2026-07-27 18:30 (CEST, UTC+02:00)
 See also MEXINFO, LEAPSECONDS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 20:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -10464,7 +10729,7 @@ Created: 2026-07-24 20:20 (CEST, UTC+02:00)
 See also BUILDMEX, RUNTESTSUITE, MEXINFO.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-27 09:40 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -10615,7 +10880,7 @@ Created: 2026-07-27 09:40 (CEST, UTC+02:00)
 See also MEXINFO, TOOLBOXVERSION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 12:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -10788,12 +11053,12 @@ Created: 2026-07-24 12:20 (CEST, UTC+02:00)
 See also SETUPREFERENCESYSTEM, BUILDMEX, MEXINFO.
 
 -------------------------------------------------------------------------
-referenceSystem v2.2
+referenceSystem v2.3
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 12:30 (CEST, UTC+02:00) - session S4, folder-lock report
 -------------------------------------------------------------------------</pre>
 <p class="top"><a href="#contents">back to contents</a></p>
 </div>
-<p class="foot">referenceSystem v2.2.245 &mdash; generated from the
+<p class="foot">referenceSystem v2.3.0 &mdash; generated from the
 package help blocks. See the handover document for the design.</p>
 </body></html>

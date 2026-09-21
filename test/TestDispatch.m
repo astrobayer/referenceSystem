@@ -12,7 +12,7 @@ classdef TestDispatch < matlab.unittest.TestCase
 %   anyway, which is precisely the defect being tested for.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.2
+% referenceSystem v2.3
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-24 12:20 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------
@@ -285,7 +285,7 @@ classdef TestDispatch < matlab.unittest.TestCase
             testCase.verifyTrue(contains(reportLine(summaryAt + 1), "Skipped"), ...
                 'The summary must count the intentional skips separately.');
             testCase.verifyTrue(any(startsWith(reportLine, "Version")), ...
-                'The header must state the version, and so the D107 revision.');
+                'The header must state the version and the D132 revision.');
             testCase.verifyTrue(any(startsWith(reportLine, "Generated")));
             testCase.verifyTrue(any(startsWith(reportLine, "MEX")));
             % Rev. 1.199: the toolchain is a build variable, and a timing

@@ -83,7 +83,7 @@ function [R, convention] = rotationFromAxisAngle(axis, angle, options)
 % See also AXISANGLEFROMROTATION, ROTATIONFROMQUATERNION, ATTITUDECONVENTION.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.2
+% referenceSystem v2.3
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-26 03:35 (CEST, UTC+02:00) - session S4, prompt P25
 % -------------------------------------------------------------------------

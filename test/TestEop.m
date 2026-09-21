@@ -27,7 +27,7 @@ classdef TestEop < matlab.unittest.TestCase
 %   explicitly; it must never import the package (handover section C.5 rule 4).
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.2
+% referenceSystem v2.3
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-25 13:10 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------

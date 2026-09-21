@@ -58,11 +58,19 @@ def _readHelpTag():
 VERSION_TAG, HELP_TAG = _readHelpTag()
 
 
-def check_patch_is_handover_revision():
-    """Decision D107: the patch component IS the handover revision number.
+def check_handover_revision_is_declared():
+    """Decision D132: handoverRevision IS the top row of the revision log.
 
-    Mirrors TestTime/toolboxVersion_contract_patchIsTheHandoverRevision, and
-    DERIVES both numbers rather than holding either (obligation O20). The
+    THIS CHECK USED TO ENFORCE D107 - that the PATCH component was the
+    revision - and it is the same instrument pointed at the field that now
+    carries that fact. The provenance D107 existed for is kept: an archived
+    copy still names the revision-log entry that explains it. What changed is
+    that the number stopped being a component of a semantic version, so the
+    check reads handoverRevision and the patch is free to count fixes, which
+    is what ci-actions VERSIONING.md defines it as.
+
+    Mirrors TestTime/toolboxVersion_contract_handoverRevisionMatchesTheLog,
+    and DERIVES both numbers rather than holding either (obligation O20). The
     MATLAB test skips where the handover is absent, because a distribution may
     ship without it; this one runs in the development tree, where it never is,
     so between them the rule is checked exactly once wherever it can be.
@@ -70,11 +78,16 @@ def check_patch_is_handover_revision():
     The revision log is written newest first, so the FIRST '| 1.x |' row is the
     current revision. Anchoring on it needs no sort and no maximum, and a row
     inserted in the wrong place is reported here instead of quietly becoming
-    the version.
+    the declared provenance.
     """
     source = open(os.path.join(PACKAGE, 'toolboxVersion.m'),
                   encoding='utf-8').read()
+    declared = re.search(r'handoverRevision\s*=\s*"([^"]+)"', source)
     patch = re.search(r'patchVersion\s*=\s*"([^"]+)"', source)
+    if not declared:
+        fail('version/revisionLiteral',
+             'toolboxVersion.m exposes no handoverRevision')
+        return
     if not patch:
         fail('version/patchLiteral', 'toolboxVersion.m exposes no patchVersion')
         return
@@ -88,10 +101,10 @@ def check_patch_is_handover_revision():
         fail('version/handoverRevision',
              'no parseable "| 1.x |" row in the revision log')
         return
-    if patch.group(1) != revision.group(1):
-        fail('version/patchIsNotTheRevision',
-             'patchVersion %s against handover revision 1.%s (D107)' % (
-                 patch.group(1), revision.group(1)))
+    if declared.group(1) != revision.group(1):
+        fail('version/handoverRevisionDisagrees',
+             'handoverRevision %s against revision log 1.%s (D132)' % (
+                 declared.group(1), revision.group(1)))
 
     contents = open(os.path.join(PACKAGE, 'Contents.m'), encoding='utf-8').read()
     listed = re.search(r'^%\s*Version\s+(\d+\.\d+\.\d+)', contents,
@@ -899,7 +912,7 @@ def check_unrun_revisions_against_the_o37_ceiling():
 
 
 def main():
-    check_patch_is_handover_revision()
+    check_handover_revision_is_declared()
     check_no_unexpected_file_at_the_root()
     check_unrun_revisions_against_the_o37_ceiling()
     check_build_date_agrees_with_contents()

@@ -18,7 +18,7 @@ classdef TestFrames < matlab.unittest.TestCase
 %   explicitly; it must never import the package (handover section C.5 rule 4).
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.2
+% referenceSystem v2.3
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-24 12:20 (CEST, UTC+02:00)
 % Populated: 2026-07-26 09:10 (CEST, UTC+02:00) by prompts P10 and P11

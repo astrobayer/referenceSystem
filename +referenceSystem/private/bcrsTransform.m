@@ -95,7 +95,7 @@ function ingredient = bcrsTransform(epoch, options, scale, functionName)
 % See also GCRSTOBCRS, BCRSTOGCRS, IERSCONSTANTS.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.2
+% referenceSystem v2.3
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-28 15:20 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------

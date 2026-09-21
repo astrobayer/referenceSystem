@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- referenceSystem v2.1 - registers the toolbox documentation with the MATLAB
+<!-- referenceSystem v2.3 - registers the toolbox documentation with the MATLAB
      Help browser. This file must sit in a folder that is ON THE MATLAB PATH,
      which for this toolbox is the distribution folder - never +referenceSystem,
      which is a namespace folder and is never on the path (handover C.5 rule 1).

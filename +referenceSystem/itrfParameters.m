@@ -106,7 +106,7 @@ function itrfInfo = itrfParameters(name)
 % See also CONVERTITRF, APPLYHELMERT7, ELLIPSOIDPARAMETERS.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.2
+% referenceSystem v2.3
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-26 05:40 (CEST, UTC+02:00) - session S4, prompt P10
 % -------------------------------------------------------------------------

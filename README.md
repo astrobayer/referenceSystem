@@ -121,13 +121,13 @@ utc  = referenceSystem.daySecondToEpoch([day, secondOfDay], "UTC");
 
 | Layer | What it owns | Examples |
 |---|---|---|
-| **L0** | time scales, epochs, constants | `convertTimeScale`, `mjdToEpoch`, `epochTo`, `leapSecondTable`, `fundamentalArguments` |
+| **L0** | time scales, epochs, constants | `convertTimeScale`, `mjdToEpoch`, `gpsNanosecondsToEpoch`, `epochTo`, `leapSecondTable`, `fundamentalArguments` |
 | **L1** | Earth orientation data | `readEop`, `interpolateEop`, `subdailyEopCorrection`, `zonalTideEopCorrection` |
 | **L2** | ITRS ↔ GCRS | `cipCoordinates`, `earthRotationAngle`, `rotationItrsToGcrs`, `applyRotation` |
 | **L3** | terrestrial realizations | `itrfParameters`, `convertItrf`, `applyHelmert7`, `applyMolodensky` |
 | **L4** | coordinate representations | `cartesianToGeodetic`, `cartesianToEnu`, `geodeticToUtm`, `geoidUndulation` |
 | **L4b** | rotation algebra | `rotationX/Y/Z`, `rotationFromQuaternion`, `eulerSequenceFromRotation` |
-| **L5** | orbit, attitude, navigation | `rotationGcrsToRsw`, `interpolateQuaternions`, `integrateAttitude` |
+| **L5** | orbit, attitude, navigation | `rotationGcrsToRsw`, `orbitSunGeometry`, `interpolateQuaternions`, `integrateAttitude` |
 | **L6** | dispatch and infrastructure | `convertCoordinates`, `buildMex`, `buildDocumentation`, `runTestSuite` |
 
 `help referenceSystem` lists every function grouped this way; `lookfor` works

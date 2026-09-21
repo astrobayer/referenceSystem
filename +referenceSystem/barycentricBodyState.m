@@ -115,7 +115,7 @@ function [position, velocity, info] = barycentricBodyState(body, epoch, options)
 % See also GEOCENTRICBODYSTATE, EPHEMERISBODIES, READEPHEMERIS, CONVERTTIMESCALE.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.2
+% referenceSystem v2.3
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-28 10:25 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------
