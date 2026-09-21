@@ -198,7 +198,7 @@ function [beta, u, info] = orbitSunGeometry(r, v, epoch, options)
     if size(v, 2) == 1 && nState > 1
         v = repmat(v, 1, nState);
     end
-    if numel(epoch.day) == 1 && nState > 1
+    if isscalar(epoch.day) && nState > 1
         epoch.day = repmat(epoch.day, nState, 1);
         epoch.sec = repmat(epoch.sec, nState, 1);
     end
