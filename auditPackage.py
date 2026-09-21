@@ -490,6 +490,30 @@ def check_generated_docs_carry_the_current_version():
                  'the manual says v%s against sources v%s; rebuild it with '
                  'doc/buildReferenceManual.py' % (sorted(found)[0], current))
 
+        # THE REVISION IS CHECKED SEPARATELY BECAUSE D132 SEPARATED THEM.
+        # Until 2.3.0 the patch component WAS the handover revision, so the
+        # version stamp above caught a stale manual on every revision - the
+        # two numbers moved together.  They no longer do: a revision that
+        # records a run leaves the version alone, and the manual's front
+        # matter would then print a revision the sources had left behind with
+        # nothing to say so.  Rev. 1.247 found that by hand and could not
+        # close it, because the front-matter table is page content and no
+        # reader of the raw bytes can reach it.  buildReferenceManual.py now
+        # writes the revision into the PDF SUBJECT, beside the version in the
+        # title, which is the only reason this check can exist at all.
+        declared = re.search(r'handoverRevision\s*=\s*"([^"]+)"', source)
+        if declared:
+            stamped = re.search(rb'handover revision 1\.(\d+)', raw)
+            if not stamped:
+                fail('doc/manualRevisionMissing',
+                     'the manual carries no handover-revision stamp; rebuild '
+                     'it with doc/buildReferenceManual.py')
+            elif stamped.group(1).decode() != declared.group(1):
+                fail('doc/manualRevisionIsStale',
+                     'the manual says handover revision 1.%s against sources '
+                     'at 1.%s; rebuild it with doc/buildReferenceManual.py'
+                     % (stamped.group(1).decode(), declared.group(1)))
+
 
 def check_closed_register_items_are_not_called_open():
     """No item the H.11 register records as CLOSED may be named in the header.
