@@ -110,7 +110,7 @@ function versionInfo = toolboxVersion()
     % D132: THE HANDOVER REVISION, WHICH IS NO LONGER PART OF THE VERSION.
     % Bump this in the same edit that writes the revision log entry; the two
     % are checked against each other by a test and by auditPackage.py.
-    handoverRevision = "248";
+    handoverRevision = "249";
     buildDate = "2026-09-21";
     toolboxAuthor = "Matthias Weigelt";
     generatorModel = "Claude Opus 5 (Anthropic)";
