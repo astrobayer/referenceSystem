@@ -6,6 +6,34 @@ classdef TestPerformance < matlab.unittest.TestCase
 %   and fails only beyond five times it, because the target is machine
 %   dependent while a fivefold miss is a defect.
 %
+%   EVERY TARGET IN THIS SUITE WAS RE-DERIVED FROM MEASUREMENT AT REV. 1.250,
+%   and this is the one place the derivation is written down rather than
+%   repeated at twenty-seven call sites. Each target is twice the slowest
+%   median the self-hosted PCWIN64 runner has reported for that row, rounded
+%   up to two significant figures - the section B.7 rule - over three
+%   consecutive green runs at v2.3.0: Actions 35693657462, 35694215340 and
+%   35695072274. Two significant figures and no further, because a rounder
+%   number is slack nobody measured. Each call site states its own slowest
+%   median and its own target, so a reader can check the arithmetic without
+%   coming here.
+%
+%   THE ONE-HOST CAVEAT IS DISCHARGED BY THE RECORD, NOT IGNORED. The rule
+%   asks for twice the SLOWEST host, and several targets were deliberately
+%   held loose while only GLNXA64 had been measured. There is no second host
+%   to wait for: the MATLAB suite runs on the PCWIN64 runner alone and the
+%   Linux job runs only the C suite (rev. 1.227). What makes that safe rather
+%   than merely unavoidable is that PCWIN64 has been the SLOWER host in every
+%   paired measurement this project has made - 1.9x to 4.8x across the whole
+%   suite and across the two rotation rows - so a target taken from it cannot
+%   be loosened by measuring GLNXA64 later. It can only be confirmed.
+%
+%   WHAT A TIGHT TARGET DOES AND DOES NOT DO. It moves the Status column and
+%   the slowerThanTarget warning, which is where a regression should first be
+%   visible; it does not move the hard failure, which stays at five times the
+%   target and is asserted on the FASTEST repetition wherever one is kept.
+%   referenceSystemCiGate goes red on a failed test or an unexpected filter
+%   and on nothing else, so a SLOW row informs and never stops the run.
+%
 %   This class also owns the two record formats that referenceSystem.runTestSuite
 %   parses into the BENCHMARKS and CONVERGENCE sections of the report. A test
 %   that measures something builds the record here and logs it itself:

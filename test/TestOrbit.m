@@ -516,13 +516,16 @@ classdef TestOrbit < matlab.unittest.TestCase
             % records at 1 Hz, and a science pipeline resamples it onto the
             % accelerometer or KBR grid, which is a query per node.
             %
-            % 0.20 s, TIGHTENED FROM THE 1.0 s PREDICTED IN REV. 1.73 (risk
-            % R17). Measured 0.058 s on PCWIN64 and 0.012 s on GLNXA64 - the
-            % prediction was pessimistic by 17x, by far the worst of the three,
+            % 0.052 s, RE-DERIVED AT REV. 1.250 FROM THE SLOWEST OF THREE
+            % MEASURED MEDIANS, 0.025895 s - see the class help of
+            % TestPerformance for the runs and the rule. It replaces the 0.20 s
+            % of rev. 1.76, which was twice 0.058 s on the PCWIN64 of the day
+            % rounded up generously; this runner does the same work in 0.026 s,
+            % so the old target had drifted to 7.7x the cost. The rev. 1.73
+            % prediction of 1.0 s was pessimistic by 39x on today's host,
             % because it budgeted for a per-query search that the vectorised
-            % implementation does not perform. Twice the slowest host, rounded
-            % up, per the rule stated in TestRotationAlgebra.
-            targetSeconds = 0.20;
+            % implementation does not perform.
+            targetSeconds = 0.052;
             nodeCount = 86400;
             second = (0:nodeCount - 1)';
             nodeEpoch = TestOrbit.epochAt(second);
@@ -918,22 +921,23 @@ classdef TestOrbit < matlab.unittest.TestCase
             % attribution needs, with the CIP equator so the precession-
             % nutation series is in the measurement.
             %
-            % 0.05 s, SET FROM THE MEASURED MEDIAN AND NO LONGER FROM A
-            % BOUND. The BENCHMARK row of run 35693657462 on the self-hosted
-            % PCWIN64 runner reads 0.024800 s at N=1440. The rev. 1.247 bound
-            % of 0.078 s - all a total wall time can yield - was therefore
-            % pessimistic by 3.1x, and the 0.20 s it justified was 8x the
-            % truth: a target that loose detects nothing. 0.05 s is
-            % TestRotationAlgebra's rule, twice the slowest host measured and
-            % rounded up, applied to the one host there is. The hard failure
-            % stays at five times the target, so 0.25 s, which is ten times
-            % the measurement.
+            % 0.051 s, SET FROM THE MEASURED MEDIAN AND NO LONGER FROM A
+            % BOUND. Rev. 1.249 made referenceSystemCiGate echo the BENCHMARKS
+            % table to the job log, which a CI-only session can fetch; the
+            % report artefact, whose blob host the egress policy refuses, is no
+            % longer the only copy. The rev. 1.247 bound of 0.078 s - all a
+            % total wall time can yield - was pessimistic by 3.1x, and the
+            % 0.20 s it justified was 8x the truth: a target that loose
+            % detects nothing.
             %
-            % THE ROW IS QUOTED BECAUSE IT CAN NOW BE READ. Rev. 1.249 made
-            % referenceSystemCiGate echo the BENCHMARKS table to the job log,
-            % which a CI-only session can fetch; the report artefact, whose
-            % blob host the egress policy refuses, is no longer the only copy.
-            targetSeconds = 0.05;
+            % 0.05 s WAS SET FROM TWO RUNS AND IS CORRECTED HERE BY THE THIRD.
+            % The slowest of three medians is 0.025262 s, so twice it is
+            % 0.050524 s and the rule gives 0.051, not 0.05. The difference
+            % cannot fail a run and is corrected anyway, because a target that
+            % is 1.98x the slowest measurement while claiming to be twice it
+            % is the kind of small untruth this suite is built to not carry.
+            % See the class help of TestPerformance for the runs and the rule.
+            targetSeconds = 0.051;
             stateCount = 1440;
             [r, v] = TestOrbit.circularState(89, 30, ...
                 (0:stateCount - 1)*360/stateCount);

@@ -1456,10 +1456,20 @@ classdef TestTime < matlab.unittest.TestCase
             % normalizeEpoch entry and the struct assembly. Handover section
             % B.9 states this cost explicitly and states the fix for a hot loop
             % is the C API of P19, not a faster single call. The N=1 row is
-            % therefore benchmarked against a call-overhead target of 3 ms so
-            % that it reports OK when the overhead is normal and FAIL only when
+            % therefore benchmarked against a call-overhead target so that it
+            % reports OK when the overhead is normal and SLOW only when
             % something has made a single call pathologically slow; the useful
             % per-epoch figure is the arc row.
+            %
+            % BOTH REPORT TARGETS RE-DERIVED AT REV. 1.250 FROM THE SLOWEST OF
+            % THREE MEASURED MEDIANS, 0.000571 s and 0.007220 s, giving
+            % 0.0012 s and 0.015 s - see the class help of TestPerformance for
+            % the runs and the rule. THE HARD ASSERTION BELOW IS DELIBERATELY
+            % NOT MOVED WITH THEM: it is five times P24's published 2 us per
+            % epoch, which is a contract this toolbox owes its callers and not
+            % a property of this runner. The report target is the regression
+            % detector; the specification is the floor, and they are allowed
+            % to differ by the 58x they currently do.
             single = referenceSystem.daySecondToEpoch([58849 0], "TT");
             arc = referenceSystem.daySecondToEpoch( ...
                 [58849*ones(86400,1) (0:86399)'], "TT");
@@ -1470,9 +1480,9 @@ classdef TestTime < matlab.unittest.TestCase
                 @() referenceSystem.fundamentalArguments(arc), 3);
 
             testCase.log(1, TestPerformance.benchmarkRecord( ...
-                "fundamentalArguments(N=1,call)", 1, singleMedian, 3e-3));
+                "fundamentalArguments(N=1,call)", 1, singleMedian, 1.2e-3));
             testCase.log(1, TestPerformance.benchmarkRecord( ...
-                "fundamentalArguments(N=86400)", 86400, arcMedian, 0.2));
+                "fundamentalArguments(N=86400)", 86400, arcMedian, 0.015));
 
             % The contract is the per-epoch arithmetic target, not the single
             % call: 2 us times 86400 epochs is 0.173 s, and the arc must beat
@@ -1662,14 +1672,21 @@ classdef TestTime < matlab.unittest.TestCase
             % rebuild would show up here and in the N=1 rotation row and
             % nowhere else in 439 tests.
             %
-            % The targets are PREDICTIONS in the sense risk R17 warns about -
-            % neither function has ever been benchmarked - and they are set on
-            % one host, so rev. 1.76's rule (twice the slowest host measured)
-            % cannot be applied yet. Re-argue them against the first two
-            % platforms rather than adopting them.
+            % THE PREDICTIONS OF REV. 1.81 ARE REPLACED BY MEASUREMENT AT
+            % REV. 1.250, AND THE CONDITION THEY WAITED ON IS DISCHARGED
+            % RATHER THAN MET. That revision set these two on one host and
+            % deferred the rule - twice the slowest host measured - until a
+            % second platform existed. It does not and will not: the MATLAB
+            % suite runs on the self-hosted PCWIN64 runner alone and the Linux
+            % job runs only the C suite (rev. 1.227). What settles it is that
+            % PCWIN64 is the SLOWER host in every paired measurement this
+            % project has made, by 1.9x to 4.8x, so a target taken from it
+            % cannot be loosened by measuring GLNXA64 later - only confirmed.
+            % Slowest of three medians: 0.005864 s and 0.059263 s, so 0.012 s
+            % and 0.12 s. See the class help of TestPerformance.
             callCount = 10000;
-            constantsTarget = 0.10;
-            scaleTarget = 0.20;
+            constantsTarget = 0.012;
+            scaleTarget = 0.12;
 
             constantsSeconds = TestPerformance.medianDuration(@() ...
                 localRepeat(@referenceSystem.iersConstants, callCount), 3);
@@ -1703,7 +1720,13 @@ classdef TestTime < matlab.unittest.TestCase
             % conversion a reprocessing campaign does most often - every data
             % record carries a UTC tag and every model wants TT - so it is worth
             % a row in the report even though nothing about it is subtle.
-            targetSeconds = 0.2;
+            %
+            % 0.049 s, RE-DERIVED AT REV. 1.250 FROM THE SLOWEST OF THREE
+            % MEASURED MEDIANS, 0.024356 s - see the class help of
+            % TestPerformance for the runs and the rule. The 0.2 s it replaces
+            % is the section B.7 budget, which was published before anything
+            % measured this function and sat at 8x its cost.
+            targetSeconds = 0.049;
             day = 60000 + floor(linspace(0, 999, 1000000)');
             second = mod(linspace(0, 86399, 1000000)', 86400);
             utc = referenceSystem.daySecondToEpoch([day, second], "UTC");

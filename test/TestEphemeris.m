@@ -1854,17 +1854,34 @@ classdef TestEphemeris < matlab.unittest.TestCase
             % the first row; gcrsToBcrs calls the ephemeris twice more for U
             % and V. A single total would hide both relations, and the
             % relations are the only part of this a later reader can check.
+            %
+            % TARGETS RE-DERIVED AT REV. 1.250 FROM THE SLOWEST OF THREE
+            % MEASURED MEDIANS - see the class help of TestPerformance for the
+            % runs and the rule. 0.005158, 0.005069, 0.019527 and 0.018428 s
+            % give 0.011, 0.011, 0.040 and 0.037 s.
+            %
+            % AND THE MEASUREMENT CONTRADICTS THE PARAGRAPH ABOVE, WHICH IS
+            % RECORDED RATHER THAN ROUNDED AWAY. geocentricBodyState does not
+            % come out near twice barycentricBodyState: the two rows agree to
+            % two per cent on all three runs, so the second call is costing
+            % almost nothing. Either the differencing shares work the comment
+            % does not know about or one of the two calls is not doing what
+            % the comment assumes. NOTHING HERE TESTS THE RELATION - the only
+            % ratio asserted is the inverse against the forward map - so this
+            % is an open question and not a defect, and the equal targets are
+            % what the measurement supports rather than what the claim
+            % predicts.
             testCase.log(1, TestPerformance.verifiedBenchmark(testCase, ...
                 "barycentricBodyState (sofa,N=500)", 500, ...
-                median(barycentricTime), 0.05, min(barycentricTime)));
+                median(barycentricTime), 0.011, min(barycentricTime)));
             testCase.log(1, TestPerformance.verifiedBenchmark(testCase, ...
                 "geocentricBodyState (sofa,N=500)", 500, ...
-                median(geocentricTime), 0.10, min(geocentricTime)));
+                median(geocentricTime), 0.011, min(geocentricTime)));
             testCase.log(1, TestPerformance.verifiedBenchmark(testCase, ...
-                "gcrsToBcrs (N=500)", 500, median(forwardTime), 0.20, ...
+                "gcrsToBcrs (N=500)", 500, median(forwardTime), 0.040, ...
                 min(forwardTime)));
             testCase.log(1, TestPerformance.verifiedBenchmark(testCase, ...
-                "bcrsToGcrs (N=500)", 500, median(inverseTime), 0.20, ...
+                "bcrsToGcrs (N=500)", 500, median(inverseTime), 0.037, ...
                 min(inverseTime)));
 
             % THE INVERSE IS SHERMAN-MORRISON ON A RANK-ONE UPDATE AND MUST

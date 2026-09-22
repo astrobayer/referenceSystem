@@ -2015,12 +2015,20 @@ classdef TestRotation < matlab.unittest.TestCase
             % thing. The ratio this test asserts was invisible in the report
             % precisely because the test passed: a quiet pass leaves no trace
             % of the number it checked.
+            %
+            % BOTH TARGETS RE-DERIVED AT REV. 1.250 FROM THE SLOWEST OF THREE
+            % MEASURED MEDIANS, 0.050161 s and 0.007782 s, giving 0.11 s and
+            % 0.016 s - see the class help of TestPerformance for the runs and
+            % the rule. Neither row carries a hard assertion and neither
+            % acquires one here: what this test refuses is the RATIO below,
+            % and an absolute bound on either path would be a second claim
+            % nobody has argued.
             testCase.log(1, TestPerformance.benchmarkRecord( ...
                 "rotationItrsToGcrs (exact,N=5000,R)", 5000, ...
-                median(exactTime), 0.20, min(exactTime)));
+                median(exactTime), 0.11, min(exactTime)));
             testCase.log(1, TestPerformance.benchmarkRecord( ...
                 "rotationItrsToGcrs (Interpolant,N=5000)", 5000, ...
-                median(fastTime), 0.05, min(fastTime)));
+                median(fastTime), 0.016, min(fastTime)));
 
             % THE RATIO IS THE CLAIM AND IT SURVIVES A LOADED HOST, because
             % both paths are timed back to back on the same machine in the
@@ -2082,15 +2090,23 @@ classdef TestRotation < matlab.unittest.TestCase
             % twice the rotation is the honest expectation; the six-output call
             % adds D102's two extra rotations for the rate partials and is
             % therefore expected near four times.
+            %
+            % ALL THREE RE-DERIVED AT REV. 1.250 FROM THE SLOWEST OF THREE
+            % MEASURED MEDIANS, 0.010542, 0.011193 and 0.035995 s, giving
+            % 0.022, 0.023 and 0.072 s - see the class help of TestPerformance
+            % for the runs and the rule. The measured shape is 1.0 : 1.06 :
+            % 3.4 against the 1 : 2 : 4 the paragraph above expects, so the
+            % three rotation partials are very nearly free and only the rate
+            % partials cost what was predicted.
             testCase.log(1, TestPerformance.verifiedBenchmark(testCase, ...
                 "rotationItrsToGcrs (N=500,R)", 500, median(rotationTime), ...
-                0.05, min(rotationTime)));
+                0.022, min(rotationTime)));
             testCase.log(1, TestPerformance.verifiedBenchmark(testCase, ...
                 "rotationItrsToGcrsPartials (N=500,dR)", 500, ...
-                median(partialTime), 0.10, min(partialTime)));
+                median(partialTime), 0.023, min(partialTime)));
             testCase.log(1, TestPerformance.verifiedBenchmark(testCase, ...
                 "rotationItrsToGcrsPartials (N=500,dR+dRdot)", 500, ...
-                median(partialRateTime), 0.30, min(partialRateTime)));
+                median(partialRateTime), 0.072, min(partialRateTime)));
 
             % THE MARGINAL COST IS THE ASSERTION. Ten times the rotation would
             % not be "small" by any reading of P20's sentence, and would mean
@@ -2154,9 +2170,19 @@ classdef TestRotation < matlab.unittest.TestCase
                 rotationTime(k) = toc(start);
             end
 
+            % 0.00033 s, RE-DERIVED AT REV. 1.250 FROM THE SLOWEST OF THREE
+            % MEASURED MEDIANS, 0.000162 s - see the class help of
+            % TestPerformance for the runs and the rule. The 0.05 s it replaces
+            % was 309x the cost, which is not a target but a placeholder.
+            % THIS IS THE ROW WHERE THE RULE IS MOST LIKELY TO BITE, and the
+            % paragraph above says why: at five repetitions this figure swung
+            % 6.8x between runs that changed nothing. At twenty it is steady to
+            % eight per cent across the three runs behind this number. If it
+            % starts reporting SLOW while the ratio below still passes, that is
+            % the timer and the machine, not the generator layer.
             testCase.log(1, TestPerformance.verifiedBenchmark(testCase, ...
                 "earthOrientationPartials (N=500)", 500, median(partialTime), ...
-                0.05, min(partialTime)));
+                0.00033, min(partialTime)));
 
             % AND THE CLAIM IS THE RATIO, BECAUSE THE ABSOLUTE ROW CANNOT
             % CARRY IT (obligation O21). What is being asserted is that the
@@ -2207,15 +2233,29 @@ classdef TestRotation < matlab.unittest.TestCase
             % fastest repetition estimates the code and the median reports the
             % machine. See TestDispatch/convertCoordinates_speed_manySinglePointCalls
             % for the full argument; it is not repeated here.
-            testCase.log(1, TestPerformance.benchmarkRecord( ...
-                "rotationItrsToGcrs (N=1,call)", 1, median(singleTime), 5e-3, ...
-                min(singleTime)));
-            testCase.log(1, TestPerformance.benchmarkRecord( ...
-                "rotationItrsToGcrs (N=5000,R+Rdot)", 5000, median(arcTime), 2.0, ...
-                min(arcTime)));
-
-            testCase.verifyLessThan(min(singleTime), 5e-3);
-            testCase.verifyLessThan(min(arcTime), 2.0);
+            % BOTH ROWS FAILED AT ONE TIMES THEIR TARGET UNTIL REV. 1.250,
+            % WHICH IS NOT THE RULE THIS SUITE PUBLISHES. Section B.7, section
+            % D.1 and the class help of TestPerformance all say a benchmark
+            % warns at its target and fails at five times it, because the
+            % target is a property of the machine and a fivefold miss is a
+            % property of the code. These two called benchmarkRecord and then
+            % asserted the bare target, so the number was doing both jobs at
+            % once. It never showed, because the targets sat at 3.0x and 15.2x
+            % what the code costs - the looseness was hiding the defect, and
+            % re-deriving the targets would have turned both rows into hard
+            % failures on any busy minute. Routed through verifiedBenchmark,
+            % which carries the five-times rule and the fastest-repetition
+            % rule in the one place they are tested.
+            %
+            % TARGETS FROM THE SLOWEST OF THREE MEASURED MEDIANS, 0.001657 s
+            % and 0.131979 s, giving 0.0034 s and 0.27 s - see the class help
+            % of TestPerformance for the runs and the rule.
+            testCase.log(1, TestPerformance.verifiedBenchmark(testCase, ...
+                "rotationItrsToGcrs (N=1,call)", 1, median(singleTime), ...
+                0.0034, min(singleTime)));
+            testCase.log(1, TestPerformance.verifiedBenchmark(testCase, ...
+                "rotationItrsToGcrs (N=5000,R+Rdot)", 5000, median(arcTime), ...
+                0.27, min(arcTime)));
         end
 
     end
