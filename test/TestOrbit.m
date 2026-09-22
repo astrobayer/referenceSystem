@@ -918,22 +918,22 @@ classdef TestOrbit < matlab.unittest.TestCase
             % attribution needs, with the CIP equator so the precession-
             % nutation series is in the measurement.
             %
-            % 0.20 s, TIGHTENED FROM THE 1.0 s PREDICTED AT REV. 1.246, AND
-            % FROM A BOUND RATHER THAN FROM THE MEDIAN. The first run of this
-            % method took 0.23237 s in total on the self-hosted PCWIN64
-            % runner, and medianDuration calls the function three times, so
-            % the median is at most 0.078 s however the setup is apportioned.
-            % 0.20 s is 2.6x that bound, which is the "twice the slowest host,
-            % rounded up" rule of TestRotationAlgebra applied to the only
-            % measurement there is.
+            % 0.05 s, SET FROM THE MEASURED MEDIAN AND NO LONGER FROM A
+            % BOUND. The BENCHMARK row of run 35693657462 on the self-hosted
+            % PCWIN64 runner reads 0.024800 s at N=1440. The rev. 1.247 bound
+            % of 0.078 s - all a total wall time can yield - was therefore
+            % pessimistic by 3.1x, and the 0.20 s it justified was 8x the
+            % truth: a target that loose detects nothing. 0.05 s is
+            % TestRotationAlgebra's rule, twice the slowest host measured and
+            % rounded up, applied to the one host there is. The hard failure
+            % stays at five times the target, so 0.25 s, which is ten times
+            % the measurement.
             %
-            % THE MEDIAN ITSELF IS NOT QUOTED HERE ON PURPOSE. Its BENCHMARK
-            % row is logged at Concise and reaches the report artefact, which
-            % the egress policy of a CI-only session cannot fetch; the wall
-            % time is in the job log, which it can. A bound that was read is
-            % worth more than a median that was assumed, and the next session
-            % with the artefact in hand can replace this with the row.
-            targetSeconds = 0.20;
+            % THE ROW IS QUOTED BECAUSE IT CAN NOW BE READ. Rev. 1.249 made
+            % referenceSystemCiGate echo the BENCHMARKS table to the job log,
+            % which a CI-only session can fetch; the report artefact, whose
+            % blob host the egress policy refuses, is no longer the only copy.
+            targetSeconds = 0.05;
             stateCount = 1440;
             [r, v] = TestOrbit.circularState(89, 30, ...
                 (0:stateCount - 1)*360/stateCount);
