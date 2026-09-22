@@ -1126,14 +1126,16 @@ classdef TestRotationAlgebra < matlab.unittest.TestCase
             % 1 Hz star camera series into matrices, which is 86 400 pages a day
             % and a million pages in under a fortnight of data.
             %
-            % 0.30 s, TIGHTENED FROM THE 0.5 s PREDICTED IN REV. 1.73 (risk
-            % R17). Measured 0.148 s on PCWIN64 and 0.066 s on GLNXA64, so the
-            % prediction was pessimistic by 3.4x on the slower of the two.
+            % 0.14 s, RE-DERIVED AT REV. 1.250 FROM THE SLOWEST OF THREE
+            % MEASURED MEDIANS, 0.068180 s - see the class help of
+            % TestPerformance for the runs and the rule. It replaces the 0.30 s
+            % of rev. 1.76, twice the 0.148 s that host then measured; this
+            % runner does the same work in 0.068 s.
             % THE RULE, so the next revision does not reinvent it: twice the
             % slowest host measured, rounded up. The hard failure stays at five
             % times the target, which puts it at ten times the slowest
             % measurement - a real regression detector rather than a flaky one.
-            targetSeconds = 0.30;
+            targetSeconds = 0.14;
             angle = linspace(0, 2 * pi, 1000000);
             q = referenceSystem.normalizeQuaternion([cos(angle / 2); ...
                 sin(angle / 2) * 0.3; sin(angle / 2) * 0.5; sin(angle / 2) * 0.8]);

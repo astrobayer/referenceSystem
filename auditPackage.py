@@ -847,6 +847,179 @@ def _help_sections(text):
     return {name: value.strip() for name, value in sections.items()}
 
 
+def _balanced_arguments(body, open_index):
+    """The text between a '(' and its match, quotes respected."""
+    depth = 0
+    i = open_index
+    while i < len(body):
+        c = body[i]
+        if c == '"':
+            i += 1
+            while i < len(body) and body[i] != '"':
+                i += 1
+        elif c == '(':
+            depth += 1
+        elif c == ')':
+            depth -= 1
+            if depth == 0:
+                return body[open_index + 1:i]
+        i += 1
+    return None
+
+
+def _split_arguments(text):
+    """Top-level commas only, continuations and comment lines removed."""
+    kept = []
+    for line in text.split('\n'):
+        stripped = line.strip()
+        if stripped.startswith('%'):
+            continue
+        kept.append(line.replace('...', ' '))
+    text = ' '.join(kept)
+    parts, depth, current = [], 0, ''
+    i = 0
+    while i < len(text):
+        c = text[i]
+        if c == '"':
+            current += c
+            i += 1
+            while i < len(text) and text[i] != '"':
+                current += text[i]
+                i += 1
+            current += '"'
+        elif c in '([{':
+            depth += 1
+            current += c
+        elif c in ')]}':
+            depth -= 1
+            current += c
+        elif c == ',' and depth == 0:
+            parts.append(current.strip())
+            current = ''
+        else:
+            current += c
+        i += 1
+    parts.append(current.strip())
+    return parts
+
+
+BENCHMARK_CALLS = {'benchmarkRecord': 3, 'verifiedBenchmark': 4}
+
+
+def _benchmark_call_sites(body):
+    """Every (label, target) a test file asserts, targets resolved."""
+    found = []
+    for name, index in BENCHMARK_CALLS.items():
+        for call in re.finditer(r'\b' + name + r'\(', body):
+            opening = call.end() - 1
+            inner = _balanced_arguments(body, opening)
+            if inner is None:
+                continue
+            args = _split_arguments(inner)
+            if len(args) <= index:
+                continue
+            label = args[index - 3]
+            if not (label.startswith('"') and label.endswith('"')):
+                continue
+            found.append((label[1:-1], args[index], opening, body))
+    resolved = []
+    for label, token, opening, text in found:
+        try:
+            resolved.append((label, float(token)))
+            continue
+        except ValueError:
+            pass
+        if not re.match(r'^[A-Za-z]\w*$', token):
+            yield_fail = 'perf/targetNotALiteral'
+            fail(yield_fail, '%s carries the expression %s' % (label, token))
+            continue
+        assignment = None
+        for hit in re.finditer(r'\b' + token + r'\s*=\s*([0-9.eE+-]+)\s*;',
+                               text[:opening]):
+            assignment = hit.group(1)
+        if assignment is None:
+            fail('perf/targetUnresolved',
+                 '%s reads %s and no assignment of it was found' % (label, token))
+            continue
+        resolved.append((label, float(assignment)))
+    return resolved
+
+
+def check_benchmark_targets_match_section_b7():
+    """Section G.2a: every B.7 target equals the target its test asserts.
+
+    THIS CHECK WAS A MANUAL ROW OF THE G.2a TABLE FROM REV. 1.81 TO REV.
+    1.250, and it was added because the table published 80 us for the N=1
+    rotation while the test asserted 5 ms - a 62x disagreement that stood
+    from rev. 1.0 and that nothing looked for, because the audit checked
+    signatures and names and never numbers. A row of a table that a human
+    is supposed to re-run is not an instrument; rev. 1.250 moved every
+    target in the suite at once, which is exactly the pass where a manual
+    comparison of twenty-seven rows silently goes stale.
+
+    IT DERIVES BOTH SIDES AND HOLDS NEITHER (obligation O20). The published
+    target is parsed out of section B.7 and the asserted one out of the test
+    that measures it, so this file cannot be the thing that is right while
+    the suite is wrong - the failure shape rev. 1.53, rev. 1.77 and rev.
+    1.81 each found in a Python mirror.
+
+    TestPerformance.m IS EXCLUDED ON PURPOSE. It owns the record FORMAT and
+    its contract tests build rows with invented numbers - benchmarkRecord
+    ("convertItrf", 1000000, 0.412, 0.5) is a format fixture, not a target.
+    The measuring test owns its numbers; this class owns their format.
+    """
+    handover = os.path.join(ROOT, 'HANDOVER_referenceSystem.md')
+    if not os.path.isfile(handover):
+        fail('perf/handoverMissing', handover)
+        return
+    text = open(handover, encoding='utf-8').read()
+    start = text.find('| Report row | N | Slowest median [s] |')
+    if start < 0:
+        fail('perf/sectionB7TableMissing',
+             'section B.7 carries no "Report row" benchmark table')
+        return
+    end = text.find('\n\n', start)
+    published = {}
+    for line in text[start:end].split('\n'):
+        row = re.match(r'^\|\s*`([^`]+)`\s*\|[^|]*\|[^|]*\|\s*\*\*([0-9.eE+-]+)\*\*\s*\|',
+                       line)
+        if row:
+            published[row.group(1)] = float(row.group(2))
+    if not published:
+        fail('perf/sectionB7Unparseable',
+             'the section B.7 benchmark table parsed to no rows')
+        return
+
+    asserted = {}
+    testdir = os.path.join(ROOT, 'test')
+    for leaf in sorted(os.listdir(testdir)):
+        if not leaf.endswith('.m') or leaf == 'TestPerformance.m':
+            continue
+        body = open(os.path.join(testdir, leaf), encoding='utf-8').read()
+        for label, target in _benchmark_call_sites(body):
+            if label in asserted and asserted[label][1] != target:
+                fail('perf/benchmarkTargetAmbiguous',
+                     '%s is asserted as %g in %s and %g in %s' % (
+                         label, asserted[label][1], asserted[label][0],
+                         target, leaf))
+            asserted[label] = (leaf, target)
+
+    for label in sorted(published):
+        if label not in asserted:
+            fail('perf/benchmarkRowUnmeasured',
+                 'section B.7 publishes %s and no test asserts it' % label)
+        elif asserted[label][1] != published[label]:
+            fail('perf/benchmarkTargetDisagrees',
+                 '%s: section B.7 says %g, %s asserts %g' % (
+                     label, published[label], asserted[label][0],
+                     asserted[label][1]))
+    for label in sorted(asserted):
+        if label not in published:
+            fail('perf/benchmarkRowUnpublished',
+                 '%s is measured by %s and section B.7 does not publish it' % (
+                     label, asserted[label][0]))
+
+
 def check_no_unexpected_file_at_the_root():
     """The distribution root holds a known set of files and nothing else.
 
@@ -938,6 +1111,7 @@ def check_unrun_revisions_against_the_o37_ceiling():
 def main():
     check_handover_revision_is_declared()
     check_no_unexpected_file_at_the_root()
+    check_benchmark_targets_match_section_b7()
     check_unrun_revisions_against_the_o37_ceiling()
     check_build_date_agrees_with_contents()
     check_handover_header_is_current()

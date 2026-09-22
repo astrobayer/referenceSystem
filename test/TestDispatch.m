@@ -2094,13 +2094,22 @@ classdef TestDispatch < matlab.unittest.TestCase
             % call of the session still pays the build; at a thousand calls
             % that is under four per cent of the budget below.
             %
-            % 1.0 s for a thousand calls is a NEW TARGET AND A PREDICTION (risk
-            % R17): after caching, a call is a struct lookup, a path search
-            % over 194 edges and one Vermeille evaluation on one point, so a
-            % millisecond each is generous. It is also 2 to 39 times under what
-            % the uncached graph cost, which is what makes it a detector for
-            % this defect returning rather than a decoration.
-            targetSeconds = 1.0;
+            % 1.7 s, AND THIS IS THE ONE TARGET IN THE SUITE THAT REV. 1.250
+            % LOOSENS. Every other row was a prediction or a bound far above
+            % what the code costs; this one was set at rev. 1.80 from the only
+            % host then measured, GLNXA64 at 0.445 s, and explicitly HELD at
+            % 1.0 s rather than tightened, because section B.7 predicted that
+            % PCWIN64 would be several times slower at exactly this kind of
+            % work - a 194-edge path search repeated a thousand times.
+            %
+            % THE PREDICTION IS NOW MEASURED AND IT WAS RIGHT. PCWIN64 costs
+            % 0.837884 s, the slowest of three medians, which is 1.88x the
+            % GLNXA64 figure the 1.0 s was built on. The rule is twice the
+            % slowest host measured, so the target is 1.7 s, and the row stops
+            % sitting at 0.84 of its own budget where any busy minute on the
+            % runner raises a warning about the machine rather than the code.
+            % See the class help of TestPerformance for the runs and the rule.
+            targetSeconds = 1.7;
             callCount = 1000;
             point = [4075532.4772, 931770.2186, 4801623.4210];
 
@@ -2144,14 +2153,18 @@ classdef TestDispatch < matlab.unittest.TestCase
             % is being rebuilt per call, which is what run 9 suggested when
             % convertCoordinates_contract_everyPublishedEdgeExecutes took 7.6 s
             % for about twenty calls.
-            % 0.30 s, TIGHTENED FROM THE 1.0 s PREDICTED IN REV. 1.73 (risk
-            % R17). Measured 0.124 s on PCWIN64 and 0.032 s on GLNXA64, against
-            % 0.103 s and 0.030 s for the bare cartesianToGeodetic leg on the
-            % same runs. THE ROUTING IS ESSENTIALLY FREE AT THIS SIZE: the
-            % 194-edge graph is rebuilt per call, but at N = 1e6 that cost
-            % amortises to under 2 per cent. It is NOT free at small N, which
-            % is why everyPublishedEdgeExecutes remains among the slower tests.
-            targetSeconds = 0.30;
+            % 0.15 s, RE-DERIVED AT REV. 1.250 FROM THE SLOWEST OF THREE
+            % MEASURED MEDIANS, 0.073529 s - see the class help of
+            % TestPerformance for the runs and the rule. It replaces the 0.30 s
+            % of rev. 1.76, twice the 0.124 s that host then measured.
+            % THE ROUTING IS STILL ESSENTIALLY FREE AT THIS SIZE, and this pair
+            % of rows is now the cleanest evidence of it in the report: the
+            % bare cartesianToGeodetic leg measures 0.074467 s on the same runs
+            % and lands on the same 0.15 s target. The 194-edge graph is still
+            % rebuilt per call and at N = 1e6 still amortises away. It is NOT
+            % free at small N, which is why everyPublishedEdgeExecutes remains
+            % among the slower tests and why the thousand-call row above exists.
+            targetSeconds = 0.15;
             point = TestPerformance.earthFixedCloud(1000000);
 
             medianSeconds = TestPerformance.medianDuration(@() ...

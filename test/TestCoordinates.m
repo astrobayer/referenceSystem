@@ -938,7 +938,14 @@ classdef TestCoordinates < matlab.unittest.TestCase
             % was benchmarked. The two are not interchangeable: the forward map
             % is closed form and the inverse is iterative, so this is the one
             % that can degrade when a convergence criterion changes.
-            targetSeconds = 0.3;
+            %
+            % 0.15 s, RE-DERIVED AT REV. 1.250 FROM THE SLOWEST OF THREE
+            % MEASURED MEDIANS, 0.074467 s - see the class help of
+            % TestPerformance for the runs and the rule. The 0.3 s it replaces
+            % came from section B.7 and was never a measurement of this
+            % function; it happens to sit at exactly 4x what the function
+            % costs, which is a budget rather than a detector.
+            targetSeconds = 0.15;
             point = TestPerformance.earthFixedCloud(1000000);
 
             medianSeconds = TestPerformance.medianDuration(@() ...

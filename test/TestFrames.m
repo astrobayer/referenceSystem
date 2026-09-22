@@ -543,14 +543,27 @@ classdef TestFrames < matlab.unittest.TestCase
             % REQUIRED and has no default, because section D.1 fixes the
             % minimum at three and a default would let a caller take fewer
             % without noticing. The S4 run found this call one short.
-            duration = TestPerformance.medianDuration(@() ...
+            % BOTH ROWS IN THIS BLOCK FAILED AT ONE TIMES THEIR TARGET UNTIL
+            % REV. 1.250, WHICH IS NOT THE RULE THIS SUITE PUBLISHES. Section
+            % B.7, section D.1 and the class help of TestPerformance all say a
+            % benchmark warns at its target and fails at five times it, because
+            % the target is a property of the machine and a fivefold miss is a
+            % property of the code. These two logged the row and then asserted
+            % the bare target, so one number did both jobs. It never showed,
+            % because the targets sat at 23x and 18x what the code costs: the
+            % looseness was hiding the defect, and re-deriving the targets
+            % without this repair would have turned both rows into hard
+            % failures on any busy minute. Routed through verifiedBenchmark,
+            % which carries the five-times rule and the fastest-repetition rule
+            % in the one place they are tested.
+            %
+            % 0.045 s, FROM THE SLOWEST OF THREE MEASURED MEDIANS, 0.022082 s -
+            % see the class help of TestPerformance for the runs and the rule.
+            [duration, fastest] = TestPerformance.medianDuration(@() ...
                 referenceSystem.convertItrf(x, "ITRF2014", "ITRF2000", ...
                 2010.0), 5);
-            testCase.log(1, TestPerformance.benchmarkRecord("convertItrf", nPoint, ...
-                duration, 0.5));
-
-            testCase.verifyLessThan(duration, 0.5, sprintf( ...
-                'convertItrf on %g points took %.3f s', nPoint, duration));
+            testCase.log(1, TestPerformance.verifiedBenchmark(testCase, ...
+                "convertItrf", nPoint, duration, 0.045, fastest));
         end
 
         function geodeticToCartesian_speed_oneMillionPoints(testCase)
@@ -559,15 +572,14 @@ classdef TestFrames < matlab.unittest.TestCase
             llh = [(rand(nPoint, 1) - 0.5)*180, (rand(nPoint, 1) - 0.5)*360, ...
                 rand(nPoint, 1)*1e4];
 
-            duration = TestPerformance.medianDuration(@() ...
+            % 0.057 s, FROM THE SLOWEST OF THREE MEASURED MEDIANS, 0.028361 s,
+            % and routed through verifiedBenchmark for the reason given in the
+            % method above - see the class help of TestPerformance.
+            [duration, fastest] = TestPerformance.medianDuration(@() ...
                 referenceSystem.geodeticToCartesian(llh, ...
                 'AngleUnit', "deg"), 5);
-            testCase.log(1, TestPerformance.benchmarkRecord("geodeticToCartesian", nPoint, ...
-                duration, 0.5));
-
-            testCase.verifyLessThan(duration, 0.5, sprintf( ...
-                'geodeticToCartesian on %g points took %.3f s', nPoint, ...
-                duration));
+            testCase.log(1, TestPerformance.verifiedBenchmark(testCase, ...
+                "geodeticToCartesian", nPoint, duration, 0.057, fastest));
         end
 
     end

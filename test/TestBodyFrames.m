@@ -507,6 +507,11 @@ classdef TestBodyFrames < matlab.unittest.TestCase
             % the table - which is exactly the defect section B.9 measured in
             % the rotation chain. Measured rather than assumed, for that
             % reason and no other.
+            %
+            % TARGETS RE-DERIVED AT REV. 1.250 FROM THE SLOWEST OF THREE
+            % MEASURED MEDIANS - see the class help of TestPerformance for the
+            % runs and the rule. Elements 0.001868 s, so 0.0038 s; the frame
+            % 0.004264 s, so 0.0086 s. Both were 5x looser than that.
             epoch = testCase.sampleEpoch(1000);
 
             referenceSystem.bodyRotationElements("mars", epoch);
@@ -525,10 +530,10 @@ classdef TestBodyFrames < matlab.unittest.TestCase
 
             testCase.log(1, TestPerformance.verifiedBenchmark(testCase, ...
                 "bodyRotationElements (N=1000)", 1000, median(elementTime), ...
-                0.02, min(elementTime)));
+                0.0038, min(elementTime)));
             testCase.log(1, TestPerformance.verifiedBenchmark(testCase, ...
                 "rotationIcrfToBodyFixed (N=1000)", 1000, median(frameTime), ...
-                0.05, min(frameTime)));
+                0.0086, min(frameTime)));
 
             % THE FRAME IS THE ELEMENTS PLUS THREE ELEMENTARY ROTATIONS, so it
             % cannot legitimately cost ten times the elements. If it does, the
