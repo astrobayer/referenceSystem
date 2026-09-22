@@ -142,6 +142,7 @@ function referenceSystemCiGate()
         sum([results.Passed]), failedCount, summary.intendedSkip, ...
         summary.unexpectedFilter);
     fprintf('referenceSystemCiGate: report at %s\n', reportFile);
+    echoBenchmarks(reportFile);
 
     if ~isempty(reason)
         error('referenceSystem:referenceSystemCiGate:red', 'referenceSystemCiGate RED:\n  %s', ...
@@ -149,4 +150,63 @@ function referenceSystemCiGate()
     end
 
     fprintf('referenceSystemCiGate: GREEN\n');
+end
+
+% =========================== local functions ===========================
+
+function echoBenchmarks(reportFile)
+%ECHOBENCHMARKS Copy the report's BENCHMARKS table to the console.
+%
+%   WHY THIS EXISTS: A BENCHMARK NOBODY CAN READ IS A BENCHMARK NOBODY
+%   REREADS. The numbers are logged by the speed tests at Concise, which
+%   puts them in the report and not on the console, and the report leaves
+%   the runner only as an uploaded artefact. That is fine for a reader with
+%   a browser and useless to a session that has only the job log - and a
+%   CI-only session is the normal way this toolbox is developed, not the
+%   exceptional one. Rev. 1.247 met this head on: the orbitSunGeometry
+%   target had to be derived from the method's WALL TIME, an upper bound,
+%   because its median sat in an artefact whose blob host the egress policy
+%   refuses with a 403 on CONNECT. A bound that was read beat a median that
+%   was assumed, but only because there was no third option. This is it.
+%
+%   THE LOG LEVEL OF THE TESTS IS DELIBERATELY NOT CHANGED. Raising eleven
+%   call sites from Concise to Terse would put every benchmark on every
+%   local console for the sake of one consumer, and the tests' choice about
+%   their own verbosity is theirs. What changes is CI POLICY, which this
+%   file owns and nothing else does - the report is read back after it is
+%   written, and the one table a later session needs is echoed.
+%
+%   IT NEVER FAILS THE RUN. An unreadable or sectionless report is already
+%   caught by the gate's own reportFile check; a second verdict raised from
+%   a printing helper would be a new way for CI to go red that has nothing
+%   to do with the toolbox.
+%
+%   reportFile   1x1   string   path written by runTestSuite
+
+    if ~isfile(reportFile)
+        return
+    end
+
+    try
+        reportLine = string(splitlines(fileread(reportFile)));
+    catch
+        return
+    end
+
+    % The sections of the section D.3 report are separated by a rule of
+    % dashes, so the table runs from its own heading to the next rule. The
+    % heading is matched whole: "BENCHMARKS" must not also match a row that
+    % happens to mention the word.
+    first = find(strcmp(strtrim(reportLine), "BENCHMARKS"), 1);
+    if isempty(first)
+        return
+    end
+    isRule = startsWith(strtrim(reportLine), "-----");
+    last = first + find(isRule(first + 1:end), 1) - 1;
+    if isempty(last)
+        last = numel(reportLine);
+    end
+
+    fprintf('\nreferenceSystemCiGate: benchmarks as recorded in the report\n');
+    fprintf('%s\n', reportLine(first:last));
 end
