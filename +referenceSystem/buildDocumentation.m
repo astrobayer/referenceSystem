@@ -196,6 +196,29 @@ function [action, reason] = localBuildReference(packageFolder, outputFile, force
     end
     text = [text, localFooter()];
 
+    % A PAGE WHOSE TEXT WOULD NOT CHANGE IS NOT WRITTEN. The page is under
+    % revision control, and a checkout's timestamps put package files and
+    % page in arbitrary order, so the clock gate above sends a fresh clone
+    % here on every installation. Rewriting identical text in LF over a
+    % CRLF checkout then reported the page as modified and blocked the next
+    % update (tbi:GitFetcher:dirty, measured 2026-11-06). The comparison
+    % ignores line endings because git owns those, not this generator.
+    % Force still writes, so the CI rebuild is unchanged.
+    if ~force && ~isempty(existing)
+        try
+            onDisk = fileread(outputFile, 'Encoding', 'UTF-8');
+        catch
+            onDisk = '';
+        end
+        crlf = [char(13), newline];
+        if strcmp(strrep(onDisk, crlf, newline), ...
+                strrep(char(text), crlf, newline))
+            action = "current";
+            reason = "the regenerated page is identical to the one on disk";
+            return
+        end
+    end
+
     [fid, message] = fopen(outputFile, 'w', 'n', 'UTF-8');
     if fid < 0
         error('referenceSystem:buildDocumentation:outputNotWritable', ...

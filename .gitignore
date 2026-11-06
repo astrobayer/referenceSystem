@@ -12,6 +12,15 @@
 +referenceSystem/private/*.o
 +referenceSystem/private/*.obj
 
+# The digest of the C sources the LOCAL gateway was built from, written by
+# buildMex beside the binary it describes. It is as machine-specific as the
+# binary: the digest reads the bytes, and a Windows checkout's CRLF sources
+# give a different number from the LF ones in the repository. Tracked, it was
+# rewritten by every build, so every installation left a modified file and
+# toolboxInstaller refused to update the checkout (tbi:GitFetcher:dirty,
+# measured 2026-11-06: committed 109793179, built 1949710850).
++referenceSystem/private/mexGateway.sources
+
 # Standalone C test binaries, built by test/c/runStandaloneTests.sh. The same
 # rule as the gateway for the same reason: they are platform-specific ELF or
 # PE executables, wrong for most machines and SILENTLY stale on the one that
