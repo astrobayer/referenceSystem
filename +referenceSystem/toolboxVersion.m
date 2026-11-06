@@ -106,11 +106,11 @@ function versionInfo = toolboxVersion()
     % D132: A SEMANTIC PATCH COUNTER. It rises for fixes and resets when the
     % minor rises; it is not a revision counter and nothing edits it because a
     % document changed. 2.3.0 is the first version chosen under that rule.
-    patchVersion = "1";
+    patchVersion = "2";
     % D132: THE HANDOVER REVISION, WHICH IS NO LONGER PART OF THE VERSION.
     % Bump this in the same edit that writes the revision log entry; the two
     % are checked against each other by a test and by auditPackage.py.
-    handoverRevision = "251";
+    handoverRevision = "252";
     buildDate = "2026-11-06";
     toolboxAuthor = "Matthias Weigelt";
     generatorModel = "Claude Opus 5 (Anthropic)";
