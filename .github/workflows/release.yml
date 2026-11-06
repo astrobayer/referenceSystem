@@ -8,15 +8,19 @@
 #   request that earns it, where the audit verifies the whole chain, and the
 #   action only asks whether a tag for the stated version exists yet.
 #
-#   A merge that does not touch the version releases nothing and says so.
+#   A merge that does not touch the version would release nothing and say so;
+#   the bump rule below is what keeps that from happening.
 #
-# THE PATCH COMPONENT IS THE REVISION NUMBER (D107), NOT A COUNTER THIS
-# WORKFLOW COULD INCREMENT
-#   auditPackage.py fails version/patchIsNotTheRevision unless patchVersion
-#   equals the newest "| 1.x |" row of the handover revision log. A label
-#   saying "patch" cannot know which revision was written; the file does.
-#   That is why this repository takes mode: file and not the version:
-#   labels ci-actions uses.
+# EVERY PULL REQUEST RAISES THE VERSION, SO EVERY MERGE RELEASES
+#   auditPackage.py fails version/notBumped on a pull request whose
+#   Contents.m is not strictly above both the newest vX.Y.Z tag and the base
+#   branch. Which field rises follows the owner's ruling of 2026-09-21 (MAJOR
+#   breaks a caller, MINOR adds, PATCH fixes); the handover revision is a
+#   field of its own (D132) and is no part of the number. That is why this
+#   repository takes mode: file and not the version: labels ci-actions uses:
+#   the file is already the authority, and a label would be a second one.
+#   PR #36 is the reason the rule is mechanical: it merged a fix with no
+#   bump, and this workflow correctly released nothing.
 #
 # WHY THE TAG IS ANNOTATED
 #   Creating a release for a tag that does not exist makes GitHub create the
