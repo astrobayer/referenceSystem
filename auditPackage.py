@@ -10,6 +10,7 @@ things.
 """
 import os
 import re
+import subprocess
 import sys
 
 
@@ -684,6 +685,84 @@ def check_build_date_agrees_with_contents():
                  builtIso, listedIso))
 
 
+def _versionTuple(text):
+    return tuple(int(part) for part in text.split('.'))
+
+
+def check_pull_request_bumps_the_version():
+    """A pull request must raise the version above every release before it.
+
+    WHY: release.yml tags what Contents.m states on merge, and a merge that
+    leaves Contents.m alone releases nothing. PR #36 fixed the gate and
+    shipped no version, so toolboxInstaller's release channel kept v2.3.0 and
+    its broken gate - with nothing anywhere to say a release had been
+    skipped. The bump belongs INSIDE the pull request that earns it (ci-actions
+    VERSIONING.md, mode: file, as lsqvce, geoMap and shAnalysis do it), and
+    this is the instrument that makes it a rule rather than a habit.
+
+    WHAT IS COMPARED: the Contents.m version of the tree under audit against
+    (a) the newest vX.Y.Z tag and (b) the Contents.m version of the base
+    branch, and it must be STRICTLY greater than both. (b) is not redundant:
+    a release job that failed leaves the base ahead of the newest tag, and a
+    pull request that matched the tag would then re-release nothing. Which
+    field rises is the author's call under the owner's ruling of 2026-09-21
+    (MAJOR breaks a caller, MINOR adds, PATCH fixes); this only refuses no
+    rise at all. The rest of the chain (toolboxVersion, the handover header,
+    the generated page and the manual) is held to Contents.m by the checks
+    above, so a bump made in one place only still fails, there.
+
+    WHERE IT RUNS: only in a pull_request run of CI, where GITHUB_EVENT_NAME
+    says so and the checkout is the merge preview, whose FIRST parent is the
+    base tip. A local run has no merge preview and may have no tags, so it is
+    skipped there and says so; it is a gate on merging, not on editing.
+    """
+    if os.environ.get('GITHUB_EVENT_NAME') != 'pull_request':
+        print('version bump: not a pull_request run, not checked')
+        return
+    contentsPath = '+referenceSystem/Contents.m'
+    pattern = r'^%\s*Version\s+(\d+\.\d+\.\d+)'
+
+    def git(*args):
+        return subprocess.run(['git', '-C', ROOT] + list(args),
+                              capture_output=True, text=True)
+
+    here = re.search(pattern, open(os.path.join(ROOT, contentsPath),
+                                   encoding='utf-8').read(), re.M)
+    if not here:
+        fail('version/bumpUnreadable', 'Contents.m states no version')
+        return
+    current = here.group(1)
+
+    listed = git('tag', '--list', 'v*')
+    tags = [t[1:] for t in listed.stdout.split()
+            if re.fullmatch(r'v\d+\.\d+\.\d+', t)]
+    if listed.returncode != 0 or not tags:
+        # No tags means a shallow or tagless checkout, not a first release:
+        # this repository has carried tags since v2.0. Silence here would
+        # pass every pull request, so it is a finding.
+        fail('version/bumpNoTags',
+             'no vX.Y.Z tag is visible; the audit job needs fetch-depth: 0')
+        return
+    newestTag = max(tags, key=_versionTuple)
+
+    base = git('show', 'HEAD^1:' + contentsPath)
+    baseVersion = re.search(pattern, base.stdout, re.M)         if base.returncode == 0 else None
+    if not baseVersion:
+        fail('version/bumpNoBase',
+             'the base branch Contents.m could not be read from HEAD^1')
+        return
+
+    floor = max(newestTag, baseVersion.group(1), key=_versionTuple)
+    if _versionTuple(current) <= _versionTuple(floor):
+        fail('version/notBumped',
+             'Contents.m says %s; a pull request must raise it above %s '
+             '(newest tag v%s, base %s)' % (current, floor, newestTag,
+                                            baseVersion.group(1)))
+    else:
+        print('version bump: %s above newest tag v%s and base %s'
+              % (current, newestTag, baseVersion.group(1)))
+
+
 def check_reference_page_bodies_match_the_help(files):
     """The RENDERED help must equal the help it was rendered from.
 
@@ -1114,6 +1193,7 @@ def main():
     check_benchmark_targets_match_section_b7()
     check_unrun_revisions_against_the_o37_ceiling()
     check_build_date_agrees_with_contents()
+    check_pull_request_bumps_the_version()
     check_handover_header_is_current()
     check_reference_page_indexes_contents()
     check_generated_docs_carry_the_current_version()
