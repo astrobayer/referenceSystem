@@ -74,7 +74,7 @@ function referenceSystemCiGate()
 % referenceSystem v2.3
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-08-21 15:20 (CEST, UTC+02:00)
-% Revised: 2026-09-15 14:00 (CEST, UTC+02:00)
+% Revised: 2026-11-06 21:45 (CET, UTC+01:00)
 % -------------------------------------------------------------------------
 
     toolboxRoot = string(fileparts(mfilename('fullpath')));
@@ -93,11 +93,28 @@ function referenceSystemCiGate()
     %   only the SPICE kernels have to come off the network. KernelSpan
     %   "short" selects de440s.bsp and excludes the full-span de440.bsp,
     %   which no test needs and which is about 115 MB.
-    % Build="always": a fresh checkout carries no compiled gateway, and
-    %   forcing the build makes the MEX compile itself part of the gate
+    % Build="always" ON CI ONLY: a fresh checkout carries no compiled gateway,
+    %   and forcing the build makes the MEX compile itself part of the gate
     %   rather than a side effect of "auto" that a cache could skip.
+    % Build="auto" EVERYWHERE ELSE. A local run of this gate is a second
+    %   MATLAB next to one that already has the toolbox loaded: the
+    %   toolboxInstaller GUI runs setup in its own MATLAB and this gate in a
+    %   "-batch" one, and a desktop session runs `matlab -batch
+    %   referenceSystemCiGate` the same way. Windows refuses to overwrite a
+    %   DLL another process has mapped, so a forced relink fails there
+    %   (MEASURED 2026-11-06: the installer's MATLAB held mexGateway.mexw64
+    %   and the gate's relink failed with mexBuildFailed). "auto" still
+    %   rebuilds when the binary is missing or any C source differs from the
+    %   one it was built from (the digest in mexGateway.sources), so a local
+    %   run can never test a stale binary; it only skips a relink that would
+    %   produce the same gateway.
+    if isCi
+        buildMode = "always";
+    else
+        buildMode = "auto";
+    end
     setupReferenceSystem('Save', false, 'Fetch', "kernels", ...
-        'KernelSet', "all", 'KernelSpan', "short", 'Build', "always", ...
+        'KernelSet', "all", 'KernelSpan', "short", 'Build', buildMode, ...
         'Verbose', true);
 
     % --- run -------------------------------------------------------------
