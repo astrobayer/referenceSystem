@@ -12,7 +12,7 @@ classdef TestDispatch < matlab.unittest.TestCase
 %   anyway, which is precisely the defect being tested for.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.3
+% referenceSystem v3.0
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-24 12:20 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------
@@ -402,7 +402,7 @@ classdef TestDispatch < matlab.unittest.TestCase
             testCase.verifyEqual(sort(string(fieldnames(status))), ...
                 sort(["toolboxRoot"; "version"; "matlabRelease"; "pathAdded"; ...
                 "pathSaved"; "removedFromPath"; "unlistedFiles"; "dataFolder"; ...
-                "eopSources"; "kernels"; "toolkit"; "fetch"; "mex"; ...
+                "dataPool"; "eopSources"; "kernels"; "toolkit"; "fetch"; "mex"; ...
                 "leapSecondTable"; "documentation"; "build"; "ready"]));
             testCase.verifyEmpty(status.unlistedFiles, ...
                 "Files left in the package by an older version: " + ...
@@ -417,26 +417,81 @@ classdef TestDispatch < matlab.unittest.TestCase
                 referenceSystem.toolboxVersion().version);
         end
 
-        function dataFolder_contract_queryDefaultsBesideThePackageAndCreatesIt(testCase)
-            % D119: WITHOUT A STORED PREFERENCE THE ANSWER IS data/ BESIDE THE
-            % PACKAGE, which is what ships and what every install before this
-            % revision hardcoded. The folder is created on query deliberately:
-            % every caller is about to read or write in it, and returning a
-            % path that does not exist moves the mkdir into each of them.
-            restorePreference = TestDispatch.preferenceRestorer();  %#ok<NASGU>
-            if ispref('referenceSystem', 'dataFolder')
-                rmpref('referenceSystem', 'dataFolder');
+        function dataFolder_contract_refusesWithoutAPoolAndWritesNothing(testCase)
+            % D133: WITHOUT A CONFIGURED POOL THERE IS NO ANSWER, AND THE
+            % TOOLBOX FOLDER IS NOT ONE. Until 3.0 a query with no preference
+            % answered data/ beside the package and created it there; the
+            % organisation's DATA_POOL.md forbids that fallback, because a
+            % download into a git checkout makes the checkout dirty. The
+            % refusal must name DATAPOOL and the way to set the pool, and must
+            % leave the toolbox's data/ exactly as it was.
+            isolation = TestDispatch.isolatedFromThePool();  %#ok<NASGU>
+            committed = fullfile(testCase.toolboxRoot(), 'data');
+            before = TestDispatch.folderListing(committed);
+
+            testCase.verifyError(@() referenceSystem.dataFolder(), ...
+                'referenceSystem:dataFolder:noDataPool', ...
+                'A query without any pool configured must refuse.');
+            try
+                referenceSystem.dataFolder();
+            catch failure
+                testCase.verifySubstring(string(failure.message), "DATAPOOL", ...
+                    'The refusal must name the variable that configures the pool.');
+                testCase.verifySubstring(string(failure.message), ...
+                    "referenceSystem.dataFolder(path)", ...
+                    'The refusal must name the call that stores a pool.');
             end
 
-            folder = referenceSystem.dataFolder();
+            testCase.verifyEqual(referenceSystem.dataFolder("reset"), "", ...
+                ['"reset" with nothing left configured returns "" and does ', ...
+                'not raise: discarding a preference succeeded.']);
+            testCase.verifyEqual(TestDispatch.folderListing(committed), before, ...
+                'The refusal wrote into the toolbox data/ folder.');
+        end
 
-            expected = what(char(fullfile(testCase.toolboxRoot(), 'data')));
-            testCase.assertNotEmpty(expected, ...
-                'The default data folder did not resolve after the query.');
-            testCase.verifyEqual(folder, string(expected(1).path), ...
-                'A query without a preference must answer data/ beside the package.');
-            testCase.verifyTrue(isfolder(folder), ...
-                'dataFolder returned a path it did not create.');
+        function dataFolder_contract_resolvesInTheContractOrder(testCase)
+            % D133: DataPool > preference > DATAPOOL > READING_DATA_POOL, the
+            % order of DATA_POOL.md section 2, each rule consulted only while
+            % the ones above it are silent. Built up from the bottom so every
+            % step shows a rule overriding the one below it, and a blank
+            % variable is shown to count as unset. The product folders are
+            % read from location and must sit directly under the root with
+            % the case-exact names; they are NOT created by a query.
+            isolation = TestDispatch.isolatedFromThePool();  %#ok<NASGU>
+            base = string(tempname());
+            cleanupFolder = onCleanup(@() TestDispatch.removeIfPresent(base));
+            folder = base + filesep + ["argument", "preference", "datapool", ...
+                "reading"];
+
+            setenv('READING_DATA_POOL', char(folder(4)));
+            setenv('DATAPOOL', '   ');
+            [root, location] = referenceSystem.dataFolder();
+            testCase.verifyEqual(location.source, "READING_DATA_POOL", ...
+                'A blank DATAPOOL must count as unset.');
+            testCase.verifyEqual(root, location.root);
+            testCase.verifyTrue(endsWith(root, "reading"), root);
+
+            setenv('DATAPOOL', char(folder(3)));
+            [~, location] = referenceSystem.dataFolder();
+            testCase.verifyEqual(location.source, "DATAPOOL");
+            testCase.verifyTrue(endsWith(location.root, "datapool"), location.root);
+
+            referenceSystem.dataFolder(folder(2));
+            [~, location] = referenceSystem.dataFolder();
+            testCase.verifyEqual(location.source, "preference");
+            testCase.verifyTrue(endsWith(location.root, "preference"), location.root);
+
+            [~, location] = referenceSystem.dataFolder(DataPool = folder(1));
+            testCase.verifyEqual(location.source, "argument");
+            testCase.verifyTrue(endsWith(location.root, "argument"), location.root);
+            testCase.verifyEqual(string(getpref('referenceSystem', 'dataFolder')), ...
+                folder(2), 'DataPool must be used for the call and stored nowhere.');
+
+            testCase.verifyEqual(location.SPICE, ...
+                string(fullfile(location.root, 'SPICE')));
+            testCase.verifyEqual(location.EOP, string(fullfile(location.root, 'EOP')));
+            testCase.verifyFalse(isfolder(location.SPICE) || isfolder(location.EOP), ...
+                'A query must not create the product folders; the writer does.');
         end
 
         function dataFolder_contract_setPersistsAndResetRestoresTheDefault(testCase)
@@ -444,8 +499,12 @@ classdef TestDispatch < matlab.unittest.TestCase
             % a setter without a reset is a trap rather than a setting: the
             % shipped behaviour would be unreachable once a preference existed.
             % shLowLevel.dataFolder in shAnalysis has the same three, and the
-            % two toolboxes are meant to feel identical here.
-            restorePreference = TestDispatch.preferenceRestorer();  %#ok<NASGU>
+            % two toolboxes are meant to feel identical here. D133: "the
+            % default" after a reset is the next rule, here DATAPOOL.
+            isolation = TestDispatch.isolatedFromThePool();  %#ok<NASGU>
+            fallback = fullfile(tempname(), "rsEnvironmentPool");
+            cleanupFallback = onCleanup(@() TestDispatch.removeIfPresent(fallback));
+            setenv('DATAPOOL', char(fallback));
 
             wanted = fullfile(tempname(), "rsPreferredData");
             cleanupFolder = onCleanup(@() TestDispatch.removeIfPresent(wanted));
@@ -464,6 +523,8 @@ classdef TestDispatch < matlab.unittest.TestCase
                 '"reset" left the preference in place.');
             testCase.verifyNotEqual(afterReset, stored, ...
                 '"reset" returned the folder it was supposed to discard.');
+            testCase.verifyTrue(endsWith(afterReset, "rsEnvironmentPool"), ...
+                "After a reset the next rule, DATAPOOL, must answer: " + afterReset);
         end
 
         function dataFolder_contract_isTheOneAuthorityBothDownloadersResolve(testCase)
@@ -480,16 +541,28 @@ classdef TestDispatch < matlab.unittest.TestCase
             % pass vacuously on any machine that could not reach NAIF - the
             % defect D116's second allow-list row exists to record. What is
             % asserted here is a spelling, so it is read as one.
-            for name = ["downloadKernels", "downloadEop"]
-                source = string(fileread(which("referenceSystem." + name)));
+            %
+            % D133 ADDS THE PRODUCT FOLDER. Each downloader must read its own
+            % field of dataFolder's location - SPICE for the kernels, EOP for
+            % the series - and neither may append a folder name of its own.
+            product = ["SPICE", "EOP"];
+            name = ["downloadKernels", "downloadEop"];
+            for k = 1:numel(name)
+                source = string(fileread(which("referenceSystem." + name(k))));
                 testCase.verifyTrue(contains(source, ...
                     "referenceSystem.dataFolder()"), ...
-                    name + " no longer resolves through referenceSystem." + ...
+                    name(k) + " no longer resolves through referenceSystem." + ...
                     "dataFolder; the second copy of the location is back.");
+                testCase.verifyTrue(contains(source, "location." + product(k)), ...
+                    name(k) + " does not read location." + product(k) + ...
+                    " from dataFolder; the product folder has a second spelling.");
                 testCase.verifyFalse(contains(source, ...
                     "fileparts(mfilename('fullpath'))), 'data')"), ...
-                    name + " composes data/ from its own mfilename again. " + ...
+                    name(k) + " composes data/ from its own mfilename again. " + ...
                     "D119 deleted that copy; it must not return.");
+                testCase.verifyFalse(contains(source, ...
+                    ["'" + product + "')", '"' + product + '")']), ...
+                    name(k) + " composes a product folder of its own (D133).");
             end
         end
 
@@ -508,6 +581,38 @@ classdef TestDispatch < matlab.unittest.TestCase
             testCase.verifyError(@() referenceSystem.dataFolder(occupied), ...
                 'referenceSystem:dataFolder:pathIsAFile', ...
                 'A file was accepted as a data folder.');
+        end
+
+        function downloadEop_contract_refusesWithoutAPoolBeforeAnyTransfer(testCase)
+            % D133: WITHOUT CacheDir THE SERIES GOES TO <pool>/EOP, AND
+            % WITHOUT A POOL IT GOES NOWHERE. The refusal is raised by
+            % dataFolder before websave is reached, so this needs no network:
+            % a call that reached the transfer would fail with downloadFailed
+            % or succeed, and either is a different identifier.
+            isolation = TestDispatch.isolatedFromThePool();  %#ok<NASGU>
+            committed = fullfile(testCase.toolboxRoot(), 'data');
+            before = TestDispatch.folderListing(committed);
+
+            testCase.verifyError(@() referenceSystem.downloadEop("finals2000A"), ...
+                'referenceSystem:dataFolder:noDataPool');
+            testCase.verifyEqual(TestDispatch.folderListing(committed), before, ...
+                'downloadEop wrote into the toolbox data/ folder.');
+        end
+
+        function downloadKernels_contract_noPoolRefusesDownloadNotList(testCase)
+            % D133: THE POOL IS RESOLVED ONLY WHEN SOMETHING IS TO BE
+            % WRITTEN. A listing reads no folder and must work on a machine
+            % that has not chosen a pool; a download without CacheDir must
+            % refuse before its first transfer - here proved without the
+            % network, since the refusal precedes every Url.
+            isolation = TestDispatch.isolatedFromThePool();  %#ok<NASGU>
+
+            manifest = referenceSystem.downloadKernels();
+            testCase.verifyTrue(all(manifest.Status == "listed"), ...
+                'Mode "list" must work without a data pool.');
+            testCase.verifyError(@() referenceSystem.downloadKernels( ...
+                Set = "minimal", Mode = "download"), ...
+                'referenceSystem:dataFolder:noDataPool');
         end
 
         function setupReferenceSystem_contract_dataFolderIsResolvedBeforeTheFetch(testCase)
@@ -544,25 +649,28 @@ classdef TestDispatch < matlab.unittest.TestCase
             testCase.verifyNotEqual(status.dataFolder, ...
                 string(fullfile(testCase.toolboxRoot(), 'data')), ...
                 'DataFolder was accepted and then ignored in favour of data/.');
+
+            % D133: DataFolder IS THE POOL ROOT, and the products sit under
+            % it with the names dataFolder spells; it is stored nowhere.
+            testCase.verifyEqual(status.dataPool.source, "argument");
+            testCase.verifyEqual(status.dataPool.root, status.dataFolder);
+            testCase.verifyEqual(status.dataPool.SPICE, ...
+                string(fullfile(status.dataFolder, 'SPICE')));
+            testCase.verifyEqual(status.dataPool.EOP, ...
+                string(fullfile(status.dataFolder, 'EOP')));
         end
 
-        function setupReferenceSystem_contract_dataFolderDefaultsToTheToolboxData(testCase)
-            % D113's idiom, asserted on the branch that keeps the old
-            % behaviour: an OMITTED DataFolder is not the same argument as one
-            % naming the default, and the omission must still land on
-            % <toolboxRoot>/data. Without this the previous test would pass
-            % against an implementation that had quietly moved the default.
-            %
-            % D119 GAVE "THE DEFAULT" TWO MEANINGS AND THIS TEST NOW PINS BOTH.
-            % With a stored preference the omission lands on the PREFERENCE -
-            % otherwise a user who moved their data and then ran setup with no
-            % arguments would fetch 700 MB back into the toolbox tree. Without
-            % one it still lands on <toolboxRoot>/data. Run 95 failed here
-            % against a real preference, which is the collision worth pinning
-            % rather than the accident it looked like.
+        function setupReferenceSystem_contract_omittedPoolIsNeverTheToolbox(testCase)
+            % D113's idiom: an OMITTED DataFolder is not the same argument as
+            % one naming a folder. D119 made the omission follow a stored
+            % preference - otherwise a user who moved their data and then ran
+            % setup with no arguments would fetch 700 MB back into the toolbox
+            % tree. D133 removes the toolbox tree from the chain altogether:
+            % the omission follows the preference, then DATAPOOL, and with
+            % neither it is "" - reported, never <toolboxRoot>/data.
             originalPath = path();
             restorePath = onCleanup(@() path(originalPath));
-            restorePreference = TestDispatch.preferenceRestorer(); %#ok<NASGU>
+            isolation = TestDispatch.isolatedFromThePool(); %#ok<NASGU>
 
             wanted = fullfile(tempname(), "rsPreferredDefault");
             cleanupFolder = onCleanup(@() TestDispatch.removeIfPresent(wanted));
@@ -570,17 +678,43 @@ classdef TestDispatch < matlab.unittest.TestCase
             status = setupReferenceSystem(TestDispatch.setupOptionsForTesting{:});
             testCase.verifyEqual(status.dataFolder, preferred, ...
                 ['An omitted DataFolder must follow a stored preference, ', ...
-                'or setup fetches into the toolbox tree behind the user.']);
+                'or setup fetches somewhere the user did not choose.']);
+            testCase.verifyEqual(status.dataPool.source, "preference");
 
             referenceSystem.dataFolder("reset");
+            fromEnvironment = fullfile(tempname(), "rsEnvironmentDefault");
+            cleanupEnvironment = onCleanup( ...
+                @() TestDispatch.removeIfPresent(fromEnvironment));
+            setenv('DATAPOOL', char(fromEnvironment));
             status = setupReferenceSystem(TestDispatch.setupOptionsForTesting{:});
-            expected = what(char(fullfile(testCase.toolboxRoot(), 'data')));
-            if isempty(expected)
-                testCase.verifyEqual(status.dataFolder, ...
-                    string(fullfile(testCase.toolboxRoot(), 'data')));
-            else
-                testCase.verifyEqual(status.dataFolder, string(expected(1).path));
-            end
+            testCase.verifyEqual(status.dataPool.source, "DATAPOOL");
+            testCase.verifyTrue(endsWith(status.dataFolder, "rsEnvironmentDefault"), ...
+                status.dataFolder);
+
+            unsetenv('DATAPOOL');
+            status = setupReferenceSystem(TestDispatch.setupOptionsForTesting{:});
+            testCase.verifyEqual(status.dataFolder, "", ...
+                ['Without any pool an offline setup must report none, not ', ...
+                'fall back to the toolbox folder.']);
+            testCase.verifyEqual(status.dataPool.source, "");
+            testCase.verifyEmpty(status.kernels, ...
+                'Without a pool no kernel can be reported as installed.');
+        end
+
+        function setupReferenceSystem_contract_fetchWithoutAPoolRefuses(testCase)
+            % D133: ANY FETCH NEEDS A POOL, AND NONE IS INVENTED. With no
+            % DataFolder, no preference and no variable, Fetch="eop" must stop
+            % on dataFolder's refusal - before downloadEop is reached, so the
+            % test needs no network - rather than record a download failure
+            % and carry on, which would hide a configuration defect among
+            % network ones.
+            originalPath = path();
+            restorePath = onCleanup(@() path(originalPath));
+            isolation = TestDispatch.isolatedFromThePool(); %#ok<NASGU>
+
+            testCase.verifyError(@() setupReferenceSystem('Save', false, ...
+                'Fetch', "eop", 'Verbose', false), ...
+                'referenceSystem:dataFolder:noDataPool');
         end
 
         function setupReferenceSystem_contract_dataFolderRefusesAnExistingFile(testCase)
@@ -1589,6 +1723,57 @@ classdef TestDispatch < matlab.unittest.TestCase
             else
                 restorer = onCleanup(@() TestDispatch.removePreferenceIfPresent( ...
                     group, name));
+            end
+        end
+
+        function restorer = isolatedFromThePool()
+            %ISOLATEDFROMTHEPOOL Remove every pool rule for one test, then put
+            %   them all back.
+            %   D133 resolves the pool from a preference AND two environment
+            %   variables, so a test of the order must control all three, and
+            %   restoring only the preference would leave a test's DATAPOOL in
+            %   the session for every test after it. An absent variable is
+            %   restored as absent (unsetenv), not as an empty one.
+            group = 'referenceSystem';
+            name = 'dataFolder';
+            hadPreference = ispref(group, name);
+            previousPreference = [];
+            if hadPreference
+                previousPreference = getpref(group, name);
+                rmpref(group, name);
+            end
+            variable = ["DATAPOOL", "READING_DATA_POOL"];
+            hadVariable = isenv(variable);
+            previousValue = strings(size(variable));
+            for k = 1:numel(variable)
+                previousValue(k) = string(getenv(variable(k)));
+            end
+            unsetenv(variable);
+            restorer = onCleanup(@() TestDispatch.restorePoolRules(group, name, ...
+                hadPreference, previousPreference, variable, hadVariable, ...
+                previousValue));
+        end
+
+        function listing = folderListing(folder)
+            %FOLDERLISTING Sorted names in a folder, to show nothing was written.
+            entry = dir(folder);
+            listing = sort(string({entry.name}));
+        end
+
+        function restorePoolRules(group, name, hadPreference, previousPreference, ...
+                variable, hadVariable, previousValue)
+            %RESTOREPOOLRULES The teardown of isolatedFromThePool.
+            if hadPreference
+                setpref(group, name, previousPreference);
+            else
+                TestDispatch.removePreferenceIfPresent(group, name);
+            end
+            for k = 1:numel(variable)
+                if hadVariable(k)
+                    setenv(variable(k), previousValue(k));
+                else
+                    unsetenv(variable(k));
+                end
             end
         end
 

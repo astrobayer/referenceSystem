@@ -87,7 +87,7 @@ function epoch = gpsNanosecondsToEpoch(nanosecond)
 % See also EPOCHTO, GPSWEEKTOEPOCH, J2000SECONDSTOEPOCH, CONVERTTIMESCALE.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.3
+% referenceSystem v3.0
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-09-21 16:25 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------

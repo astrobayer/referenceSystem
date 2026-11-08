@@ -145,7 +145,7 @@ function [reportFile, reportLine] = profileRotationCall(options)
 % See also RUNTESTSUITE, TESTPERFORMANCE, MEXINFO, TOOLBOXVERSION.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.3
+% referenceSystem v3.0
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-28 02:10 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------

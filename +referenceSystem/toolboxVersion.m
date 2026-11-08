@@ -94,7 +94,7 @@ function versionInfo = toolboxVersion()
 % See also IERSCONSTANTS, ELLIPSOIDPARAMETERS.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.3
+% referenceSystem v3.0
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-24 11:05 (CEST, UTC+02:00)
 % Revised: 2026-08-09 10:15 (CEST, UTC+02:00)
@@ -102,16 +102,16 @@ function versionInfo = toolboxVersion()
 
 %#codegen
 
-    majorMinorVersion = "2.3";
+    majorMinorVersion = "3.0";
     % D132: A SEMANTIC PATCH COUNTER. It rises for fixes and resets when the
     % minor rises; it is not a revision counter and nothing edits it because a
     % document changed. 2.3.0 is the first version chosen under that rule.
-    patchVersion = "2";
+    patchVersion = "0";
     % D132: THE HANDOVER REVISION, WHICH IS NO LONGER PART OF THE VERSION.
     % Bump this in the same edit that writes the revision log entry; the two
     % are checked against each other by a test and by auditPackage.py.
-    handoverRevision = "252";
-    buildDate = "2026-11-06";
+    handoverRevision = "253";
+    buildDate = "2026-11-08";
     toolboxAuthor = "Matthias Weigelt";
     generatorModel = "Claude Opus 5 (Anthropic)";
     toolboxName = "referenceSystem";

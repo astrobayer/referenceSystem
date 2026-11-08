@@ -38,8 +38,9 @@ than the binary;</li>
 the page, and rebuilds the <b>Help browser search database</b> if any page is
 newer than the database;</li>
 <li><b>saves</b> the path, so the toolbox is still there after a restart;</li>
-<li><b>downloads</b> both Earth orientation series and the full SPICE kernel set
-into <code>data/</code>, skipping anything already present;</li>
+<li>with <code>Fetch="all"</code>, <b>downloads</b> both Earth orientation series
+and the full SPICE kernel set into the data pool, <code>&lt;pool&gt;/EOP</code> and
+<code>&lt;pool&gt;/SPICE</code>, skipping anything already present;</li>
 <li>prints what it found and what it did.</li>
 </ol>
 </div>
@@ -53,9 +54,26 @@ back in <code>status.fetch.failures</code> and in the summary. When nothing is
 installed yet, setup prints the call that installs it, so the empty folder is
 reported rather than merely left.</p>
 
-<p>Where the data goes is <code>referenceSystem.dataFolder</code>, the one
-authority for the location: call it with a path to move installed data off the
-system disk, and the choice persists across sessions.</p>
+<p><b>Downloaded data goes to the data pool, never into the toolbox.</b> The
+pool is one folder shared by every astrobayer toolbox, laid out by product:
+<code>&lt;pool&gt;/SPICE</code> for the kernels and <code>&lt;pool&gt;/EOP</code> for
+the Earth orientation series. <code>referenceSystem.dataFolder</code> is the one
+authority for its root and resolves it in this order: an explicit argument
+(<code>DataFolder=</code> to setup, <code>DataPool=</code> to dataFolder,
+<code>CacheDir=</code> to a downloader), the stored preference
+(<code>referenceSystem.dataFolder(path)</code>, persistent), the
+<code>DATAPOOL</code> environment variable that toolboxInstaller sets, the older
+<code>READING_DATA_POOL</code>, and otherwise a refusal,
+<code>referenceSystem:dataFolder:noDataPool</code>. There is no default inside the
+toolbox folder. The two EOP tables committed to <code>data/</code> are part of
+the repository and stay there.</p>
+
+<p><b>Upgrading from 2.x:</b> the stored preference now names the pool
+<i>root</i>. Move the files of a per-toolbox folder into
+<code>&lt;pool&gt;/SPICE</code> and <code>&lt;pool&gt;/EOP</code> once, by hand, and
+point the preference at the root, or reset it with
+<code>referenceSystem.dataFolder("reset")</code> so that <code>DATAPOOL</code>
+answers. No code looks in the old place.</p>
 
 <table>
 <tr><th>Call</th><th>Use it when</th></tr>

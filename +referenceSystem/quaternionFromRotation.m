@@ -81,7 +81,7 @@ function [q, convention] = quaternionFromRotation(R, options)
 % See also ROTATIONFROMQUATERNION, NORMALIZEQUATERNION, ATTITUDECONVENTION.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.3
+% referenceSystem v3.0
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-26 02:55 (CEST, UTC+02:00) - session S4, prompt P25
 % -------------------------------------------------------------------------

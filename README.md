@@ -29,12 +29,35 @@ call does that, and setup names it when nothing is installed yet:
 
 ```matlab
 >> setupReferenceSystem(Fetch="all")       % EOP + kernels, ~700 MB once
->> referenceSystem.dataFolder("E:\DATAPOOL\referenceSystem")   % put it elsewhere first
 ```
 
-`dataFolder` is the one authority for where installed data lives; the choice
-persists across sessions, and `referenceSystem.dataFolder("reset")` returns to
-`data/` beside the package.
+**Downloaded data goes to the data pool, never into the toolbox.** The pool is
+the one folder all astrobayer toolboxes share, laid out by product: kernels in
+`<pool>/SPICE`, Earth orientation series in `<pool>/EOP` (the organisation's
+`DATA_POOL.md`, in toolboxInstaller). `referenceSystem.dataFolder` is the one
+authority for the pool root and resolves it in this order:
+
+1. an explicit argument - `setupReferenceSystem(DataFolder=...)`,
+   `referenceSystem.dataFolder(DataPool=...)`, or `CacheDir` of the downloaders;
+2. the stored preference, `referenceSystem.dataFolder("E:\DATAPOOL")`, which
+   persists across sessions;
+3. the environment variable `DATAPOOL`, which toolboxInstaller writes into
+   `startup.m`;
+4. the older `READING_DATA_POOL`;
+5. otherwise a refusal, `referenceSystem:dataFolder:noDataPool`. There is no
+   default inside the toolbox folder.
+
+`referenceSystem.dataFolder("reset")` discards the stored preference so that
+`DATAPOOL` answers. The two EOP tables committed to `data/` are part of the
+repository and stay there; nothing downloads into `data/`.
+
+**Upgrading from 2.x.** The stored preference now names the pool ROOT, not a
+folder holding the files flat. Move the kernels into `<pool>/SPICE` and the EOP
+series into `<pool>/EOP` once, by hand, then point the preference at the root
+(or reset it and let `DATAPOOL` answer). For example, files in
+`E:\DATAPOOL\referencesSystem` move to `E:\DATAPOOL\SPICE` and
+`E:\DATAPOOL\EOP`, followed by `referenceSystem.dataFolder("reset")`. No code
+looks in the old place.
 
 ```matlab
 >> setupReferenceSystem(Fetch="eop")       % Earth orientation only
@@ -51,7 +74,7 @@ two different acts with two different costs: the first is offline and takes
 seconds, the second is ~700 MB. The call with no arguments is what somebody
 makes once on a fresh clone, and what they want out of it is a toolbox that
 still works in the next session. When no data is installed, setup prints the
-call that installs it, so an empty `data/` is reported rather than merely left.
+call that installs it, so an empty pool is reported rather than merely left.
 A failed download never stops setup; it is recorded in `status.fetch.failures`
 and reported.
 

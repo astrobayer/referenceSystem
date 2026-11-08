@@ -71,10 +71,10 @@ function referenceSystemCiGate()
 % See also SETUPREFERENCESYSTEM, REFERENCESYSTEM.RUNTESTSUITE
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.3
+% referenceSystem v3.0
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-08-21 15:20 (CEST, UTC+02:00)
-% Revised: 2026-11-06 21:45 (CET, UTC+01:00)
+% Revised: 2026-11-08 23:10 (CET, UTC+01:00)
 % -------------------------------------------------------------------------
 
     toolboxRoot = string(fileparts(mfilename('fullpath')));
@@ -90,7 +90,11 @@ function referenceSystemCiGate()
     % Save=false: the runner is ephemeral and savepath would either fail or
     %   write a pathdef nothing reads.
     % Fetch="kernels": the EOP tables are under revision control in data/, so
-    %   only the SPICE kernels have to come off the network. KernelSpan
+    %   only the SPICE kernels have to come off the network. They go to
+    %   <pool>/SPICE of the data pool referenceSystem.dataFolder resolves
+    %   (D133); without a configured pool setup refuses with
+    %   referenceSystem:dataFolder:noDataPool, so the gate needs DATAPOOL
+    %   (CI sets it, and so does toolboxInstaller's startup.m). KernelSpan
     %   "short" selects de440s.bsp and excludes the full-span de440.bsp,
     %   which no test needs and which is about 115 MB.
     % Build="always" ON CI ONLY: a fresh checkout carries no compiled gateway,

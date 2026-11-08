@@ -19,7 +19,7 @@ classdef TestBodyFrames < matlab.unittest.TestCase
 %   fourteen unbalanced ends (rev. 1.139).
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.3
+% referenceSystem v3.0
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-30 22:10 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------
@@ -65,10 +65,25 @@ classdef TestBodyFrames < matlab.unittest.TestCase
             % location after the two D119 deleted in the downloaders - so a
             % user who moved their data with referenceSystem.dataFolder was
             % told the kernels were missing while they sat where they had put
-            % them. Run 94 reported exactly that, through D117.
-            kernel = fullfile(referenceSystem.dataFolder(), 'pck00011.tpc');
+            % them. Run 94 reported exactly that, through D117. D133: the
+            % folder is now <pool>/SPICE.
+            % ASKED FOR HERE, NOT THROUGH kernelFolder: the category audit
+            % credits a function to a test through ONE helper only, and the
+            % reference tests reach dataFolder through this one (D133).
+            try
+                [~, location] = referenceSystem.dataFolder();
+            catch failure
+                if failure.identifier ~= "referenceSystem:dataFolder:noDataPool"
+                    rethrow(failure);
+                end
+                testCase.assumeFail(['No data pool is configured (DATAPOOL ', ...
+                    'unset), so no kernels can be found; set DATAPOOL and run ', ...
+                    'setupReferenceSystem(Fetch = "kernels").']);
+            end
+            folder = location.SPICE;
+            kernel = fullfile(folder, 'pck00011.tpc');
             testCase.assumeTrue(isfile(kernel), ...
-                "pck00011.tpc is not in " + referenceSystem.dataFolder() + ...
+                "pck00011.tpc is not in " + folder + ...
                 "; run setupReferenceSystem(Fetch = ""kernels"").");
             ephemeris = referenceSystem.readEphemeris(string(kernel));
         end

@@ -1,14 +1,23 @@
-# `data/` — third-party data, downloaded and never committed
+# `data/` — the committed tables only; downloads go to the data pool
 
-Nothing in this folder is part of the toolbox. It is where a session puts the
-external files the toolbox reads: IERS Earth orientation series, an optional
-leap-second override, and — for P21–P23 — the SPICE kernels.
+**Nothing is downloaded into this folder.** Every file the toolbox fetches goes
+to the shared data pool, by product: SPICE kernels to `<pool>/SPICE`, Earth
+orientation series to `<pool>/EOP` (decision D133, after the organisation's
+`DATA_POOL.md`: *all data go always to the data pool; only model code or
+libraries go to the toolbox*). `referenceSystem.dataFolder` resolves the pool
+root - an explicit argument, the stored preference, `DATAPOOL`, then
+`READING_DATA_POOL` - and refuses when none is set; it never falls back to here.
 
-**Everything here is ignored by git except this file.** That is deliberate on
-three counts: the files are third-party data that are not ours to redistribute,
-they are reissued by their publishers so a committed copy goes stale silently,
-and the SPICE kernels are large enough to make a hand-over archive unusable.
-`sb441-n16.bsp` alone is about 650 MB against a toolbox of roughly two.
+**What this folder holds is committed and stays:** `eopc04_20.1962-now` and
+`finals2000A.all`, pinned copies tracked by git so that the CI gate needs to
+fetch only the kernels. They are not downloads, nothing writes them, and setup
+lists them as `committed` beside the pool's series.
+
+**Kernels stay out of git, wherever they are.** `.gitignore` still refuses
+kernel extensions here as a guard: the files are third-party data that are not
+ours to redistribute, they are reissued by their publishers so a committed copy
+goes stale silently, and they are large enough to make a hand-over archive
+unusable. `sb441-n16.bsp` alone is about 650 MB against a toolbox of roughly two.
 
 **Record the filename and a digest in the result, never the file.** That is the
 same rule D15 applies to kernel pairing and the one `mexSourceDigest` applies to

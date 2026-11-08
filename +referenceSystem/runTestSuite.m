@@ -151,7 +151,7 @@ function [results, reportFile, summary] = runTestSuite(options)
 % See also MEXINFO, TOOLBOXVERSION.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.3
+% referenceSystem v3.0
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-24 12:20 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------
@@ -875,21 +875,28 @@ function heading = unexpectedFilterHeading()
 end
 
 function described = localDescribeDataFolder()
-%LOCALDESCRIBEDATAFOLDER Where this run read its kernels and EOP, and whether
-%   that was a preference or the shipped default.
+%LOCALDESCRIBEDATAFOLDER Which data pool this run read its kernels from, and
+%   which rule chose it.
 %
 %   D119 LET THE SUITE FOLLOW A USER PREFERENCE, SO THE REPORT MUST SAY WHICH
 %   FOLDER IT FOLLOWED. Coverage now depends on a setting that appears in no
 %   call: two runs of the same sources can cover different tests because one
-%   machine's preference points somewhere with kernels and the other's does
-%   not. A report that did not name the folder would make those two runs
-%   indistinguishable, which is the shape D113 exists to prevent.
+%   machine's pool holds kernels and the other's does not. A report that did
+%   not name the folder would make those two runs indistinguishable, which is
+%   the shape D113 exists to prevent.
+%
+%   D133: THE POOL MAY BE UNCONFIGURED, AND THAT IS REPORTED, NOT RAISED. The
+%   report is written whatever the run found; a run with no pool says so here
+%   and its kernel-backed tests say so as filters.
 
-    folder = referenceSystem.dataFolder();
-    if ispref('referenceSystem', 'dataFolder')
-        described = folder + "   (preference)";
-    else
-        described = folder + "   (default)";
+    try
+        [~, location] = referenceSystem.dataFolder();
+        described = location.SPICE + "   (pool from " + location.source + ")";
+    catch failure
+        if failure.identifier ~= "referenceSystem:dataFolder:noDataPool"
+            rethrow(failure);
+        end
+        described = "no data pool configured (DATAPOOL unset)";
     end
 end
 
