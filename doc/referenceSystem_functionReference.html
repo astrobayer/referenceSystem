@@ -233,7 +233,7 @@ each function by <code>referenceSystem.buildDocumentation</code>
 See also IERSCONSTANTS, ELLIPSOIDPARAMETERS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 11:05 (CEST, UTC+02:00)
 Revised: 2026-08-09 10:15 (CEST, UTC+02:00)
@@ -242,92 +242,148 @@ Revised: 2026-08-09 10:15 (CEST, UTC+02:00)
 </div>
 <div class="fcn" id="datafolder">
 <h3>referenceSystem.dataFolder</h3>
-<p class="h1">Get or set the persistent data folder of the toolbox.</p>
+<p class="h1">Get or set the root of the data pool the toolbox downloads into.</p>
 <h4>SYNTAX</h4>
-<pre>folder = dataFolder() returns the folder the toolbox reads and writes
-  installed data in, creating it if it does not exist. Without a stored
-  preference this is data/ beside the package, which is what ships.
+<pre>folder = dataFolder() returns the ROOT OF THE DATA POOL: the one folder,
+  shared by every astrobayer toolbox, under which downloaded data is kept by
+  product. SPICE kernels live in &lt;pool&gt;/SPICE and Earth orientation series
+  in &lt;pool&gt;/EOP. Nothing downloaded is ever kept in the toolbox folder, and
+  there is no default inside it: without a configured pool this function
+  REFUSES rather than invent one.
 
-  folder = dataFolder(path) stores path as the data folder and returns it.
+  [folder, location] = dataFolder() also returns where each product of this
+  toolbox lives under that root, and which rule chose the root.
+
+  folder = dataFolder(path) stores path as the pool root and returns it.
   The choice PERSISTS ACROSS SESSIONS as a MATLAB preference, so it is made
   once and not on every call, and no startup.m is needed.
 
   folder = dataFolder("reset") discards the stored choice and returns the
-  default. Without it a preference would be one-way and the shipped
-  behaviour unreachable, which is a trap rather than a setting.</pre>
+  root the remaining rules resolve to now, or "" when none does. A reset is
+  a successful act, so it does not raise when the pool is then unset.
+
+  folder = dataFolder(DataPool = path) uses path as the root FOR THIS CALL
+  ONLY and stores nothing. It is the explicit first rule below, and what an
+  installer that was told where the pool is passes on.</pre>
 <h4>INPUT ARGUMENTS</h4>
 <pre>Name                     Size   Type     Units  Description
   ----                     ----   ----     -----  -----------
-  newFolder                1x1    string   -      Folder to store, the
+  newFolder                1x1    string   -      Pool root to store, the
                                                   literal "reset" to discard
                                                   a stored choice, or omitted
                                                   to query. Default "".</pre>
+<h4>OPTIONAL NAME-VALUE ARGUMENTS</h4>
+<pre>Name                     Size   Type     Default  Description
+  ----                     ----   ----     -------  -----------
+  DataPool                 1x1    string   ""       Pool root for this call,
+                                                    stored nowhere. Wins over
+                                                    every other rule. "" means
+                                                    not given.</pre>
 <h4>OUTPUT ARGUMENTS</h4>
 <pre>Name                     Size   Type     Units  Description
   ----                     ----   ----     -----  -----------
-  folder                   1x1    string   -      ABSOLUTE path of the data
-                                                  folder, which exists on
-                                                  return.</pre>
+  folder                   1x1    string   -      ABSOLUTE path of the pool
+                                                  root, which exists on
+                                                  return; "" only after a
+                                                  "reset" that leaves no rule
+                                                  standing.
+  location                 1x1    struct   -      Fields listed below.
+  .root                    1x1    string   -      The same path as folder.
+  .source                  1x1    string   -      The rule that chose it:
+                                                  "argument", "preference",
+                                                  "DATAPOOL",
+                                                  "READING_DATA_POOL", or ""
+                                                  when none did.
+  .SPICE                   1x1    string   -      &lt;root&gt;/SPICE, where
+                                                  downloadKernels writes.
+  .EOP                     1x1    string   -      &lt;root&gt;/EOP, where
+                                                  downloadEop writes.</pre>
 <h4>METHOD</h4>
-<pre>ONE AUTHORITY FOR THE LOCATION, AND THIS IS IT. downloadEop and
-  downloadKernels each carried a private localDefaultCache that composed
-  data/ from their own mfilename, so the toolbox held two answers to one
-  question and neither could be moved. Both now resolve through this
-  function: where a value has more than one definition, the copies are
-  deleted rather than kept equal.
+<pre>THE POOL ROOT IS RESOLVED IN ONE ORDER, THE ORGANISATION'S (DATA_POOL.md,
+  decided by the owner on 2026-11-08: "All data go always to the data pool.
+  Only model code or libraries go to the toolbox."):
+    1. the DataPool argument of this call;
+    2. the stored preference, setpref('referenceSystem', 'dataFolder');
+    3. getenv("DATAPOOL"), which toolboxInstaller writes into startup.m;
+    4. getenv("READING_DATA_POOL"), the older name, honoured, never required;
+    5. otherwise referenceSystem:dataFolder:noDataPool. NOTHING IS WRITTEN
+       INTO THE TOOLBOX FOLDER AS A FALLBACK, because a download that lands
+       in a git checkout makes the checkout dirty and is a second copy of a
+       product another toolbox already holds.
+  An environment variable holding only blanks counts as unset.
+
+  THE LAYOUT IS BY PRODUCT AND SHARED. One copy of each product, whichever
+  toolbox fetched it, so NonGravForces and this toolbox read one de440s.bsp.
+  The two folder names are spelled here and nowhere else in the toolbox, and
+  case-exact, because a Linux runner reads "spice" and "SPICE" as two
+  folders. The product folders are NOT created on query: the downloader
+  that writes into one creates it, and a reader that finds none reports it.
+
+  THE STORED PREFERENCE IS A POOL ROOT. Before version 3.0 it named a
+  per-toolbox folder that held the kernels and EOP files flat. The name of
+  the preference is kept, so a user who stored one is not silently ignored,
+  but it now means the root: point it at the pool (or reset it and let
+  DATAPOOL answer) and move the files into &lt;pool&gt;/SPICE and &lt;pool&gt;/EOP once,
+  by hand. No code looks in the old place.
+
+  ONE AUTHORITY FOR THE LOCATION, AND THIS IS IT. downloadEop,
+  downloadKernels, setupReferenceSystem, the test suite and its report all
+  resolve through this function and read the fields of location; none of
+  them composes a path of its own.
 
   THE MECHANISM IS setpref AND IT MATCHES shAnalysis DELIBERATELY. The same
   author maintains both toolboxes and calls shLowLevel.dataFolder with the
-  same three shapes - query, set, "reset" - so the habit transfers and the
-  two do not disagree about where a session's data lives. The preference
-  group is the toolbox name, so nothing here can collide with another
-  toolbox's settings.
+  same three shapes - query, set, "reset" - so the habit transfers. The
+  preference group is the toolbox name, so nothing here can collide with
+  another toolbox's settings.
 
-  THE FOLDER IS CREATED ON QUERY, WHICH IS A SIDE EFFECT AND IS INTENDED.
-  Every caller of this function is about to read or write in the folder, and
-  returning a path that does not exist moves the mkdir into each of them,
-  where it would be written more than once and eventually forgotten in one
-  place. The alternative - a query that only reports - was considered and
-  rejected because it makes the common path longer to serve a case the
-  toolbox does not have.
+  THE ROOT IS CREATED ON QUERY, WHICH IS A SIDE EFFECT AND IS INTENDED.
+  Every caller is about to read or write under it, and returning a path that
+  does not exist moves the mkdir into each of them. It is the pool, never
+  the toolbox, that is created.
 
-  A STORED PREFERENCE IS INVISIBLE IN A SCRIPT, which is the cost of
-  persistence and is stated here rather than discovered. Two identical
-  scripts on two machines can read different files with nothing in the call
-  to say so. Where that matters - a test, a published result, a CI run -
-  pass the folder explicitly through the CacheDir option of downloadEop or
-  downloadKernels, which is unaffected by any preference.</pre>
+  A STORED PREFERENCE OR AN ENVIRONMENT VARIABLE IS INVISIBLE IN A SCRIPT,
+  which is the cost of configuration and is stated here rather than
+  discovered. Where that matters - a test, a published result, a CI run -
+  pass the folder explicitly: DataPool here, DataFolder to setup, or CacheDir
+  to downloadEop and downloadKernels, which no rule above touches.</pre>
 <h4>ACCURACY</h4>
 <pre>Not applicable; the function resolves a path and computes no numerical
   quantity.</pre>
 <h4>ERRORS</h4>
-<pre>referenceSystem:dataFolder:pathIsAFile
-      The requested folder is an existing FILE, so no folder can be made
-      there. Raised before anything is written, because mkdir would
-      otherwise fail later inside a transfer and report a kernel when the
-      defect is in the argument.
+<pre>referenceSystem:dataFolder:noDataPool
+      No rule named a pool root: no DataPool argument, no stored preference,
+      and neither DATAPOOL nor READING_DATA_POOL is set. Set DATAPOOL (the
+      installer does), call referenceSystem.dataFolder(path) once, or pass
+      DataPool. Nothing is written anywhere before this is raised.
+  referenceSystem:dataFolder:pathIsAFile
+      The resolved root is an existing FILE, so no folder can be made there.
+      Raised before anything is written, because mkdir would otherwise fail
+      later inside a transfer and report a kernel when the defect is in the
+      configuration.
   referenceSystem:dataFolder:notCreated
-      The folder does not exist and could not be created; the message
-      carries the reason the file system gave.</pre>
+      The root does not exist and could not be created; the message carries
+      the reason the file system gave.</pre>
 <h4>REFERENCES</h4>
-<pre>Handover decision D119 and section C.10. The sibling
-  implementation is shLowLevel.dataFolder in the shAnalysis toolbox.</pre>
+<pre>toolboxInstaller docs/DATA_POOL.md, the organisation's data-pool contract.
+  Handover decisions D119 and D133, section C.10. The sibling implementation
+  is shLowLevel.dataFolder in the shAnalysis toolbox.</pre>
 <h4>EXAMPLE</h4>
-<pre>% Where does installed data go, and how do I move it off the system disk?
-  folder = referenceSystem.dataFolder()
-  referenceSystem.dataFolder("E:\DATAPOOL\referenceSystem");
-  referenceSystem.downloadKernels(Mode = "download");   % goes there now
-  referenceSystem.dataFolder("reset");                  % back to the default</pre>
+<pre>% Where does downloaded data go, and how do I name the pool?
+  [folder, location] = referenceSystem.dataFolder()  % refuses if unset
+  referenceSystem.dataFolder("E:\DATAPOOL");          % store the pool root
+  referenceSystem.downloadKernels(Mode = "download"); % to E:\DATAPOOL\SPICE
+  referenceSystem.dataFolder("reset");                % DATAPOOL answers now</pre>
 <h4>KEYWORDS</h4>
-<pre>data folder, preference, cache, installation, kernels, EOP
+<pre>data pool, DATAPOOL, data folder, preference, cache, installation, kernels
 
 See also DOWNLOADKERNELS, DOWNLOADEOP, SETUPREFERENCESYSTEM
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-08-21 18:05 (CEST, UTC+02:00)
-Revised: 2026-08-21 18:05 (CEST, UTC+02:00)
+Revised: 2026-11-08 23:10 (CET, UTC+01:00)
 -------------------------------------------------------------------------</pre>
 <p class="top"><a href="#contents">back to contents</a></p>
 </div>
@@ -451,7 +507,7 @@ Revised: 2026-08-21 18:05 (CEST, UTC+02:00)
 See also TOOLBOXVERSION, ELLIPSOIDPARAMETERS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 11:05 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -542,7 +598,7 @@ Created: 2026-07-24 11:05 (CEST, UTC+02:00)
 See also IERSCONSTANTS, TOOLBOXVERSION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 11:05 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -619,7 +675,7 @@ Created: 2026-07-24 11:05 (CEST, UTC+02:00)
 See also NORMALIZEEPOCH, CONVERTTIMESCALE.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -721,7 +777,7 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 See also TIMESCALE, LEAPSECONDS, DAYSECONDTOEPOCH, EPOCHTO, CONVERTTIMESCALE.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -785,7 +841,7 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 See also DAYSECONDTOEPOCH, DATETIMETOEPOCH, EPOCHTO, NORMALIZEEPOCH.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -844,7 +900,7 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 See also MJDTOEPOCH, EPOCHTO, NORMALIZEEPOCH.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -909,7 +965,7 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 See also MJDTOEPOCH, DAYSECONDTOEPOCH, EPOCHTO.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -975,7 +1031,7 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 See also MJDTOEPOCH, EPOCHTO, CONVERTTIMESCALE.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -1040,7 +1096,7 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 See also MJDTOEPOCH, DAYSECONDTOEPOCH, EPOCHTO.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -1128,7 +1184,7 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 See also EPOCHTO, GPSWEEKTOEPOCH, J2000SECONDSTOEPOCH, CONVERTTIMESCALE.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-09-21 16:25 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -1215,7 +1271,7 @@ See also MJDTOEPOCH, DAYSECONDTOEPOCH, DATETIMETOEPOCH, GPSWEEKTOEPOCH,
   J2000SECONDSTOEPOCH, GPSNANOSECONDSTOEPOCH.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -1275,7 +1331,7 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 See also SECONDSBETWEEN, NORMALIZEEPOCH, CONVERTTIMESCALE.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -1336,7 +1392,7 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 See also ADDSECONDS, NORMALIZEEPOCH, CONVERTTIMESCALE.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -1481,7 +1537,7 @@ Created: 2026-07-24 19:20 (CEST, UTC+02:00)
 See also CONVERTTIMESCALE, NORMALIZEEPOCH, MEXINFO.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 19:40 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -1652,7 +1708,7 @@ Created: 2026-07-24 19:40 (CEST, UTC+02:00)
 See also TIMESCALE, LEAPSECONDS, NORMALIZEEPOCH, EPOCHTO.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 19:55 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -1824,7 +1880,7 @@ Created: 2026-07-24 19:55 (CEST, UTC+02:00)
 See also CONVERTTIMESCALE, NORMALIZEEPOCH, TIMESCALE.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 20:10 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -2036,7 +2092,7 @@ Created: 2026-07-24 20:10 (CEST, UTC+02:00)
 See also INTERPOLATEEOP, DOWNLOADEOP, SUBDAILYEOPCORRECTION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 11:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -2218,7 +2274,7 @@ Created: 2026-07-25 11:20 (CEST, UTC+02:00)
 See also READEOP, SUBDAILYEOPCORRECTION, ZONALTIDEEOPCORRECTION, LEAPSECONDTABLE.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 11:55 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -2336,7 +2392,7 @@ Created: 2026-07-25 11:55 (CEST, UTC+02:00)
 See also INTERPOLATEEOP, ZONALTIDEEOPCORRECTION, READEOP.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 12:15 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -2450,7 +2506,7 @@ Created: 2026-07-25 12:15 (CEST, UTC+02:00)
 See also INTERPOLATEEOP, SUBDAILYEOPCORRECTION, READEOP.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 12:30 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -2477,8 +2533,11 @@ Created: 2026-07-25 12:30 (CEST, UTC+02:00)
 <h4>OPTIONAL NAME-VALUE ARGUMENTS</h4>
 <pre>Name       Size  Type      Default        Description
   ----       ----  ----      -------        -----------
-  CacheDir   1x1   string    data/ under    Folder the copy is written to.
-                             the toolbox    Created if absent.
+  CacheDir   1x1   string    ""             Folder the copy is written to.
+                                            Created if absent. "" means
+                                            &lt;pool&gt;/EOP, the data pool
+                                            resolved by dataFolder; never
+                                            the toolbox folder.
   MaxAge     1x1   duration  days(7)        Reuse an existing cached file
                                             younger than this instead of
                                             fetching. Set to days(0) to force.
@@ -2512,6 +2571,13 @@ Created: 2026-07-25 12:30 (CEST, UTC+02:00)
   one was. A truncated EOP file is the worst possible failure here, because it
   parses, it validates, and it silently shortens the usable epoch range.
 
+  WHERE THE COPY GOES IS THE DATA POOL, NEVER THE TOOLBOX (D133). Without
+  CacheDir the series is written to &lt;pool&gt;/EOP, the folder dataFolder names
+  for this product, and without a configured pool the call refuses before
+  anything is fetched. An explicit CacheDir is used as given. The two tables
+  committed to the repository's data/ folder are not downloads and are
+  never written by this function.
+
   The downloaded file is NOT parsed or validated here. Pass it to readEop,
   which owns format identification and validation; doing it in two places
   would be two sources of truth about what a valid series is.</pre>
@@ -2526,7 +2592,10 @@ Created: 2026-07-25 12:30 (CEST, UTC+02:00)
   anything reprocessed, and check eop.meta.series before quoting an accuracy.</pre>
 <h4>ERRORS</h4>
 <pre>referenceSystem:downloadEop:downloadFailed
-  referenceSystem:downloadEop:cacheNotWritable</pre>
+  referenceSystem:downloadEop:cacheNotWritable
+  referenceSystem:dataFolder:noDataPool
+      No CacheDir and no data pool configured. Raised by dataFolder before
+      any transfer; see there.</pre>
 <h4>REFERENCES</h4>
 <pre>IERS EOP Product Centre, https://hpiers.obspm.fr/eoppc/eop/
   IERS Rapid Service / Prediction Centre, https://maia.usno.navy.mil/</pre>
@@ -2539,7 +2608,7 @@ Created: 2026-07-25 12:30 (CEST, UTC+02:00)
 See also READEOP, INTERPOLATEEOP.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 12:45 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -2676,7 +2745,7 @@ See also ROTATIONGCRSTOCIRS, ROTATIONITRSTOGCRS, INTERPOLATEEOP, READEOP,
   EVALUATEINTERPOLANT.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 21:40 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -2869,7 +2938,7 @@ Created: 2026-07-25 21:40 (CEST, UTC+02:00)
 See also rotationItrsToGcrs, cipCoordinates, interpolateEop, readEop
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-27 10:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -2974,7 +3043,7 @@ See also rotationItrsToGcrs, rotationItrsToGcrsPartials,
   earthRotationAngleRate, interpolateEop
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-27 20:10 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -3138,7 +3207,7 @@ See also ROTATIONITRSTOGCRS, EARTHORIENTATIONPARTIALS, INTERPOLATEEOP,
   IERSCONSTANTS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-08-05 09:30 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -3196,7 +3265,7 @@ Created: 2026-08-05 09:30 (CEST, UTC+02:00)
 See also earthOrientationInterpolant, rotationItrsToGcrs
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-27 10:40 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -3258,7 +3327,7 @@ Created: 2026-07-27 10:40 (CEST, UTC+02:00)
 See also earthOrientationInterpolant, readInterpolant, evaluateInterpolant
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-27 21:10 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -3312,7 +3381,7 @@ Created: 2026-07-27 21:10 (CEST, UTC+02:00)
 See also writeInterpolant, earthOrientationInterpolant
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-27 21:10 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -3385,7 +3454,7 @@ Created: 2026-07-27 21:10 (CEST, UTC+02:00)
 See also EARTHROTATIONANGLE, IERSCONSTANTS, ROTATIONITRSTOGCRS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 22:00 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -3490,7 +3559,7 @@ Created: 2026-07-25 22:00 (CEST, UTC+02:00)
 See also GREENWICHSIDEREALTIME, ROTATIONITRSTOGCRS, INTERPOLATEEOP.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 21:55 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -3583,7 +3652,7 @@ Created: 2026-07-25 21:55 (CEST, UTC+02:00)
 See also EARTHROTATIONANGLE, ROTATIONITRSTOGCRS, CONVERTTIMESCALE.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 22:05 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -3666,7 +3735,7 @@ Created: 2026-07-25 22:05 (CEST, UTC+02:00)
 See also ROTATIONGCRSTOCIRS, GREENWICHSIDEREALTIME, ROTATIONITRSTOGCRS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 23:00 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -3745,7 +3814,7 @@ Created: 2026-07-25 23:00 (CEST, UTC+02:00)
 See also CIPCOORDINATES, ROTATIONTIRSTOITRS, ROTATIONITRSTOGCRS, APPLYROTATION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 22:10 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -3841,7 +3910,7 @@ Created: 2026-07-25 22:10 (CEST, UTC+02:00)
 See also ROTATIONGCRSTOCIRS, ROTATIONITRSTOGCRS, INTERPOLATEEOP, APPLYROTATION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 22:15 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -4066,7 +4135,7 @@ See also CIPCOORDINATES, APPLYROTATION, INVERTROTATION, EARTHROTATIONANGLE,
   INTERPOLATEEOP, READEOP, EARTHORIENTATIONINTERPOLANT.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 22:50 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -4177,7 +4246,7 @@ Created: 2026-07-25 22:50 (CEST, UTC+02:00)
 See also ROTATIONITRSTOGCRS, INVERTROTATION, ROTATIONGCRSTOCIRS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 22:25 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -4273,7 +4342,7 @@ Created: 2026-07-25 22:25 (CEST, UTC+02:00)
 See also APPLYROTATION, ROTATIONITRSTOGCRS, ROTATIONGCRSTOCIRS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-25 22:35 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -4381,7 +4450,7 @@ Created: 2026-07-25 22:35 (CEST, UTC+02:00)
 See also CONVERTITRF, APPLYHELMERT7, ELLIPSOIDPARAMETERS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 05:40 (CEST, UTC+02:00) - session S4, prompt P10
 -------------------------------------------------------------------------</pre>
@@ -4498,7 +4567,7 @@ Created: 2026-07-26 05:40 (CEST, UTC+02:00) - session S4, prompt P10
 See also ITRFPARAMETERS, APPLYHELMERT7, CARTESIANTOGEODETIC.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 06:00 (CEST, UTC+02:00) - session S4, prompt P10
 -------------------------------------------------------------------------</pre>
@@ -4618,7 +4687,7 @@ Created: 2026-07-26 06:00 (CEST, UTC+02:00) - session S4, prompt P10
 See also CONVERTITRF, ITRFPARAMETERS, APPLYMOLODENSKY.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 06:20 (CEST, UTC+02:00) - session S4, prompt P11
 -------------------------------------------------------------------------</pre>
@@ -4731,7 +4800,7 @@ Created: 2026-07-26 06:20 (CEST, UTC+02:00) - session S4, prompt P11
 See also APPLYHELMERT7, GEODETICTOCARTESIAN, CARTESIANTOGEODETIC.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 06:35 (CEST, UTC+02:00) - session S4, prompt P11
 -------------------------------------------------------------------------</pre>
@@ -4827,7 +4896,7 @@ Created: 2026-07-26 06:35 (CEST, UTC+02:00) - session S4, prompt P11
 See also CARTESIANTOGEODETIC, ELLIPSOIDPARAMETERS, CARTESIANTOENU.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 04:20 (CEST, UTC+02:00) - session S4, prompt P12
 -------------------------------------------------------------------------</pre>
@@ -4922,7 +4991,7 @@ Created: 2026-07-26 04:20 (CEST, UTC+02:00) - session S4, prompt P12
 See also GEODETICTOCARTESIAN, CARTESIANTOSPHERICAL, ELLIPSOIDPARAMETERS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 04:35 (CEST, UTC+02:00) - session S4, prompt P12
 -------------------------------------------------------------------------</pre>
@@ -5009,7 +5078,7 @@ Created: 2026-07-26 04:35 (CEST, UTC+02:00) - session S4, prompt P12
 See also ENUTOCARTESIAN, ROTATIONECEFTOENU, ENUTOAZIMUTHELEVATION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 05:05 (CEST, UTC+02:00) - session S4, prompt P12
 -------------------------------------------------------------------------</pre>
@@ -5069,7 +5138,7 @@ Created: 2026-07-26 05:05 (CEST, UTC+02:00) - session S4, prompt P12
 See also CARTESIANTOENU, ROTATIONECEFTOENU, AZIMUTHELEVATIONTOENU.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 05:10 (CEST, UTC+02:00) - session S4, prompt P12
 -------------------------------------------------------------------------</pre>
@@ -5122,7 +5191,7 @@ Created: 2026-07-26 05:10 (CEST, UTC+02:00) - session S4, prompt P12
 See also NEDTOENU, ROTATIONECEFTONED, CARTESIANTOENU.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 05:15 (CEST, UTC+02:00) - session S4, prompt P12
 -------------------------------------------------------------------------</pre>
@@ -5163,7 +5232,7 @@ Created: 2026-07-26 05:15 (CEST, UTC+02:00) - session S4, prompt P12
 See also ENUTONED, ROTATIONECEFTOENU, ROTATIONECEFTONED.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 05:16 (CEST, UTC+02:00) - session S4, prompt P12
 -------------------------------------------------------------------------</pre>
@@ -5240,7 +5309,7 @@ Created: 2026-07-26 05:16 (CEST, UTC+02:00) - session S4, prompt P12
 See also ROTATIONECEFTONED, CARTESIANTOENU, ROTATIONX, ROTATIONZ.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 04:50 (CEST, UTC+02:00) - session S4, prompt P12
 -------------------------------------------------------------------------</pre>
@@ -5312,7 +5381,7 @@ Created: 2026-07-26 04:50 (CEST, UTC+02:00) - session S4, prompt P12
 See also ROTATIONECEFTOENU, ENUTONED, ROTATIONY, ROTATIONZ.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 04:55 (CEST, UTC+02:00) - session S4, prompt P12
 -------------------------------------------------------------------------</pre>
@@ -5387,7 +5456,7 @@ Created: 2026-07-26 04:55 (CEST, UTC+02:00) - session S4, prompt P12
 See also AZIMUTHELEVATIONTOENU, CARTESIANTOENU, ENUTONED.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 05:20 (CEST, UTC+02:00) - session S4, prompt P12
 -------------------------------------------------------------------------</pre>
@@ -5451,7 +5520,7 @@ Created: 2026-07-26 05:20 (CEST, UTC+02:00) - session S4, prompt P12
 See also ENUTOAZIMUTHELEVATION, ENUTOCARTESIAN, CARTESIANTOENU.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 05:22 (CEST, UTC+02:00) - session S4, prompt P12
 -------------------------------------------------------------------------</pre>
@@ -5519,7 +5588,7 @@ Created: 2026-07-26 05:22 (CEST, UTC+02:00) - session S4, prompt P12
 See also SPHERICALTOCARTESIAN, CARTESIANTOGEODETIC, GEODETICTOCARTESIAN.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 05:26 (CEST, UTC+02:00) - session S4, prompt P12
 -------------------------------------------------------------------------</pre>
@@ -5576,7 +5645,7 @@ Created: 2026-07-26 05:26 (CEST, UTC+02:00) - session S4, prompt P12
 See also CARTESIANTOSPHERICAL, GEODETICTOCARTESIAN, CARTESIANTOGEODETIC.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 05:28 (CEST, UTC+02:00) - session S4, prompt P12
 -------------------------------------------------------------------------</pre>
@@ -5707,7 +5776,7 @@ Created: 2026-07-26 05:28 (CEST, UTC+02:00) - session S4, prompt P12
 See also UTMTOGEODETIC, GEODETICTOCARTESIAN, ELLIPSOIDPARAMETERS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 07:00 (CEST, UTC+02:00) - session S4, prompt P13
 -------------------------------------------------------------------------</pre>
@@ -5799,7 +5868,7 @@ Created: 2026-07-26 07:00 (CEST, UTC+02:00) - session S4, prompt P13
 See also GEODETICTOUTM, CARTESIANTOGEODETIC, ELLIPSOIDPARAMETERS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 07:15 (CEST, UTC+02:00) - session S4, prompt P13
 -------------------------------------------------------------------------</pre>
@@ -5903,7 +5972,7 @@ Created: 2026-07-26 07:15 (CEST, UTC+02:00) - session S4, prompt P13
 See also ELLIPSOIDALTOORTHOMETRIC, ORTHOMETRICTOELLIPSOIDAL, CARTESIANTOGEODETIC.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 07:40 (CEST, UTC+02:00) - session S4, prompt P13
 -------------------------------------------------------------------------</pre>
@@ -5975,7 +6044,7 @@ Created: 2026-07-26 07:40 (CEST, UTC+02:00) - session S4, prompt P13
 See also ORTHOMETRICTOELLIPSOIDAL, GEOIDUNDULATION, CARTESIANTOGEODETIC.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 07:25 (CEST, UTC+02:00) - session S4, prompt P13
 -------------------------------------------------------------------------</pre>
@@ -6039,7 +6108,7 @@ Created: 2026-07-26 07:25 (CEST, UTC+02:00) - session S4, prompt P13
 See also ELLIPSOIDALTOORTHOMETRIC, GEOIDUNDULATION, GEODETICTOCARTESIAN.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 07:28 (CEST, UTC+02:00) - session S4, prompt P13
 -------------------------------------------------------------------------</pre>
@@ -6148,7 +6217,7 @@ Created: 2026-07-26 07:28 (CEST, UTC+02:00) - session S4, prompt P13
 See also QUATERNIONFROMROTATION, ROTATIONFROMEULERSEQUENCE, MULTIPLYQUATERNIONS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 02:05 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -6216,7 +6285,7 @@ Created: 2026-07-26 02:05 (CEST, UTC+02:00) - session S4, prompt P25
 See also ROTATIONFROMEULERSEQUENCE, ATTITUDECONVENTION, APPLYROTATION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 02:10 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -6284,7 +6353,7 @@ Created: 2026-07-26 02:10 (CEST, UTC+02:00) - session S4, prompt P25
 See also ROTATIONFROMEULERSEQUENCE, ATTITUDECONVENTION, APPLYROTATION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 02:10 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -6352,7 +6421,7 @@ Created: 2026-07-26 02:10 (CEST, UTC+02:00) - session S4, prompt P25
 See also ROTATIONFROMEULERSEQUENCE, ATTITUDECONVENTION, APPLYROTATION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 02:10 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -6446,7 +6515,7 @@ Created: 2026-07-26 02:10 (CEST, UTC+02:00) - session S4, prompt P25
 See also EULERSEQUENCEFROMROTATION, ROTATIONFROMROLLPITCHYAW, ATTITUDECONVENTION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 02:20 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -6562,7 +6631,7 @@ Created: 2026-07-26 02:20 (CEST, UTC+02:00) - session S4, prompt P25
 See also ROTATIONFROMEULERSEQUENCE, ROLLPITCHYAWFROMROTATION, ATTITUDECONVENTION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 02:30 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -6632,7 +6701,7 @@ Created: 2026-07-26 02:30 (CEST, UTC+02:00) - session S4, prompt P25
 See also ROLLPITCHYAWFROMROTATION, ROTATIONFROMEULERSEQUENCE, ATTITUDECONVENTION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 02:40 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -6700,7 +6769,7 @@ Created: 2026-07-26 02:40 (CEST, UTC+02:00) - session S4, prompt P25
 See also ROTATIONFROMROLLPITCHYAW, EULERSEQUENCEFROMROTATION, ATTITUDECONVENTION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 02:45 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -6772,7 +6841,7 @@ Created: 2026-07-26 02:45 (CEST, UTC+02:00) - session S4, prompt P25
 See also QUATERNIONFROMROTATION, MULTIPLYQUATERNIONS, ATTITUDECONVENTION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 03:05 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -6853,7 +6922,7 @@ Created: 2026-07-26 03:05 (CEST, UTC+02:00) - session S4, prompt P25
 See also ROTATIONFROMQUATERNION, NORMALIZEQUATERNION, ATTITUDECONVENTION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 02:55 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -6936,7 +7005,7 @@ Created: 2026-07-26 02:55 (CEST, UTC+02:00) - session S4, prompt P25
 See also AXISANGLEFROMROTATION, ROTATIONFROMQUATERNION, ATTITUDECONVENTION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 03:35 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -7026,7 +7095,7 @@ Created: 2026-07-26 03:35 (CEST, UTC+02:00) - session S4, prompt P25
 See also ROTATIONFROMAXISANGLE, QUATERNIONFROMROTATION, EULERSEQUENCEFROMROTATION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 03:45 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -7097,7 +7166,7 @@ Created: 2026-07-26 03:45 (CEST, UTC+02:00) - session S4, prompt P25
 See also EULERSEQUENCEFROMQUATERNION, ROTATIONFROMEULERSEQUENCE, MULTIPLYQUATERNIONS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 03:55 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -7167,7 +7236,7 @@ Created: 2026-07-26 03:55 (CEST, UTC+02:00) - session S4, prompt P25
 See also QUATERNIONFROMEULERSEQUENCE, EULERSEQUENCEFROMROTATION, ROTATIONFROMQUATERNION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 04:00 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -7262,7 +7331,7 @@ Created: 2026-07-26 04:00 (CEST, UTC+02:00) - session S4, prompt P25
 See also INVERTQUATERNION, NORMALIZEQUATERNION, ATTITUDECONVENTION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 03:25 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -7324,7 +7393,7 @@ Created: 2026-07-26 03:25 (CEST, UTC+02:00) - session S4, prompt P25
 See also MULTIPLYQUATERNIONS, NORMALIZEQUATERNION, INVERTROTATION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 03:15 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -7396,7 +7465,7 @@ Created: 2026-07-26 03:15 (CEST, UTC+02:00) - session S4, prompt P25
 See also QUATERNIONFROMROTATION, INVERTQUATERNION, MULTIPLYQUATERNIONS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 03:10 (CEST, UTC+02:00) - session S4, prompt P25
 -------------------------------------------------------------------------</pre>
@@ -7517,7 +7586,7 @@ Created: 2026-07-26 03:10 (CEST, UTC+02:00) - session S4, prompt P25
 See also APPLYROTATION, INVERTROTATION, ROTATIONITRSTOGCRS, INTERPOLATEQUATERNIONS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 21:10 (CEST, UTC+02:00) - session S5, prompt P14
 -------------------------------------------------------------------------</pre>
@@ -7666,7 +7735,7 @@ See also ROTATIONGCRSTORSW, GEOCENTRICBODYSTATE, CIPCOORDINATES,
   ROTATIONGCRSTOCIRS, CONVERTTIMESCALE.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-09-21 17:05 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -7837,7 +7906,7 @@ Created: 2026-09-21 17:05 (CEST, UTC+02:00)
 See also NORMALIZEQUATERNION, MULTIPLYQUATERNIONS, INVERTQUATERNION, SECONDSBETWEEN.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 21:35 (CEST, UTC+02:00) - session S5, prompt P14
 -------------------------------------------------------------------------</pre>
@@ -7932,7 +8001,7 @@ See also ROTATIONFROMROLLPITCHYAW, ROTATIONECEFTONED, ROTATIONECEFTOENU,
   ANGULARVELOCITYTOROTATIONRATE.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 22:30 (CEST, UTC+02:00) - session S5, prompt P26
 -------------------------------------------------------------------------</pre>
@@ -8039,7 +8108,7 @@ Created: 2026-07-26 22:30 (CEST, UTC+02:00) - session S5, prompt P26
 See also ANGULARVELOCITYFROMROTATIONRATE, INTEGRATEATTITUDE, ROTATIONNAVTOBODY.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 22:15 (CEST, UTC+02:00) - session S5, prompt P26
 -------------------------------------------------------------------------</pre>
@@ -8135,7 +8204,7 @@ Created: 2026-07-26 22:15 (CEST, UTC+02:00) - session S5, prompt P26
 See also ANGULARVELOCITYTOROTATIONRATE, INTEGRATEATTITUDE, INVERTROTATION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 22:20 (CEST, UTC+02:00) - session S5, prompt P26
 -------------------------------------------------------------------------</pre>
@@ -8308,7 +8377,7 @@ Created: 2026-07-26 22:20 (CEST, UTC+02:00) - session S5, prompt P26
 See also ANGULARVELOCITYTOROTATIONRATE, INTERPOLATEQUATERNIONS, ROTATIONNAVTOBODY.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 22:25 (CEST, UTC+02:00) - session S5, prompt P26
 -------------------------------------------------------------------------</pre>
@@ -8477,7 +8546,7 @@ Created: 2026-07-26 22:25 (CEST, UTC+02:00) - session S5, prompt P26
 See also INTEGRATEATTITUDE, GRACEFOIMUINCREMENTS, ATTITUDECONVENTION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-28 00:20 (CEST, UTC+02:00) - session S9, prompt P27b
 -------------------------------------------------------------------------</pre>
@@ -8650,7 +8719,7 @@ See also ROTATIONECEFTOENU, ROTATIONECEFTONED, ROTATIONNAVTOBODY,
   INTEGRATEATTITUDE, IERSCONSTANTS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 22:40 (CEST, UTC+02:00) - session S5, prompt P26
 -------------------------------------------------------------------------</pre>
@@ -8755,7 +8824,7 @@ Created: 2026-07-26 22:40 (CEST, UTC+02:00) - session S5, prompt P26
 See also GRACEFOIMUINCREMENTS, GRACEFOIMUALIGNMENT, READEOP.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-27 21:20 (CEST, UTC+02:00) - session S9, prompt P27
 -------------------------------------------------------------------------</pre>
@@ -8859,7 +8928,7 @@ Created: 2026-07-27 21:20 (CEST, UTC+02:00) - session S9, prompt P27
 See also GRACEFOIMUINCREMENTS, READIMU1B, INTEGRATEATTITUDE.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-27 21:05 (CEST, UTC+02:00) - session S9, prompt P27
 -------------------------------------------------------------------------</pre>
@@ -9066,7 +9135,7 @@ Created: 2026-07-27 21:05 (CEST, UTC+02:00) - session S9, prompt P27
 See also READIMU1B, GRACEFOIMUALIGNMENT, INTEGRATEATTITUDE.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-27 21:40 (CEST, UTC+02:00) - session S9, prompt P27
 -------------------------------------------------------------------------</pre>
@@ -9173,7 +9242,7 @@ Created: 2026-07-27 21:40 (CEST, UTC+02:00) - session S9, prompt P27
 See also BARYCENTRICBODYSTATE, GEOCENTRICBODYSTATE, READEPHEMERIS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-28 10:05 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -9287,7 +9356,7 @@ Created: 2026-07-28 10:05 (CEST, UTC+02:00)
 See also GEOCENTRICBODYSTATE, EPHEMERISBODIES, READEPHEMERIS, CONVERTTIMESCALE.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-28 10:25 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -9385,7 +9454,7 @@ Created: 2026-07-28 10:25 (CEST, UTC+02:00)
 See also BARYCENTRICBODYSTATE, EPHEMERISBODIES, READEPHEMERIS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-28 10:50 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -9518,7 +9587,8 @@ Created: 2026-07-28 10:50 (CEST, UTC+02:00)
   Folkner, W.M. et al., 2014, IPN Progress Report 42-196 (DE430/DE431).
   Handover decisions D13, D15, D26, D89 and section H.7.1.</pre>
 <h4>EXAMPLE</h4>
-<pre>eph = referenceSystem.readEphemeris("data/de440s.bsp");
+<pre>[~, pool] = referenceSystem.dataFolder();     % kernels: &lt;pool&gt;/SPICE
+  eph = referenceSystem.readEphemeris(fullfile(pool.SPICE, "de440s.bsp"));
   r = referenceSystem.geocentricBodyState("moon", t, Source = "mice", ...
       Ephemeris = eph);</pre>
 <h4>KEYWORDS</h4>
@@ -9527,7 +9597,7 @@ Created: 2026-07-28 10:50 (CEST, UTC+02:00)
 See also BARYCENTRICBODYSTATE, GEOCENTRICBODYSTATE, EPHEMERISBODIES.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-28 11:10 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -9565,7 +9635,13 @@ Created: 2026-07-28 11:10 (CEST, UTC+02:00)
                                                    "both".
   Mode         1x1    string            "list"     "list", "verify" or
                                                    "download".
-  CacheDir     1x1    string            data/      Destination folder.
+  CacheDir     1x1    string            ""         Destination folder.
+                                                   "" means &lt;pool&gt;/SPICE,
+                                                   the data pool resolved
+                                                   by dataFolder, and is
+                                                   resolved in Mode
+                                                   "download" only. Never
+                                                   the toolbox folder.
   Timeout      1x1    double            900        Seconds per file.
   Overwrite    1x1    logical           false      Refetch files already there.
   Announce     1x1    function_handle   no-op      Called as
@@ -9675,7 +9751,15 @@ Created: 2026-07-28 11:10 (CEST, UTC+02:00)
   It is held to the same rules as the built-in one: the seven descriptive
   variables must be present (badCatalogue), and a leapseconds kernel is
   refused (D89, leapSecondKernelInCatalogue). Status, Bytes and Digest are
-  added as for the built-in rows.</pre>
+  added as for the built-in rows.
+
+  WHERE THE FILES GO IS THE DATA POOL, NEVER THE TOOLBOX (D133). Without
+  CacheDir a download writes to &lt;pool&gt;/SPICE, the folder dataFolder names
+  for this product, so one copy of each kernel serves every toolbox that
+  reads it. The pool is resolved only when something is to be written:
+  "list" and "verify" work on a machine with no pool configured, and
+  "download" without one refuses before any transfer starts. An explicit
+  CacheDir is used as given and consults nothing.</pre>
 <h4>ACCURACY</h4>
 <pre>Not applicable; this function transfers files and computes no quantity.
   ApproximateBytes is the published size and is for planning only; Bytes is
@@ -9685,6 +9769,9 @@ Created: 2026-07-28 11:10 (CEST, UTC+02:00)
   referenceSystem:downloadKernels:unknownSpan
   referenceSystem:downloadKernels:unknownMode
   referenceSystem:downloadKernels:cacheNotWritable
+  referenceSystem:dataFolder:noDataPool
+      Mode "download" without CacheDir, and no data pool is configured.
+      Raised by dataFolder before any transfer; see there.
   referenceSystem:downloadKernels:badCatalogue
   referenceSystem:downloadKernels:leapSecondKernelInCatalogue
   referenceSystem:downloadKernels:notReachable
@@ -9715,7 +9802,7 @@ Created: 2026-07-28 11:10 (CEST, UTC+02:00)
 See also READEPHEMERIS, DOWNLOADEOP, SETUPREFERENCESYSTEM, EPHEMERISBODIES.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-29 09:15 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -9845,7 +9932,7 @@ Created: 2026-07-29 09:15 (CEST, UTC+02:00)
 See also BCRSTOGCRS, BARYCENTRICBODYSTATE, GEOCENTRICBODYSTATE, IERSCONSTANTS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-28 15:35 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -9926,7 +10013,7 @@ Created: 2026-07-28 15:35 (CEST, UTC+02:00)
 See also GCRSTOBCRS, BARYCENTRICBODYSTATE, GEOCENTRICBODYSTATE, IERSCONSTANTS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-28 15:45 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -10099,7 +10186,7 @@ Created: 2026-07-28 15:45 (CEST, UTC+02:00)
 See also ROTATIONICRFTOBODYFIXED, BARYCENTRICBODYSTATE, ROTATIONITRSTOGCRS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-30 20:15 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -10211,7 +10298,7 @@ Created: 2026-07-30 20:15 (CEST, UTC+02:00)
 See also BODYROTATIONELEMENTS, ROTATIONITRSTOGCRS, APPLYROTATION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-30 21:40 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -10381,7 +10468,7 @@ Created: 2026-07-30 21:40 (CEST, UTC+02:00)
 See also CARTESIANTOGEODETIC, CONVERTITRF, ROTATIONITRSTOGCRS, APPLYROTATION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 22:55 (CEST, UTC+02:00) - session S5, prompt P15
 -------------------------------------------------------------------------</pre>
@@ -10466,7 +10553,7 @@ Created: 2026-07-26 22:55 (CEST, UTC+02:00) - session S5, prompt P15
 See also RUNTESTSUITE, TOOLBOXVERSION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 12:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -10534,7 +10621,7 @@ Created: 2026-07-24 12:20 (CEST, UTC+02:00)
 See also buildMex, setupReferenceSystem, mexInfo
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-27 18:30 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -10630,7 +10717,7 @@ Created: 2026-07-27 18:30 (CEST, UTC+02:00)
 See also MEXINFO, LEAPSECONDS.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 20:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -10729,7 +10816,7 @@ Created: 2026-07-24 20:20 (CEST, UTC+02:00)
 See also BUILDMEX, RUNTESTSUITE, MEXINFO.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-27 09:40 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -10880,7 +10967,7 @@ Created: 2026-07-27 09:40 (CEST, UTC+02:00)
 See also MEXINFO, TOOLBOXVERSION.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-24 12:20 (CEST, UTC+02:00)
 -------------------------------------------------------------------------</pre>
@@ -11053,12 +11140,12 @@ Created: 2026-07-24 12:20 (CEST, UTC+02:00)
 See also SETUPREFERENCESYSTEM, BUILDMEX, MEXINFO.
 
 -------------------------------------------------------------------------
-referenceSystem v2.3
+referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-07-26 12:30 (CEST, UTC+02:00) - session S4, folder-lock report
 -------------------------------------------------------------------------</pre>
 <p class="top"><a href="#contents">back to contents</a></p>
 </div>
-<p class="foot">referenceSystem v2.3.2 &mdash; generated from the
+<p class="foot">referenceSystem v3.0.0 &mdash; generated from the
 package help blocks. See the handover document for the design.</p>
 </body></html>

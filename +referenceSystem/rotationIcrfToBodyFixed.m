@@ -112,7 +112,7 @@ function [rotation, info] = rotationIcrfToBodyFixed(body, epoch, options)
 % See also BODYROTATIONELEMENTS, ROTATIONITRSTOGCRS, APPLYROTATION.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.3
+% referenceSystem v3.0
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-30 21:40 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------

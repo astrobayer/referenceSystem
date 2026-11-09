@@ -29,9 +29,12 @@ safe in <code>startup.m</code>.</p>
 call, <code>setupReferenceSystem(Fetch="all")</code>, about 700 MB on a first run
 and nothing afterwards; <code>KernelSet="minimal"</code> leaves out the 650 MB
 small-body kernel. Setup prints this instruction itself when nothing is installed
-yet, so an empty data folder is never silent. Where the data goes is
-<code>referenceSystem.dataFolder</code>, which remembers the choice between
-sessions.</p>
+yet, so an empty data pool is never silent. The data goes to the shared
+<b>data pool</b> and never into the toolbox: kernels to
+<code>&lt;pool&gt;/SPICE</code>, Earth orientation series to
+<code>&lt;pool&gt;/EOP</code>. <code>referenceSystem.dataFolder</code> finds the
+pool root - a stored choice, else the <code>DATAPOOL</code> environment variable
+- and refuses when neither is set.</p>
 
 <p>It is also the only unqualified name the toolbox installs, and the one place
 permitted to print. It prints by default, and this is what it says:</p>

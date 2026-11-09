@@ -3,27 +3,28 @@ function status = setupReferenceSystem(options)
 %
 %   status = setupReferenceSystem() adds the folder containing this file to the
 %   MATLAB path, SAVES that path, removes any misconfigured or stale entry
-%   belonging to this toolbox, verifies that the package is reachable,
-%   DOWNLOADS the external data the toolbox can use, prints a summary, and
-%   returns what it did.
+%   belonging to this toolbox, verifies that the package is reachable, reports
+%   the external data present in the data pool, prints a summary, and returns
+%   what it did. It downloads NOTHING unless Fetch asks for it.
 %
 %   It is also the INSTALLER: it compiles the MEX gateway and builds the
 %   documentation whenever either is missing or out of date, so a fresh zip or
 %   git clone takes one command and not three. Every step is idempotent, so
 %   calling setup from startup.m costs milliseconds once all is in place.
 %
-%   THE DEFAULTS INSTALL RATHER THAN INSPECT. Calling this function with no
-%   arguments is what a new user does first and usually only once, and the
-%   thing they want out of it is a toolbox that works in the next session and
-%   in every session after it. That means the path is saved, both Earth
-%   orientation series and the full kernel set are fetched, and the summary is
-%   printed - roughly 700 MB on a first run, dominated by the 650 MB small-body
-%   kernel, and nothing at all on later runs because every file already present
-%   is skipped. A failed download does not stop setup; it is recorded and
-%   reported.
+%   THE DEFAULTS INSTALL THE TOOLBOX, NOT THE DATA. Calling this function with
+%   no arguments saves the path, builds what is missing and prints the
+%   summary, offline, in seconds. The external data - both Earth orientation
+%   series and the full kernel set, roughly 700 MB on a first fetch,
+%   dominated by the 650 MB small-body kernel - is one named argument away,
+%   Fetch="all", and is then skipped file by file on every later run. It goes
+%   to the DATA POOL, <pool>/EOP and <pool>/SPICE, and never into the toolbox
+%   folder; see referenceSystem.dataFolder for how the pool is found. A failed
+%   download does not stop setup; it is recorded and reported.
 %
 %   status = setupReferenceSystem(Save=false) sets the path for this session only.
-%   status = setupReferenceSystem(Fetch="none") downloads nothing.
+%   status = setupReferenceSystem(Fetch="all") fetches EOP and kernels.
+%   status = setupReferenceSystem(Fetch="none") downloads nothing (the default).
 %   status = setupReferenceSystem(KernelSet="minimal") takes de440s.bsp alone.
 %   status = setupReferenceSystem(Verbose=false) prints nothing.
 %   status = setupReferenceSystem(Build="always") rebuilds everything.
@@ -49,10 +50,13 @@ function status = setupReferenceSystem(options)
 %   options.Save      1x1    logical   -      Call savepath so the entry
 %                                             survives a restart. Default true.
 %   options.Fetch     1x1    string    -      Data to download before the
-%                                            summary: "all" (default), "eop",
-%                                            "kernels" or "none". EVERYTHING IS
-%                                            FETCHED BY DEFAULT; pass "none"
-%                                            for an offline call.
+%                                            summary: "none" (default),
+%                                            "eop", "kernels" or "all".
+%                                            NOTHING IS FETCHED BY DEFAULT;
+%                                            pass "all" to install the data.
+%                                            Anything but "none" needs a
+%                                            data pool and refuses without
+%                                            one (dataFolder:noDataPool).
 %   options.KernelSet 1x1    string    -      How much kernel content, when
 %                                            Fetch asks for them: "minimal"
 %                                            (~31 MB), "orientation" or "all"
@@ -87,13 +91,20 @@ function status = setupReferenceSystem(options)
 %                                             (default, build when the sources
 %                                             are newer than the product),
 %                                             "always" or "never".
-%   options.DataFolder 1x1   string    -      Where installed EOP files and
-%                                             kernels are put, RESOLVED BEFORE
-%                                             ANYTHING IS FETCHED. Default ""
-%                                             means <toolboxRoot>/data. A
-%                                             named folder is created when it
-%                                             does not exist and reported
-%                                             absolute in status.dataFolder.
+%   options.DataFolder 1x1   string    -      ROOT OF THE DATA POOL for
+%                                             this call, RESOLVED BEFORE
+%                                             ANYTHING IS FETCHED: EOP series
+%                                             go to <DataFolder>/EOP, kernels
+%                                             to <DataFolder>/SPICE. Default ""
+%                                             means the pool dataFolder
+%                                             resolves (preference, then
+%                                             DATAPOOL, then
+%                                             READING_DATA_POOL); never the
+%                                             toolbox folder. A named folder
+%                                             is created when it does not
+%                                             exist, reported absolute in
+%                                             status.dataFolder, and stored
+%                                             nowhere.
 %
 % OUTPUT ARGUMENTS
 %   Name                  Size   Type      Units  Description
@@ -120,26 +131,42 @@ function status = setupReferenceSystem(options)
 %   .unlistedFiles        Nx1    string    -      Package files absent from
 %                                                 Contents.m, possibly empty.
 %   .mex                  1x1    struct    -      The mexInfo report, see there.
-%   .dataFolder           1x1    string    -      ABSOLUTE path of the folder
-%                                                 that holds installed EOP
-%                                                 files and kernels: the
-%                                                 DataFolder option resolved,
-%                                                 or <toolboxRoot>/data.
+%   .dataFolder           1x1    string    -      ABSOLUTE path of the data
+%                                                 pool root: the DataFolder
+%                                                 option resolved, or the pool
+%                                                 dataFolder resolves. "" when
+%                                                 no pool is configured, which
+%                                                 only Fetch="none" accepts.
+%   .dataPool             1x1    struct    -      The location struct of
+%                                                 referenceSystem.dataFolder:
+%                                                 .root, .source, .SPICE and
+%                                                 .EOP; all "" without a pool.
+%   .eopSources           Nx1    string    -      EOP series in <pool>/EOP and
+%                                                 the tables committed to the
+%                                                 toolbox's data/, labelled.
+%   .kernels              Nx1    string    -      Kernels in <pool>/SPICE.
 %   .leapSecondTable      1x1    string    -      The leap-second source and
 %                                                 coverage actually in use.
 %   .ready                1x1    logical   -      True when the package resolves.
 %
 % METHOD
-%   DataFolder GOVERNS THIS CALL AND NOT THE TOOLBOX. downloadEop and
-%   downloadKernels each resolve their own CacheDir default to
-%   <toolboxRoot>/data, so a later bare downloadKernels(Mode="download")
-%   writes THERE, not to the folder named here. Nothing reads the wrong data
-%   as a result - readEop and readEphemeris take explicit paths and discover
-%   nothing - but a caller who installs elsewhere has to carry the path
-%   onward, which is what status.dataFolder is for. The toolbox has no
-%   persisted setting and this option does not invent one: a preference that
-%   survives the call would have to be written somewhere, and where is a
-%   decision, not an implementation detail.
+%   DOWNLOADED DATA GOES TO THE DATA POOL AND NEVER INTO THE TOOLBOX (D133,
+%   the organisation's DATA_POOL.md). The pool root is resolved by
+%   referenceSystem.dataFolder - DataFolder here, else the stored preference,
+%   else DATAPOOL, else READING_DATA_POOL - and the products sit under it as
+%   SPICE/ and EOP/, spelled by dataFolder alone. Without a pool, Fetch="none"
+%   still installs the toolbox and reports that no pool is configured; any
+%   other Fetch refuses before a byte moves. The two EOP tables committed to
+%   the repository's data/ folder are part of the toolbox, not downloads: they
+%   stay, nothing writes there, and the summary lists them beside the pool's.
+%
+%   DataFolder GOVERNS THIS CALL AND NOT THE TOOLBOX. It is stored nowhere, so
+%   a later bare downloadKernels(Mode="download") writes to the pool
+%   dataFolder resolves, not to the folder named here. Nothing reads the wrong
+%   data as a result - readEop and readEphemeris take explicit paths and
+%   discover nothing - but a caller who installs elsewhere has to carry the
+%   path onward, which is what status.dataFolder is for; a persistent choice
+%   is referenceSystem.dataFolder(path).
 %
 %   Three things are checked, in the order in which they break a session.
 %
@@ -182,18 +209,15 @@ function status = setupReferenceSystem(options)
 %   place in the toolbox where printing is permitted, because it runs before
 %   there is a toolbox to return anything through (section C.10).
 %
-%   THE DEFAULTS CHANGED AT REVISION 1.204, AND THE REASON IS WHO CALLS THIS.
-%   Save, Fetch, KernelSet and Verbose defaulted to false, "none", "minimal"
-%   and false - the conservative choice, which assumes the caller is a script
-%   that knows what it wants. The caller is almost always a person running the
-%   one documented command on a fresh clone, and for them every one of those
-%   defaults was the wrong half of a decision they did not know they were
-%   making: the path was gone after a restart, the data the toolbox is built
-%   around was absent, and the function that had just done the work said
-%   nothing about it. Setup now does the whole installation and reports it. The
-%   conservative behaviour is one named argument away and is what the test
-%   suite uses, since a suite that saved the path and pulled 700 MB would be
-%   changing the machine it is measuring.
+%   THE DEFAULTS FOLLOW WHO CALLS THIS. The caller is almost always a person
+%   running the one documented command on a fresh clone, so the path is saved,
+%   the kernel set asked for by a later Fetch is the full one, and the summary
+%   is printed. Installing 700 MB is a separate act with a separate cost, so
+%   Fetch defaults to "none" - and the summary prints the call that fetches
+%   the data whenever none is present, so an empty pool is reported rather
+%   than merely left. The test suite passes Save=false, Fetch="none" and
+%   Verbose=false, since a suite that saved the path and pulled 700 MB would
+%   be changing the machine it is measuring.
 %
 % ACCURACY
 %   Not applicable; the function configures the session and computes no
@@ -211,6 +235,13 @@ function status = setupReferenceSystem(options)
 %       message reports the file it expected and whether that file is on disk.
 %   referenceSystem:setupReferenceSystem:otherInstallationResolved
 %       The name resolves to a copy of the toolbox outside this folder.
+%   referenceSystem:setupReferenceSystem:dataFolderIsAFile
+%       DataFolder names an existing file.
+%   referenceSystem:setupReferenceSystem:dataFolderNotCreated
+%       DataFolder does not exist and could not be created.
+%   referenceSystem:dataFolder:noDataPool
+%       Fetch is not "none", DataFolder is omitted and no data pool is
+%       configured. Raised by dataFolder before anything is downloaded.
 %
 %   Warnings, all suppressible by identifier:
 %   referenceSystem:setupReferenceSystem:packageFolderRemoved
@@ -223,7 +254,9 @@ function status = setupReferenceSystem(options)
 %   C.10 (installation and this entry point).
 %
 % EXAMPLE
-%   status = setupReferenceSystem();                  % install, fetch, save
+%   status = setupReferenceSystem();                  % install and save
+%   status = setupReferenceSystem(Fetch="all", ...    % and fetch into the pool
+%       DataFolder="E:\DATAPOOL");
 %   status = setupReferenceSystem(Fetch="none", ...   % quiet and offline
 %       Save=false, Verbose=false);
 %   t = referenceSystem.iersConstants();
@@ -234,7 +267,7 @@ function status = setupReferenceSystem(options)
 % See also RUNTESTSUITE, MEXINFO, TOOLBOXVERSION, DOWNLOADEOP, DOWNLOADKERNELS.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.3
+% referenceSystem v3.0
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-24 13:45 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------
@@ -321,7 +354,8 @@ function status = setupReferenceSystem(options)
     % IT. Both downloads and both of the state readers below take the folder as
     % an argument, so this line is the single place the location is decided and
     % nothing downstream can pick a different one.
-    dataFolder = resolveDataFolder(toolboxRoot, options.DataFolder);
+    [dataFolder, dataPool] = resolveDataFolder(options.DataFolder, ...
+        options.Fetch);
 
     % SETUP IS THE INSTALLER. The toolbox ships as a zip or a git clone, so
     % nothing stands between the repository and the user: whatever has to
@@ -366,7 +400,7 @@ function status = setupReferenceSystem(options)
     % it in the same session. The fetch runs AFTER the path is set - it calls
     % package functions - and BEFORE eopSource is read, so a series downloaded
     % in this call is reported by this call rather than by the next one.
-    fetch = performFetch(dataFolder, options);
+    fetch = performFetch(dataPool, options);
 
     report = struct( ...
         'toolboxRoot', toolboxRoot, ...
@@ -377,8 +411,9 @@ function status = setupReferenceSystem(options)
         'removedFromPath', removedFromPath, ...
         'unlistedFiles', unlistedFile, ...
         'dataFolder', string(dataFolder), ...
-        'eopSources', eopSource(dataFolder), ...
-        'kernels', kernelState(dataFolder), ...
+        'dataPool', dataPool, ...
+        'eopSources', eopSource(dataPool.EOP, fullfile(toolboxRoot, 'data')), ...
+        'kernels', kernelState(dataPool.SPICE), ...
         'toolkit', toolkitState(), ...
         'fetch', fetch, ...
         'mex', mexState, ...
@@ -640,17 +675,22 @@ function state = documentationState(toolboxRoot)
     state.searchable = ~isempty(found) && any([found.isdir]);
 end
 
-function dataFolder = resolveDataFolder(toolboxRoot, requested)
-%RESOLVEDATAFOLDER Decide where installed data goes, and say so when it is new.
+function [dataFolder, dataPool] = resolveDataFolder(requested, fetchRequest)
+%RESOLVEDATAFOLDER Decide which data pool this call uses, before any fetch.
 %
 %   AN OMISSION AND A CHOICE ARE DISTINGUISHABLE, WHICH IS THE D113 IDIOM.
-%   The default is the empty string rather than the path, so this function can
-%   tell "the caller said nothing" from "the caller named the default", and the
-%   two get different treatment: an absent DEFAULT folder is a warning, because
-%   the toolbox shipped with one and its absence means an incomplete unpack; an
-%   absent NAMED folder is created, because naming it is a deliberate act and
-%   an installer that refuses to make the directory it was pointed at is
-%   answering a question nobody asked.
+%   The default is the empty string rather than a path, so this function can
+%   tell "the caller said nothing" from "the caller named a folder", and the
+%   two get different treatment: a NAMED folder is created when absent,
+%   because naming it is a deliberate act; an OMITTED one is whatever
+%   referenceSystem.dataFolder resolves, and no folder of setup's own.
+%
+%   D133: WITHOUT A POOL, ONLY AN OFFLINE CALL PROCEEDS. Fetch="none" writes
+%   nothing, so refusing it would make the toolbox uninstallable on a machine
+%   that has not chosen a pool yet; it proceeds with an empty location and the
+%   summary says no pool is configured. Any other Fetch would have to write
+%   somewhere, and the contract leaves no somewhere: dataFolder's noDataPool
+%   propagates, before a byte moves. There is no toolbox-folder fallback.
 %
 %   A PATH THAT IS ALREADY A FILE IS REFUSED RATHER THAN WORKED AROUND. mkdir
 %   would fail later, inside a download, with the message of whichever transfer
@@ -658,24 +698,15 @@ function dataFolder = resolveDataFolder(toolboxRoot, requested)
 %   the defect is in their argument.
 
     if strlength(strtrim(requested)) == 0
-        % D119: A STORED PREFERENCE IS THE DEFAULT, AND ONLY THEN data/.
-        % Setup computing its own default would be the copy D119 deleted,
-        % reintroduced in the installer: a user who moved their data and then
-        % ran setup with no arguments would have fetched 700 MB back into the
-        % toolbox tree. The warning below belongs to the SHIPPED folder only -
-        % a preference is a deliberate act, and an absent folder it names is
-        % created rather than complained about.
-        if ispref('referenceSystem', 'dataFolder')
-            dataFolder = referenceSystem.dataFolder();
-            return
-        end
-        dataFolder = string(fullfile(toolboxRoot, 'data'));
-        if ~isfolder(dataFolder)
-            warning('referenceSystem:setupReferenceSystem:missingDataFolder', ...
-                ['The data folder "%s" is missing. It holds the leap-second ', ...
-                'and Earth orientation files a session may install; the ', ...
-                'toolbox runs without it on the bundled SOFA table alone.'], ...
-                dataFolder);
+        try
+            [dataFolder, dataPool] = referenceSystem.dataFolder();
+        catch failure
+            if failure.identifier ~= "referenceSystem:dataFolder:noDataPool" ...
+                    || fetchRequest ~= "none"
+                rethrow(failure);
+            end
+            dataFolder = "";
+            dataPool = struct('root', "", 'source', "", 'SPICE', "", 'EOP', "");
         end
         return
     end
@@ -683,7 +714,7 @@ function dataFolder = resolveDataFolder(toolboxRoot, requested)
     dataFolder = string(strtrim(requested));
     if isfile(dataFolder)
         error('referenceSystem:setupReferenceSystem:dataFolderIsAFile', ...
-            ['DataFolder "%s" is an existing FILE, so no data folder can be ', ...
+            ['DataFolder "%s" is an existing FILE, so no data pool can be ', ...
             'made there. Name a directory, or a path that does not exist ', ...
             'yet.'], dataFolder);
     end
@@ -696,17 +727,13 @@ function dataFolder = resolveDataFolder(toolboxRoot, requested)
         end
     end
 
-    % ABSOLUTE FROM HERE ON. A relative DataFolder would be resolved against
-    % whatever the working directory happened to be when each downstream call
-    % ran, and the status struct would report a path that means something
-    % different after a cd. what() answers for a folder that now exists.
-    resolved = what(char(dataFolder));
-    if ~isempty(resolved)
-        dataFolder = string(resolved(1).path);
-    end
+    % ABSOLUTE, AND THE PRODUCT FOLDERS FROM THEIR ONE AUTHORITY. dataFolder
+    % makes the path absolute through what() and spells SPICE/ and EOP/; the
+    % DataPool argument uses the folder for this call and stores nothing.
+    [dataFolder, dataPool] = referenceSystem.dataFolder(DataPool = dataFolder);
 end
 
-function fetch = performFetch(dataFolder, options)
+function fetch = performFetch(dataPool, options)
 %PERFORMFETCH Download the external data the caller asked for, and only that.
 %   Nothing is fetched unless Fetch says so. The two sources are handled by the
 %   package functions that own them - downloadEop and downloadKernels - rather
@@ -734,7 +761,7 @@ function fetch = performFetch(dataFolder, options)
         for series = ["EOP 20 C04", "finals2000A"]
             try
                 file = referenceSystem.downloadEop(series, ...
-                    CacheDir = dataFolder);
+                    CacheDir = dataPool.EOP);
                 fetch.eop(end+1, 1) = string(file);
             catch failure
                 fetch.failures(end+1, 1) = series + ": " + ...
@@ -762,7 +789,7 @@ function fetch = performFetch(dataFolder, options)
             fetch.kernelManifest = referenceSystem.downloadKernels( ...
                 Set = options.KernelSet, Span = options.KernelSpan, ...
                 Mode = "download", ...
-                CacheDir = dataFolder, Announce = announce);
+                CacheDir = dataPool.SPICE, Announce = announce);
             failedRow = startsWith(fetch.kernelManifest.Status, "FAILED");
             for k = find(failedRow).'
                 fetch.failures(end+1, 1) = fetch.kernelManifest.File(k) + ...
@@ -837,21 +864,21 @@ function state = toolkitState()
         "https://naif.jpl.nasa.gov/naif/toolkit_MATLAB.html)";
 end
 
-function found = kernelState(dataFolder)
-%KERNELSTATE SPICE kernels present in data/, with their size and age.
+function found = kernelState(spiceFolder)
+%KERNELSTATE SPICE kernels present in <pool>/SPICE, with their size and age.
 %   The same C.10 obligation eopSource discharges for the Earth orientation
 %   series: a session running against a kernel it forgot it had should say so
 %   here, where it is cheap to notice.
 
     found = strings(0, 1);
-    if ~isfolder(dataFolder)
+    if strlength(spiceFolder) == 0 || ~isfolder(spiceFolder)
         return
     end
 
-    candidate = [dir(fullfile(dataFolder, '*.bsp')); ...
-        dir(fullfile(dataFolder, '*.bpc')); ...
-        dir(fullfile(dataFolder, '*.tpc')); ...
-        dir(fullfile(dataFolder, '*.tf'))];
+    candidate = [dir(fullfile(spiceFolder, '*.bsp')); ...
+        dir(fullfile(spiceFolder, '*.bpc')); ...
+        dir(fullfile(spiceFolder, '*.tpc')); ...
+        dir(fullfile(spiceFolder, '*.tf'))];
     candidate = candidate(~[candidate.isdir]);
 
     for k = 1:numel(candidate)
@@ -862,8 +889,8 @@ function found = kernelState(dataFolder)
     end
 end
 
-function found = eopSource(dataFolder)
-%EOPSOURCE Earth orientation series present in data/, with their coverage.
+function found = eopSource(eopFolder, committedFolder)
+%EOPSOURCE Earth orientation series present, with their size and age.
 %   The section C.10 obligation attached to prompt P5: setup reports the EOP
 %   sources actually in use, so that a session which is quietly running on a
 %   two-year-old cached series says so at the point where it is cheap to
@@ -873,22 +900,39 @@ function found = eopSource(dataFolder)
 %   Only the file name, size and modification time are read. Parsing the series
 %   here would duplicate readEop, which owns format identification, and would
 %   make setup fail on a file that is merely stale rather than broken.
+%
+%   TWO PLACES, LABELLED, AND THE LABEL IS THE POINT (D133). Downloads are in
+%   <pool>/EOP. The repository also COMMITS two tables to its data/ folder;
+%   they are part of the toolbox, not downloads, and stay. Both are listed,
+%   each with where it is, so a session reading a committed table of a given
+%   age is told so rather than left to assume it is reading a fresh download.
+
+    found = [eopFilesIn(eopFolder, "pool"); ...
+        eopFilesIn(committedFolder, "committed")];
+end
+
+function found = eopFilesIn(folder, label)
+%EOPFILESIN The EOP series in one folder, each line tagged with its place.
 
     found = strings(0, 1);
-    if ~isfolder(dataFolder)
+    if strlength(string(folder)) == 0 || ~isfolder(folder)
         return
     end
 
-    candidate = [dir(fullfile(dataFolder, 'eopc04*')); ...
-        dir(fullfile(dataFolder, 'finals*')); ...
-        dir(fullfile(dataFolder, 'EOP*'))];
+    candidate = [dir(fullfile(folder, 'eopc04*')); ...
+        dir(fullfile(folder, 'finals*')); ...
+        dir(fullfile(folder, 'EOP*'))];
     candidate = candidate(~[candidate.isdir]);
+    % ONE LINE PER FILE. Windows matches 'EOP*' case-insensitively, so it
+    % found eopc04_* a second time and the summary listed that file twice.
+    [~, first] = unique(string({candidate.name}), 'stable');
+    candidate = candidate(first);
 
     for k = 1:numel(candidate)
         age = days(datetime('now') - ...
             datetime(candidate(k).datenum, 'ConvertFrom', 'datenum'));
-        found(end+1, 1) = sprintf('%s (%.1f MB, %.0f day(s) old)', ...
-            candidate(k).name, candidate(k).bytes/1048576, age); %#ok<AGROW>
+        found(end+1, 1) = sprintf('%s (%s, %.1f MB, %.0f day(s) old)', ...
+            candidate(k).name, label, candidate(k).bytes/1048576, age); %#ok<AGROW>
     end
 end
 
@@ -924,7 +968,13 @@ function printSummary(status)
         fprintf('  unlisted: %s.m is in the package but not in Contents.m\n', ...
             status.unlistedFiles(k));
     end
-    fprintf('  data    : %s\n', status.dataFolder);
+    if strlength(status.dataFolder) == 0
+        fprintf(['  data    : NO DATA POOL CONFIGURED. Set DATAPOOL, or call ', ...
+            'referenceSystem.dataFolder(path) once\n']);
+    else
+        fprintf('  data    : %s (from %s)\n', status.dataFolder, ...
+            status.dataPool.source);
+    end
     fprintf('  MEX     : %s\n', status.mex.summary);
     fprintf('  leapsec : %s\n', status.leapSecondTable);
     % "mex built (the gateway is not compiled on this machine)" read as a
@@ -964,12 +1014,12 @@ function printSummary(status)
         % an empty data folder - and the fix for that was never the download
         % itself, it was ending the SILENCE about it. The next command is
         % printed rather than left in the documentation.
-        fprintf(['  data    : nothing installed yet. To fetch it:\n', ...
+        fprintf(['  data    : nothing in the pool yet. To fetch it:\n', ...
             '            setupReferenceSystem(Fetch = "all")   %% ~700 MB\n', ...
-            '            referenceSystem.dataFolder(path)      %% to put it elsewhere first\n']);
+            '            referenceSystem.dataFolder(path)      %% to name the pool first\n']);
     end
     if isempty(status.eopSources)
-        fprintf('  EOP     : none cached in data/; supply a series to readEop\n');
+        fprintf('  EOP     : none found; supply a series to readEop\n');
     else
         for k = 1:numel(status.eopSources)
             fprintf('  EOP     : %s\n', status.eopSources(k));

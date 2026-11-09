@@ -106,7 +106,7 @@ function bodies = ephemerisBodies(options)
 % See also BARYCENTRICBODYSTATE, GEOCENTRICBODYSTATE, READEPHEMERIS.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.3
+% referenceSystem v3.0
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-28 10:05 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------

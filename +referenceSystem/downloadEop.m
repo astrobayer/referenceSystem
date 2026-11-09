@@ -20,8 +20,11 @@ function [file, info] = downloadEop(series, options)
 % OPTIONAL NAME-VALUE ARGUMENTS
 %   Name       Size  Type      Default        Description
 %   ----       ----  ----      -------        -----------
-%   CacheDir   1x1   string    data/ under    Folder the copy is written to.
-%                              the toolbox    Created if absent.
+%   CacheDir   1x1   string    ""             Folder the copy is written to.
+%                                             Created if absent. "" means
+%                                             <pool>/EOP, the data pool
+%                                             resolved by dataFolder; never
+%                                             the toolbox folder.
 %   MaxAge     1x1   duration  days(7)        Reuse an existing cached file
 %                                             younger than this instead of
 %                                             fetching. Set to days(0) to force.
@@ -57,6 +60,13 @@ function [file, info] = downloadEop(series, options)
 %   one was. A truncated EOP file is the worst possible failure here, because it
 %   parses, it validates, and it silently shortens the usable epoch range.
 %
+%   WHERE THE COPY GOES IS THE DATA POOL, NEVER THE TOOLBOX (D133). Without
+%   CacheDir the series is written to <pool>/EOP, the folder dataFolder names
+%   for this product, and without a configured pool the call refuses before
+%   anything is fetched. An explicit CacheDir is used as given. The two tables
+%   committed to the repository's data/ folder are not downloads and are
+%   never written by this function.
+%
 %   The downloaded file is NOT parsed or validated here. Pass it to readEop,
 %   which owns format identification and validation; doing it in two places
 %   would be two sources of truth about what a valid series is.
@@ -74,6 +84,9 @@ function [file, info] = downloadEop(series, options)
 % ERRORS
 %   referenceSystem:downloadEop:downloadFailed
 %   referenceSystem:downloadEop:cacheNotWritable
+%   referenceSystem:dataFolder:noDataPool
+%       No CacheDir and no data pool configured. Raised by dataFolder before
+%       any transfer; see there.
 %
 % REFERENCES
 %   IERS EOP Product Centre, https://hpiers.obspm.fr/eoppc/eop/
@@ -89,7 +102,7 @@ function [file, info] = downloadEop(series, options)
 % See also READEOP, INTERPOLATEEOP.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.3
+% referenceSystem v3.0
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-25 12:45 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------
@@ -97,12 +110,15 @@ function [file, info] = downloadEop(series, options)
     arguments
         series (1,1) string {mustBeMember(series, ["EOP 14 C04", ...
             "EOP 20 C04", "EOP 20 C04 dPsiDEpsilon", "finals2000A"])} = "EOP 20 C04"
-        options.CacheDir (1,1) string = localDefaultCache()
+        options.CacheDir (1,1) string = ""
         options.MaxAge (1,1) duration = days(7)
         options.Timeout (1,1) double {mustBePositive} = 60
     end
 
     startTime = tic;
+    if strlength(strtrim(options.CacheDir)) == 0
+        options.CacheDir = localDefaultCache();
+    end
     source = localSourceRegistry();
     % String-array comparison, not strcmp on a cell of string scalars; see the
     % note in readEop/localLookup for why that silently matches nothing.
@@ -165,14 +181,16 @@ function source = localSourceRegistry()
 end
 
 function folder = localDefaultCache()
-%LOCALDEFAULTCACHE The toolbox data folder, from its one authority.
+%LOCALDEFAULTCACHE The EOP folder of the data pool, from its one authority.
 %
 %   D119: this function used to compose data/ from its own mfilename, and so
 %   did its twin in the sibling downloader. Two definitions of one location
 %   cannot be moved together, and a caller who set one was surprised by the
-%   other. Both now ask referenceSystem.dataFolder.
+%   other. Both now ask referenceSystem.dataFolder. D133: and they read the
+%   product folder from its answer rather than appending a name of their own.
 
-    folder = referenceSystem.dataFolder();
+    [~, location] = referenceSystem.dataFolder();
+    folder = location.EOP;
 end
 
 function [isFresh, age] = localCacheIsFresh(file, maxAge)

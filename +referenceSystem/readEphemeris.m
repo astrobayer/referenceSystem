@@ -133,7 +133,8 @@ function ephemeris = readEphemeris(kernelFile, options)
 %   Handover decisions D13, D15, D26, D89 and section H.7.1.
 %
 % EXAMPLE
-%   eph = referenceSystem.readEphemeris("data/de440s.bsp");
+%   [~, pool] = referenceSystem.dataFolder();     % kernels: <pool>/SPICE
+%   eph = referenceSystem.readEphemeris(fullfile(pool.SPICE, "de440s.bsp"));
 %   r = referenceSystem.geocentricBodyState("moon", t, Source = "mice", ...
 %       Ephemeris = eph);
 %
@@ -143,7 +144,7 @@ function ephemeris = readEphemeris(kernelFile, options)
 % See also BARYCENTRICBODYSTATE, GEOCENTRICBODYSTATE, EPHEMERISBODIES.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.3
+% referenceSystem v3.0
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-28 11:10 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------

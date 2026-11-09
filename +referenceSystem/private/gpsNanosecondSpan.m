@@ -77,7 +77,7 @@ function span = gpsNanosecondSpan()
 % See also GPSNANOSECONDSTOEPOCH, EPOCHTO, IERSCONSTANTS.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.3
+% referenceSystem v3.0
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-09-21 16:10 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------

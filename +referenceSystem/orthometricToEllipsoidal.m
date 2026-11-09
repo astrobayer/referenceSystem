@@ -64,7 +64,7 @@ function ellipsoidalHeight = orthometricToEllipsoidal(orthometricHeight, ...
 % See also ELLIPSOIDALTOORTHOMETRIC, GEOIDUNDULATION, GEODETICTOCARTESIAN.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.3
+% referenceSystem v3.0
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-26 07:28 (CEST, UTC+02:00) - session S4, prompt P13
 % -------------------------------------------------------------------------

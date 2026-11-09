@@ -173,7 +173,7 @@ function status = teardownReferenceSystem(options)
 % See also SETUPREFERENCESYSTEM, BUILDMEX, MEXINFO.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.3
+% referenceSystem v3.0
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-26 12:30 (CEST, UTC+02:00) - session S4, folder-lock report
 % -------------------------------------------------------------------------

@@ -31,7 +31,13 @@ function manifest = downloadKernels(options)
 %                                                    "both".
 %   Mode         1x1    string            "list"     "list", "verify" or
 %                                                    "download".
-%   CacheDir     1x1    string            data/      Destination folder.
+%   CacheDir     1x1    string            ""         Destination folder.
+%                                                    "" means <pool>/SPICE,
+%                                                    the data pool resolved
+%                                                    by dataFolder, and is
+%                                                    resolved in Mode
+%                                                    "download" only. Never
+%                                                    the toolbox folder.
 %   Timeout      1x1    double            900        Seconds per file.
 %   Overwrite    1x1    logical           false      Refetch files already there.
 %   Announce     1x1    function_handle   no-op      Called as
@@ -145,6 +151,14 @@ function manifest = downloadKernels(options)
 %   refused (D89, leapSecondKernelInCatalogue). Status, Bytes and Digest are
 %   added as for the built-in rows.
 %
+%   WHERE THE FILES GO IS THE DATA POOL, NEVER THE TOOLBOX (D133). Without
+%   CacheDir a download writes to <pool>/SPICE, the folder dataFolder names
+%   for this product, so one copy of each kernel serves every toolbox that
+%   reads it. The pool is resolved only when something is to be written:
+%   "list" and "verify" work on a machine with no pool configured, and
+%   "download" without one refuses before any transfer starts. An explicit
+%   CacheDir is used as given and consults nothing.
+%
 % ACCURACY
 %   Not applicable; this function transfers files and computes no quantity.
 %   ApproximateBytes is the published size and is for planning only; Bytes is
@@ -155,6 +169,9 @@ function manifest = downloadKernels(options)
 %   referenceSystem:downloadKernels:unknownSpan
 %   referenceSystem:downloadKernels:unknownMode
 %   referenceSystem:downloadKernels:cacheNotWritable
+%   referenceSystem:dataFolder:noDataPool
+%       Mode "download" without CacheDir, and no data pool is configured.
+%       Raised by dataFolder before any transfer; see there.
 %   referenceSystem:downloadKernels:badCatalogue
 %   referenceSystem:downloadKernels:leapSecondKernelInCatalogue
 %   referenceSystem:downloadKernels:notReachable
@@ -189,7 +206,7 @@ function manifest = downloadKernels(options)
 % See also READEPHEMERIS, DOWNLOADEOP, SETUPREFERENCESYSTEM, EPHEMERISBODIES.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.3
+% referenceSystem v3.0
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-29 09:15 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------
@@ -198,7 +215,7 @@ function manifest = downloadKernels(options)
         options.Set (1,1) string = "minimal"
         options.Span (1,1) string = "short"
         options.Mode (1,1) string = "list"
-        options.CacheDir (1,1) string = localDefaultCache()
+        options.CacheDir (1,1) string = ""
         options.Timeout (1,1) double {mustBePositive} = 900
         options.Overwrite (1,1) logical = false
         options.Announce (1,1) function_handle = @(varargin) []
@@ -224,6 +241,11 @@ function manifest = downloadKernels(options)
     end
 
     if options.Mode == "download"
+        % D133: THE POOL IS ASKED FOR ONLY HERE, where something is about to
+        % be written, so a listing never refuses for want of one.
+        if strlength(strtrim(options.CacheDir)) == 0
+            options.CacheDir = localDefaultCache();
+        end
         localRequireCache(options.CacheDir);
     end
 
@@ -572,14 +594,16 @@ function [bytes, digest] = localDescribe(target)
 end
 
 function cacheDir = localDefaultCache()
-%LOCALDEFAULTCACHE The toolbox data folder, from its one authority.
+%LOCALDEFAULTCACHE The SPICE folder of the data pool, from its one authority.
 %
 %   D119: this function used to compose data/ from its own mfilename, and so
 %   did its twin in the sibling downloader. Two definitions of one location
 %   cannot be moved together, and a caller who set one was surprised by the
-%   other. Both now ask referenceSystem.dataFolder.
+%   other. Both now ask referenceSystem.dataFolder. D133: and they read the
+%   product folder from its answer rather than appending a name of their own.
 
-    cacheDir = referenceSystem.dataFolder();
+    [~, location] = referenceSystem.dataFolder();
+    cacheDir = location.SPICE;
 end
 
 function value = ternary(condition, whenTrue, whenFalse)

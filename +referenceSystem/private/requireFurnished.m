@@ -45,7 +45,7 @@ function requireFurnished(ephemeris, functionName)
 % See also READEPHEMERIS, BARYCENTRICBODYSTATE, ROTATIONICRFTOBODYFIXED.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.3
+% referenceSystem v3.0
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-09-15 22:30 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------

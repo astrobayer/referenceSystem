@@ -60,7 +60,7 @@ function cartesian = enuToCartesian(enu, origin, options)
 % See also CARTESIANTOENU, ROTATIONECEFTOENU, AZIMUTHELEVATIONTOENU.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.3
+% referenceSystem v3.0
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-26 05:10 (CEST, UTC+02:00) - session S4, prompt P12
 % -------------------------------------------------------------------------

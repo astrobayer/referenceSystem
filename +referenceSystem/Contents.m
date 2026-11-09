@@ -1,5 +1,5 @@
 % referenceSystem — Time systems, Earth orientation and coordinate transformations
-% Version 2.3.2  06-Nov-2026
+% Version 3.0.0  08-Nov-2026
 %
 %   Reference and time system transformations for satellite geodesy, built on
 %   the IERS Conventions (2010) and the IAU SOFA library. All functions live in
@@ -16,7 +16,7 @@
 %
 % L0 — Time and constants
 %   toolboxVersion       - Version, build date and provenance of the toolbox.
-%   dataFolder           - Persistent data folder for installed EOP and kernels.
+%   dataFolder           - Root of the shared data pool for downloaded EOP and kernels.
 %   iersConstants        - Named IERS, IAU and BIPM constants.
 %   ellipsoidParameters  - Defining and derived parameters of a reference ellipsoid.
 %   timeScale            - Registry of the supported time scales.
@@ -144,7 +144,7 @@
 %   that govern every function in this package.
 %
 % -------------------------------------------------------------------------
-% referenceSystem v2.3
+% referenceSystem v3.0
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-07-24 20:30 (CEST, UTC+02:00)
 % -------------------------------------------------------------------------
