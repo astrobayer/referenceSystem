@@ -135,11 +135,15 @@ jobs:
       - uses: astrobayer/ci-actions/matlab-probe@v1.0.0
         timeout-minutes: 2
 
-      # THE STORED PREFERENCE IS PUT EQUAL TO DATAPOOL. referenceSystem.
+      # THE STORED PREFERENCE IS DISCARDED, NOT SET (3.0.1). referenceSystem.
       # dataFolder ranks a stored preference above DATAPOOL, and setpref is
-      # per USER, so an earlier run on a self-hosted account may have left one
-      # naming another folder. Storing the job's pool makes the preference
-      # and the variable agree whatever the account held before.
+      # per USER: on a self-hosted machine it OUTLIVES THE JOB. Until 3.0.1
+      # this step stored the job's pool, so every later job of every other
+      # repository on the same account inherited this repository's
+      # REF_DATA_POOL - NonGravForces #141 (2026-11-09) passed a test for
+      # months only because that folder held its EOP file flat, and went red
+      # when the test read the pool layout. A reset leaves no state behind and
+      # lets DATAPOOL, exported above, answer; the assert below proves it did.
       #
       # Reported as a named list against downloadKernels' own catalogue,
       # because a pool that is absent and a pool with the wrong layout both
@@ -153,8 +157,10 @@ jobs:
             pool = string(getenv("DATAPOOL"));
             assert(strlength(pool) > 0, 'referenceSystem:ci:dataPoolMissing', ...
                 'DATAPOOL is not set; the "Choose the data pool" step exports it.');
-            referenceSystem.dataFolder(pool);
+            referenceSystem.dataFolder("reset");
             [root, location] = referenceSystem.dataFolder();
+            assert(location.source == "DATAPOOL", 'referenceSystem:ci:poolNotFromDatapool', ...
+                'After the reset the pool must come from DATAPOOL, not %s.', location.source);
             fprintf('data pool: %s (from %s)\n', root, location.source);
             fprintf('kernels  : %s\n', location.SPICE);
             want = ["de440s.bsp"

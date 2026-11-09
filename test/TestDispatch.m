@@ -476,7 +476,10 @@ classdef TestDispatch < matlab.unittest.TestCase
             testCase.verifyEqual(location.source, "DATAPOOL");
             testCase.verifyTrue(endsWith(location.root, "datapool"), location.root);
 
-            referenceSystem.dataFolder(folder(2));
+            % The preference outranks the DATAPOOL set above: legal, and said so
+            % once (dataFolder_contract_warnsWhenThePreferenceOutranksDatapool).
+            testCase.verifyWarning(@() referenceSystem.dataFolder(folder(2)), ...
+                'referenceSystem:dataFolder:preferenceOverridesPool');
             [~, location] = referenceSystem.dataFolder();
             testCase.verifyEqual(location.source, "preference");
             testCase.verifyTrue(endsWith(location.root, "preference"), location.root);
@@ -509,7 +512,9 @@ classdef TestDispatch < matlab.unittest.TestCase
             wanted = fullfile(tempname(), "rsPreferredData");
             cleanupFolder = onCleanup(@() TestDispatch.removeIfPresent(wanted));
 
-            stored = referenceSystem.dataFolder(wanted);
+            % A preference beside a different DATAPOOL is reported (once).
+            stored = testCase.verifyWarning(@() referenceSystem.dataFolder(wanted), ...
+                'referenceSystem:dataFolder:preferenceOverridesPool');
             resolved = what(char(wanted));
             testCase.assertNotEmpty(resolved, ...
                 "dataFolder did not create the folder it was given: " + wanted);
@@ -525,6 +530,66 @@ classdef TestDispatch < matlab.unittest.TestCase
                 '"reset" returned the folder it was supposed to discard.');
             testCase.verifyTrue(endsWith(afterReset, "rsEnvironmentPool"), ...
                 "After a reset the next rule, DATAPOOL, must answer: " + afterReset);
+        end
+
+        function dataFolder_contract_warnsOnceForAPreferenceInTheOldLayout(testCase)
+            % A 2.x preference named a per-toolbox folder holding kernels and EOP
+            % FLAT; since 3.0 that folder is read as the pool root and nothing
+            % looks at its top level. Legal, so a warning and not an error, raised
+            % once per session and folder - and only for the preference, because
+            % an argument or a variable is visible where it is set.
+            isolation = TestDispatch.isolatedFromThePool();  %#ok<NASGU>
+            old = string(tempname());
+            cleanupFolder = onCleanup(@() TestDispatch.removeIfPresent(old));
+            mkdir(old);
+            for name = ["finals2000A.all", "naif0012.tls"]
+                fid = fopen(fullfile(old, name), 'w'); fclose(fid);
+            end
+            testCase.verifyWarningFree(@() referenceSystem.dataFolder(DataPool = old), ...
+                'An explicit DataPool is not a stored preference and is not diagnosed.');
+            testCase.verifyWarning(@() referenceSystem.dataFolder(old), ...
+                'referenceSystem:dataFolder:oldLayout');
+            message = lastwarn();
+            testCase.verifyTrue(contains(string(message), "finals2000A.all"), ...
+                "The warning must name what it found: " + string(message));
+            testCase.verifyWarningFree(@() referenceSystem.dataFolder(), ...
+                'Once per session and folder: the second query must be quiet.');
+            [~, location] = referenceSystem.dataFolder();
+            testCase.verifyEqual(location.source, "preference", ...
+                'The diagnostic must not change what is resolved.');
+        end
+
+        function dataFolder_contract_warnsWhenThePreferenceOutranksDatapool(testCase)
+            % Seen 2026-11-09 on the CI runner: a stored preference outranked
+            % DATAPOOL, so referenceSystem read and wrote somewhere every other
+            % toolbox did not. The same folder spelled differently (a trailing
+            % separator, on Windows another case) is the same pool and is quiet.
+            isolation = TestDispatch.isolatedFromThePool();  %#ok<NASGU>
+            base = string(tempname());
+            cleanupFolder = onCleanup(@() TestDispatch.removeIfPresent(base));
+            pool = base + filesep + "pool";
+            other = base + filesep + "other";
+            mkdir(pool);
+            setenv('DATAPOOL', char(pool));
+            testCase.verifyWarning(@() referenceSystem.dataFolder(other), ...
+                'referenceSystem:dataFolder:preferenceOverridesPool');
+            message = lastwarn();
+            testCase.verifyTrue(contains(string(message), "DATAPOOL"), string(message));
+            testCase.verifyWarningFree(@() referenceSystem.dataFolder(), ...
+                'Once per session for one folder and pool.');
+
+            same = pool + filesep;
+            if ispc
+                same = upper(same);
+            end
+            testCase.verifyWarningFree(@() referenceSystem.dataFolder(same), ...
+                'The pool itself, spelled differently, must not be reported.');
+
+            unsetenv('DATAPOOL');
+            setenv('READING_DATA_POOL', char(pool));
+            testCase.verifyWarning(@() referenceSystem.dataFolder(other), ...
+                'referenceSystem:dataFolder:preferenceOverridesPool', ...
+                'READING_DATA_POOL is a pool rule too.');
         end
 
         function dataFolder_contract_isTheOneAuthorityBothDownloadersResolve(testCase)

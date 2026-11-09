@@ -128,6 +128,22 @@ function [folder, location] = dataFolder(newFolder, options)
 %       The root does not exist and could not be created; the message carries
 %       the reason the file system gave.
 %
+% WARNINGS
+%   Only when the STORED PREFERENCE chose the root; each once per session and
+%   folder, so a CI log shows it and a loop does not repeat it.
+%   referenceSystem:dataFolder:oldLayout
+%       The preference names a folder holding kernels or EOP series FLAT, the
+%       per-toolbox layout before 3.0. Nothing reads files there any more, so
+%       the preference is almost certainly a 2.x leftover: point it at the pool
+%       or reset it, and move the files into <pool>/SPICE and <pool>/EOP.
+%   referenceSystem:dataFolder:preferenceOverridesPool
+%       DATAPOOL (or READING_DATA_POOL) names a different folder, which the
+%       preference silently outranks. toolboxInstaller writes DATAPOOL and every
+%       other toolbox follows it, so this toolbox alone would read and write
+%       elsewhere. Seen 2026-11-09 on the CI runner: a 2.x preference
+%       ...\DATAPOOL\referencesSystem outranked DATAPOOL, and a NonGravForces
+%       test passed for months only because that folder held its file flat.
+%
 % REFERENCES
 %   toolboxInstaller docs/DATA_POOL.md, the organisation's data-pool contract.
 %   Handover decisions D119 and D133, section C.10. The sibling implementation
@@ -149,7 +165,7 @@ function [folder, location] = dataFolder(newFolder, options)
 % referenceSystem v3.0
 % Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 % Created: 2026-08-21 18:05 (CEST, UTC+02:00)
-% Revised: 2026-11-08 23:10 (CET, UTC+01:00)
+% Revised: 2026-11-09 23:30 (CET, UTC+01:00)
 % -------------------------------------------------------------------------
 
     arguments
@@ -233,4 +249,78 @@ function [folder, location] = dataFolder(newFolder, options)
     location = struct('root', folder, 'source', source, ...
         'SPICE', string(fullfile(folder, 'SPICE')), ...
         'EOP', string(fullfile(folder, 'EOP')));
+
+    if source == "preference"
+        localDiagnosePreference(folder);
+    end
+end
+
+function localDiagnosePreference(folder)
+%LOCALDIAGNOSEPREFERENCE The two ways a stored preference goes wrong silently.
+%   Warnings, not errors: the preference is the user's explicit choice and
+%   rule 2 of DATA_POOL.md, and a configuration that was legal yesterday must
+%   not stop a session today. Each is raised once per session for one folder
+%   (and pool), keyed on the paths, so a test with its own scratch folders
+%   sees its warning whatever ran before it.
+    persistent raised
+    if isempty(raised)
+        raised = strings(0, 1);
+    end
+
+    flat = strings(1, 0);
+    for pattern = ["*.bsp", "*.bpc", "*.tpc", "*.tf", "*.tls", ...
+            "finals2000A*", "eopc04*"]
+        entry = dir(fullfile(folder, pattern));
+        flat = [flat, string({entry(~[entry.isdir]).name})]; %#ok<AGROW>
+    end
+    key = "oldLayout|" + folder;
+    if ~isempty(flat) && ~any(raised == key)
+        raised(end + 1) = key;
+        shown = flat(1:min(3, numel(flat)));
+        if numel(flat) > 3
+            shown(end + 1) = sprintf("and %d more", numel(flat) - 3);
+        end
+        warning('referenceSystem:dataFolder:oldLayout', ...
+            ['The stored data folder "%s" holds %d kernel or EOP file(s) at ', ...
+            'its top level (%s), the layout before referenceSystem 3.0. ', ...
+            'Since 3.0 it is the POOL ROOT and nothing reads files there. ', ...
+            'Point the preference at the pool, referenceSystem.dataFolder(pool), ', ...
+            'or discard it, referenceSystem.dataFolder("reset"), and move the ', ...
+            'files into <pool>/SPICE and <pool>/EOP.'], ...
+            folder, numel(flat), strjoin(shown, ", "));
+    end
+
+    for variable = ["DATAPOOL", "READING_DATA_POOL"]
+        pool = strtrim(string(getenv(variable)));
+        if strlength(pool) == 0
+            continue
+        end
+        key = "overrides|" + folder + "|" + variable + "|" + pool;
+        if localCanonical(pool) ~= localCanonical(folder) && ~any(raised == key)
+            raised(end + 1) = key;
+            warning('referenceSystem:dataFolder:preferenceOverridesPool', ...
+                ['The stored preference "%s" outranks %s = "%s", so ', ...
+                'referenceSystem reads and writes under the preference while ', ...
+                'the other toolboxes follow %s. To follow it as well, discard ', ...
+                'the preference: referenceSystem.dataFolder("reset").'], ...
+                folder, variable, pool, variable);
+        end
+        break   % only the variable that would answer
+    end
+end
+
+function canonical = localCanonical(path)
+%LOCALCANONICAL An absolute path without a trailing separator, for comparing.
+%   Case-folded on Windows, whose file system ignores case; exact elsewhere.
+    canonical = string(path);
+    if isfolder(canonical)
+        resolved = what(char(canonical));
+        if ~isempty(resolved)
+            canonical = string(resolved(1).path);
+        end
+    end
+    canonical = regexprep(canonical, '[\\/]+$', '');
+    if ispc
+        canonical = lower(canonical);
+    end
 end
