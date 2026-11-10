@@ -364,6 +364,21 @@ Revised: 2026-08-09 10:15 (CEST, UTC+02:00)
   referenceSystem:dataFolder:notCreated
       The root does not exist and could not be created; the message carries
       the reason the file system gave.</pre>
+<h4>WARNINGS</h4>
+<pre>Only when the STORED PREFERENCE chose the root; each once per session and
+  folder, so a CI log shows it and a loop does not repeat it.
+  referenceSystem:dataFolder:oldLayout
+      The preference names a folder holding kernels or EOP series FLAT, the
+      per-toolbox layout before 3.0. Nothing reads files there any more, so
+      the preference is almost certainly a 2.x leftover: point it at the pool
+      or reset it, and move the files into &lt;pool&gt;/SPICE and &lt;pool&gt;/EOP.
+  referenceSystem:dataFolder:preferenceOverridesPool
+      DATAPOOL (or READING_DATA_POOL) names a different folder, which the
+      preference silently outranks. toolboxInstaller writes DATAPOOL and every
+      other toolbox follows it, so this toolbox alone would read and write
+      elsewhere. Seen 2026-11-09 on the CI runner: a 2.x preference
+      ...\DATAPOOL\referencesSystem outranked DATAPOOL, and a NonGravForces
+      test passed for months only because that folder held its file flat.</pre>
 <h4>REFERENCES</h4>
 <pre>toolboxInstaller docs/DATA_POOL.md, the organisation's data-pool contract.
   Handover decisions D119 and D133, section C.10. The sibling implementation
@@ -383,7 +398,7 @@ See also DOWNLOADKERNELS, DOWNLOADEOP, SETUPREFERENCESYSTEM
 referenceSystem v3.0
 Developed by Matthias Weigelt with the assistance of Claude Opus 5 (Anthropic)
 Created: 2026-08-21 18:05 (CEST, UTC+02:00)
-Revised: 2026-11-08 23:10 (CET, UTC+01:00)
+Revised: 2026-11-09 23:30 (CET, UTC+01:00)
 -------------------------------------------------------------------------</pre>
 <p class="top"><a href="#contents">back to contents</a></p>
 </div>
@@ -11146,6 +11161,6 @@ Created: 2026-07-26 12:30 (CEST, UTC+02:00) - session S4, folder-lock report
 -------------------------------------------------------------------------</pre>
 <p class="top"><a href="#contents">back to contents</a></p>
 </div>
-<p class="foot">referenceSystem v3.0.0 &mdash; generated from the
+<p class="foot">referenceSystem v3.0.1 &mdash; generated from the
 package help blocks. See the handover document for the design.</p>
 </body></html>

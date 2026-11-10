@@ -1,5 +1,5 @@
 % referenceSystem — Time systems, Earth orientation and coordinate transformations
-% Version 3.0.0  08-Nov-2026
+% Version 3.0.1  09-Nov-2026
 %
 %   Reference and time system transformations for satellite geodesy, built on
 %   the IERS Conventions (2010) and the IAU SOFA library. All functions live in
