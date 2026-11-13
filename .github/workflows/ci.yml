@@ -21,6 +21,14 @@ on:
                        # push-on-all-branches PLUS pull_request runs
                        # everything twice once a PR exists; lsqvce paid for
                        # that lesson on 2026-08-19 and this file inherits it.
+  workflow_dispatch:   # a manual start, for a run GitHub refused at start-up
+                       # (such a run cannot be re-run) and for choosing the
+                       # runner by hand. ci-route: it narrows, never widens.
+    inputs:
+      runner:
+        description: "auto | a8 | hosted - narrows the routing, never widens it"
+        required: false
+        default: auto
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
