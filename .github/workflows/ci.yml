@@ -143,8 +143,8 @@ jobs:
           path: ${{ env.DATAPOOL }}/SPICE
           key: rsPoolKernels-${{ hashFiles('+referenceSystem/downloadKernels.m') }}
 
-      # The probe and the reasoning behind it live in
-      # astrobayer/ci-actions. Six repositories carried this step
+      # matlab-setup (it replaced the probe on 2026-11-13) and the reasoning
+      # behind both live in astrobayer/ci-actions. Six repositories carried this step
       # byte-for-byte identically, and a copied step is what let one
       # editing mistake cost three repositories a checkout each.
       #
