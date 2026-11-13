@@ -27,6 +27,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Where may MATLAB run for this event: A8, a GitHub-hosted runner, or
+  # nowhere? One decision for the whole organisation, in
+  # astrobayer/ci-actions (ci-route; docs/CI_GUIDE.md section 2): members
+  # only, no forks, A8 from a public repository only for the allow-listed
+  # user. This job never fails - a refusal arrives in the MATLAB job as
+  # runner=none and matlab-setup turns that required context red.
+  route:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      runner: ${{ steps.route.outputs.runner }}
+      runs-on: ${{ steps.route.outputs.runs-on }}
+      reason: ${{ steps.route.outputs.reason }}
+    steps:
+      - id: route
+        uses: astrobayer/ci-actions/ci-route@v1.4.0
+        with:
+          policy: ${{ vars.CI_MATLAB_RUNNER }}
+          request: ${{ github.event.inputs.runner }}
+
   audit:
     runs-on: ubuntu-latest
     steps:
@@ -58,8 +80,8 @@ jobs:
           path: test/fixtures/fundargIers.csv
 
   matlab:
-    needs: [audit, csuites]
-    runs-on: [self-hosted, Windows]
+    needs: [audit, csuites, route]
+    runs-on: ${{ fromJSON(needs.route.outputs.runs-on) }}
     timeout-minutes: 60        # backstop: no wedge sits for hours
     env:
       REFERENCESYSTEM_CI: 1    # read by referenceSystemCiGate; the ONE CI policy switch
@@ -86,7 +108,7 @@ jobs:
       - name: Choose the data pool
         shell: powershell
         env:
-          REF_DATA_POOL: ${{ vars.REF_DATA_POOL }}
+          REF_DATA_POOL: ${{ needs.route.outputs.runner == 'a8' && vars.REF_DATA_POOL || '' }}
         run: |
           if ($env:REF_DATA_POOL) { $pool = $env:REF_DATA_POOL }
           else { $pool = Join-Path $env:RUNNER_TEMP 'datapool' }
@@ -115,7 +137,7 @@ jobs:
       # traffic for nothing. Both cache steps therefore stand down when the
       # variable is set.
       - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        if: ${{ vars.REF_DATA_POOL == '' }}
+        if: ${{ (needs.route.outputs.runner == 'a8' && vars.REF_DATA_POOL || '') == '' }}
         id: kernelCache
         with:
           path: ${{ env.DATAPOOL }}/SPICE
@@ -132,8 +154,15 @@ jobs:
       #
       # timeout-minutes sits here and not in the action: GitHub's
       # composite-action schema rejects the key on a step.
-      - uses: astrobayer/ci-actions/matlab-probe@v1.0.0
-        timeout-minutes: 2
+      # MATLAB on the routed runner: probed on A8, installed by setup-matlab on a
+      # GitHub-hosted runner (public repositories only), or a red step quoting
+      # the routing refusal. Replaces matlab-probe; same immutable-tag rule.
+      - uses: astrobayer/ci-actions/matlab-setup@v1.4.0
+        timeout-minutes: 15
+        with:
+          runner: ${{ needs.route.outputs.runner }}
+          reason: ${{ needs.route.outputs.reason }}
+          products: ${{ vars.CI_MATLAB_PRODUCTS }}
 
       # THE STORED PREFERENCE IS DISCARDED, NOT SET (3.0.1). referenceSystem.
       # dataFolder ranks a stored preference above DATAPOOL, and setpref is
@@ -216,7 +245,7 @@ jobs:
           path: referenceSystem_testReport.txt
 
       - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        if: ${{ always() && vars.REF_DATA_POOL == '' && steps.kernelCache.outputs.cache-hit != 'true' }}
+        if: ${{ always() && (needs.route.outputs.runner == 'a8' && vars.REF_DATA_POOL || '') == '' && steps.kernelCache.outputs.cache-hit != 'true' }}
         with:
           path: ${{ env.DATAPOOL }}/SPICE
           key: rsPoolKernels-${{ hashFiles('+referenceSystem/downloadKernels.m') }}

@@ -37,6 +37,11 @@ name: rebuild-docs
 
 on:
   workflow_dispatch:
+    inputs:
+      runner:
+        description: "auto | a8 | hosted - narrows the routing, never widens it"
+        required: false
+        default: auto
 
 permissions:
   contents: write
@@ -46,6 +51,28 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Where may MATLAB run for this event: A8, a GitHub-hosted runner, or
+  # nowhere? One decision for the whole organisation, in
+  # astrobayer/ci-actions (ci-route; docs/CI_GUIDE.md section 2): members
+  # only, no forks, A8 from a public repository only for the allow-listed
+  # user. This job never fails - a refusal arrives in the MATLAB job as
+  # runner=none and matlab-setup turns that required context red.
+  route:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      runner: ${{ steps.route.outputs.runner }}
+      runs-on: ${{ steps.route.outputs.runs-on }}
+      reason: ${{ steps.route.outputs.reason }}
+    steps:
+      - id: route
+        uses: astrobayer/ci-actions/ci-route@v1.4.0
+        with:
+          policy: ${{ vars.CI_MATLAB_RUNNER }}
+          request: ${{ github.event.inputs.runner }}
+
   manual:
     name: manual (python)
     runs-on: ubuntu-latest
@@ -68,17 +95,26 @@ jobs:
           if-no-files-found: error
 
   reference:
+    # A8-only and optional: skipped (not failed) when the route refuses.
+    if: needs.route.outputs.runner == 'a8'
     name: reference page (MATLAB)
-    needs: manual
-    runs-on: [self-hosted, Windows]
+    needs: [manual, route]
+    runs-on: ${{ fromJSON(needs.route.outputs.runs-on) }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       # The probe and the reasoning behind it live in astrobayer/ci-actions,
       # pinned to an immutable tag for the reason ci.yml states at length.
-      - uses: astrobayer/ci-actions/matlab-probe@v1.0.0
-        timeout-minutes: 2
+      # MATLAB on the routed runner: probed on A8, installed by setup-matlab on a
+      # GitHub-hosted runner (public repositories only), or a red step quoting
+      # the routing refusal. Replaces matlab-probe; same immutable-tag rule.
+      - uses: astrobayer/ci-actions/matlab-setup@v1.4.0
+        timeout-minutes: 15
+        with:
+          runner: ${{ needs.route.outputs.runner }}
+          reason: ${{ needs.route.outputs.reason }}
+          products: ${{ vars.CI_MATLAB_PRODUCTS }}
 
       # Steps="reference" only: the search database lands in doc/helpsearch*,
       # which .gitignore excludes, so building it here would produce nothing
